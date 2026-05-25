@@ -88,6 +88,29 @@ void AudienceWindow::cacheSlideImage(const QString& textureKey, const QImage& im
     update();
 }
 
+void AudienceWindow::setVideoFrame(const QImage& image, QRectF slideRect) {
+    if (image.isNull() || !slideRect.isValid()) {
+        clearVideoOverlay();
+        return;
+    }
+
+    m_pendingVideoFrame = image;
+    m_videoRect = slideRect;
+    m_videoFrameDirty = true;
+    m_hasVideoOverlay = true;
+    update();
+}
+
+void AudienceWindow::clearVideoOverlay() {
+    m_pendingVideoFrame = {};
+    m_videoRect = {};
+    m_videoTexture.reset();
+    m_videoTextureSize = {};
+    m_videoFrameDirty = false;
+    m_hasVideoOverlay = false;
+    update();
+}
+
 void AudienceWindow::setAudienceScreen(QScreen* screen) {
     if (!screen) {
         return;
@@ -176,7 +199,10 @@ void AudienceWindow::initializeGL() {
 }
 
 void AudienceWindow::resizeGL(int width, int height) {
-    updateVertexBuffer(QSize(width, height));
+    CachedTexture* texture = currentTexture();
+    if (texture) {
+        updateVertexBuffer(QSize(width, height), texture->size, QRectF(0.0, 0.0, 1.0, 1.0));
+    }
 }
 
 void AudienceWindow::paintGL() {
@@ -191,20 +217,28 @@ void AudienceWindow::paintGL() {
     glClear(GL_COLOR_BUFFER_BIT);
 
     uploadPendingTextures();
+    uploadPendingVideoTexture();
 
     CachedTexture* texture = currentTexture();
     if (!texture || !texture->texture || !m_program.isLinked()) {
         return;
     }
 
-    updateVertexBuffer(viewportSize);
-
     m_program.bind();
     QOpenGLVertexArrayObject::Binder vertexArrayBinder(&m_vertexArray);
     glActiveTexture(GL_TEXTURE0);
+    updateVertexBuffer(viewportSize, texture->size, QRectF(0.0, 0.0, 1.0, 1.0));
     texture->texture->bind();
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     texture->texture->release();
+
+    if (m_hasVideoOverlay && m_videoTexture && m_videoTextureSize.isValid() && m_videoRect.isValid()) {
+        updateVertexBuffer(viewportSize, texture->size, m_videoRect);
+        m_videoTexture->bind();
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        m_videoTexture->release();
+    }
+
     m_program.release();
 }
 
@@ -228,6 +262,11 @@ void AudienceWindow::keyPressEvent(QKeyEvent* event) {
         return;
     case Qt::Key_End:
         emit lastRequested();
+        event->accept();
+        return;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        emit playPauseRequested();
         event->accept();
         return;
     case Qt::Key_F11:
@@ -278,14 +317,35 @@ void AudienceWindow::uploadPendingTextures() {
     }
 }
 
-void AudienceWindow::updateVertexBuffer(QSize viewportSize) {
-    CachedTexture* texture = currentTexture();
-    if (!m_vertexBuffer.isCreated() || !viewportSize.isValid() || !texture || !texture->size.isValid()) {
+void AudienceWindow::uploadPendingVideoTexture() {
+    if (!m_videoFrameDirty) {
+        return;
+    }
+
+    m_videoFrameDirty = false;
+    m_videoTexture.reset();
+    m_videoTextureSize = {};
+
+    if (m_pendingVideoFrame.isNull()) {
+        return;
+    }
+
+    const QImage textureImage = verticallyFlipped(m_pendingVideoFrame.convertToFormat(QImage::Format_RGBA8888));
+    auto texture = std::make_unique<QOpenGLTexture>(textureImage);
+    texture->setMinificationFilter(QOpenGLTexture::Linear);
+    texture->setMagnificationFilter(QOpenGLTexture::Linear);
+    texture->setWrapMode(QOpenGLTexture::ClampToEdge);
+    m_videoTextureSize = textureImage.size();
+    m_videoTexture = std::move(texture);
+}
+
+void AudienceWindow::updateVertexBuffer(QSize viewportSize, QSize textureSize, QRectF slideRect) {
+    if (!m_vertexBuffer.isCreated() || !viewportSize.isValid() || !textureSize.isValid() || !slideRect.isValid()) {
         return;
     }
 
     const float viewportAspect = float(viewportSize.width()) / float(viewportSize.height());
-    const float textureAspect = float(texture->size.width()) / float(texture->size.height());
+    const float textureAspect = float(textureSize.width()) / float(textureSize.height());
 
     float halfWidth = 1.0f;
     float halfHeight = 1.0f;
@@ -295,11 +355,16 @@ void AudienceWindow::updateVertexBuffer(QSize viewportSize) {
         halfWidth = textureAspect / viewportAspect;
     }
 
+    const float left = -halfWidth + 2.0f * halfWidth * float(slideRect.left());
+    const float right = -halfWidth + 2.0f * halfWidth * float(slideRect.right());
+    const float top = halfHeight - 2.0f * halfHeight * float(slideRect.top());
+    const float bottom = halfHeight - 2.0f * halfHeight * float(slideRect.bottom());
+
     const Vertex vertices[] = {
-        {-halfWidth, -halfHeight, 0.0f, 0.0f},
-        { halfWidth, -halfHeight, 1.0f, 0.0f},
-        {-halfWidth,  halfHeight, 0.0f, 1.0f},
-        { halfWidth,  halfHeight, 1.0f, 1.0f},
+        {left,  bottom, 0.0f, 0.0f},
+        {right, bottom, 1.0f, 0.0f},
+        {left,  top,    0.0f, 1.0f},
+        {right, top,    1.0f, 1.0f},
     };
 
     m_vertexBuffer.bind();
@@ -368,6 +433,7 @@ void AudienceWindow::releaseOpenGLResources() {
     m_openGLReady = false;
     m_textureCache.clear();
     m_pendingUploads.clear();
+    m_videoTexture.reset();
     if (m_vertexBuffer.isCreated()) {
         m_vertexBuffer.destroy();
     }

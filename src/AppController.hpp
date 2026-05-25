@@ -2,14 +2,17 @@
 
 #include "cache/SlideCache.hpp"
 #include "pdf/PdfBackend.hpp"
+#include "media/VideoFrameExtractor.hpp"
 #include "render/RenderScheduler.hpp"
 #include "util/PdfMediaDetector.hpp"
 
 #include <QObject>
 #include <QImage>
 #include <QPointer>
+#include <QRectF>
 #include <QScreen>
 #include <QString>
+#include <QTimer>
 
 #include <memory>
 
@@ -36,6 +39,7 @@ public:
     void refreshScreens();
     void enterAudienceFullscreen();
     void toggleAudienceFullscreen();
+    void toggleMediaPlayback();
 
 signals:
     void documentChanged(int pageCount);
@@ -56,6 +60,11 @@ private:
     void schedulePredictiveRenders();
     void requestPageRender(int pageIndex, int priority);
     QImage imageWithMediaFrames(int pageIndex, const QImage& image) const;
+    const PdfMediaAnnotation* currentPlayableMediaAnnotation() const;
+    QRectF normalizedMediaRect(const PdfMediaAnnotation& annotation) const;
+    void startMediaPlayback();
+    void stopMediaPlayback();
+    void advanceVideoFrame();
     void handleAudienceRenderTargetChanged();
     void handleRenderStarted(const RenderRequest& request);
     void handleRenderFinished(const RenderRequest& request, const QImage& image, qint64 elapsedMs, const QString& errorMessage);
@@ -64,11 +73,16 @@ private:
     std::unique_ptr<PdfBackend> m_backend;
     SlideCache m_slideCache;
     RenderScheduler m_renderScheduler;
+    QTimer m_videoTimer;
+    std::unique_ptr<VideoFrameReader> m_videoReader;
     QPointer<AudienceWindow> m_audienceWindow;
     QPointer<QScreen> m_audienceScreen;
     QString m_currentPath;
     QString m_documentHash;
     PdfMediaScanResult m_mediaScanResult;
+    QRectF m_activeVideoRect;
+    qint64 m_lastVideoPtsMs = -1;
+    bool m_videoPlaying = false;
     int m_currentPageIndex = 0;
     int m_renderGeneration = 0;
 };

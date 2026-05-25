@@ -25,6 +25,7 @@ int main(int argc, char* argv[]) {
     QObject::connect(&audienceWindow, &AudienceWindow::lastRequested, &controller, [&controller] {
         controller.goToPage(controller.pageCount() - 1);
     });
+    QObject::connect(&audienceWindow, &AudienceWindow::playPauseRequested, &controller, &AppController::toggleMediaPlayback);
 
     audienceWindow.setAudienceScreen(controller.selectedAudienceScreen());
     if (QGuiApplication::platformName() != QStringLiteral("offscreen")) {

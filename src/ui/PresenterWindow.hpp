@@ -67,5 +67,6 @@ private:
     QAction* m_firstAction = nullptr;
     QAction* m_lastAction = nullptr;
     QAction* m_startPresentationAction = nullptr;
+    QAction* m_playPauseMediaAction = nullptr;
     QAction* m_fullscreenAction = nullptr;
 };

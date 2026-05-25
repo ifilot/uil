@@ -5,7 +5,6 @@
 #include <QLoggingCategory>
 
 #include <array>
-#include <memory>
 
 Q_LOGGING_CATEGORY(logVideo, "video")
 
@@ -96,126 +95,257 @@ QImage frameToImage(const AVFrame* frame, AVCodecContext* codecContext) {
 
     return image;
 }
-}
-#endif
 
-QImage extractFirstVideoFrame(const QString& path, QString* errorMessage) {
-#if !defined(UIL_HAVE_FFMPEG)
-    if (errorMessage) {
-        *errorMessage = QStringLiteral("FFmpeg libraries were not found at build time");
+qint64 frameTimestampMs(const AVFrame* frame, const AVStream* stream) {
+    const int64_t timestamp = frame->best_effort_timestamp;
+    if (timestamp == AV_NOPTS_VALUE) {
+        return 0;
     }
-    qCInfo(logVideo) << "Skipping first-frame extraction; FFmpeg libraries are not linked";
-    return {};
-#else
-    const QByteArray encodedPath = QFile::encodeName(path);
+    return qint64(double(timestamp) * av_q2d(stream->time_base) * 1000.0);
+}
+}
 
+class VideoFrameReader::Impl {
+public:
+    bool open(const QString& path, QString* errorMessage);
+    std::optional<DecodedVideoFrame> readNextFrame(QString* errorMessage);
+    void close();
+    bool isOpen() const;
+
+private:
+    std::optional<DecodedVideoFrame> receiveFrame(QString* errorMessage);
+
+    QString m_path;
+    std::unique_ptr<AVFormatContext, FormatContextDeleter> m_formatContext;
+    std::unique_ptr<AVCodecContext, CodecContextDeleter> m_codecContext;
+    std::unique_ptr<AVPacket, PacketDeleter> m_packet;
+    std::unique_ptr<AVFrame, FrameDeleter> m_frame;
+    AVStream* m_stream = nullptr;
+    int m_streamIndex = -1;
+    bool m_draining = false;
+};
+
+bool VideoFrameReader::Impl::open(const QString& path, QString* errorMessage) {
+    close();
+    m_path = path;
+
+    const QByteArray encodedPath = QFile::encodeName(path);
     AVFormatContext* rawFormatContext = nullptr;
     int result = avformat_open_input(&rawFormatContext, encodedPath.constData(), nullptr, nullptr);
     if (result < 0) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("Could not open video: %1").arg(avErrorToString(result));
         }
-        return {};
+        return false;
     }
-    std::unique_ptr<AVFormatContext, FormatContextDeleter> formatContext(rawFormatContext);
+    m_formatContext.reset(rawFormatContext);
 
-    result = avformat_find_stream_info(formatContext.get(), nullptr);
+    result = avformat_find_stream_info(m_formatContext.get(), nullptr);
     if (result < 0) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("Could not read stream info: %1").arg(avErrorToString(result));
         }
-        return {};
+        close();
+        return false;
     }
 
-    const int streamIndex = av_find_best_stream(formatContext.get(), AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
-    if (streamIndex < 0) {
+    m_streamIndex = av_find_best_stream(m_formatContext.get(), AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    if (m_streamIndex < 0) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("No video stream found");
         }
-        return {};
+        close();
+        return false;
     }
 
-    AVStream* stream = formatContext->streams[streamIndex];
-    const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
+    m_stream = m_formatContext->streams[m_streamIndex];
+    const AVCodec* codec = avcodec_find_decoder(m_stream->codecpar->codec_id);
     if (!codec) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("No decoder found for video stream");
         }
-        return {};
+        close();
+        return false;
     }
 
-    std::unique_ptr<AVCodecContext, CodecContextDeleter> codecContext(avcodec_alloc_context3(codec));
-    if (!codecContext) {
+    m_codecContext.reset(avcodec_alloc_context3(codec));
+    if (!m_codecContext) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("Could not allocate codec context");
         }
-        return {};
+        close();
+        return false;
     }
 
-    result = avcodec_parameters_to_context(codecContext.get(), stream->codecpar);
+    result = avcodec_parameters_to_context(m_codecContext.get(), m_stream->codecpar);
     if (result < 0) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("Could not copy codec parameters: %1").arg(avErrorToString(result));
         }
-        return {};
+        close();
+        return false;
     }
 
-    result = avcodec_open2(codecContext.get(), codec, nullptr);
+    result = avcodec_open2(m_codecContext.get(), codec, nullptr);
     if (result < 0) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("Could not open decoder: %1").arg(avErrorToString(result));
         }
-        return {};
+        close();
+        return false;
     }
 
-    std::unique_ptr<AVPacket, PacketDeleter> packet(av_packet_alloc());
-    std::unique_ptr<AVFrame, FrameDeleter> frame(av_frame_alloc());
-    if (!packet || !frame) {
+    m_packet.reset(av_packet_alloc());
+    m_frame.reset(av_frame_alloc());
+    if (!m_packet || !m_frame) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("Could not allocate decode buffers");
         }
+        close();
+        return false;
+    }
+
+    m_draining = false;
+    return true;
+}
+
+std::optional<DecodedVideoFrame> VideoFrameReader::Impl::readNextFrame(QString* errorMessage) {
+    if (!isOpen()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Video reader is not open");
+        }
+        return std::nullopt;
+    }
+
+    while (true) {
+        if (auto decoded = receiveFrame(errorMessage)) {
+            return decoded;
+        }
+
+        if (m_draining) {
+            return std::nullopt;
+        }
+
+        const int readResult = av_read_frame(m_formatContext.get(), m_packet.get());
+        if (readResult < 0) {
+            avcodec_send_packet(m_codecContext.get(), nullptr);
+            m_draining = true;
+            continue;
+        }
+
+        if (m_packet->stream_index != m_streamIndex) {
+            av_packet_unref(m_packet.get());
+            continue;
+        }
+
+        const int sendResult = avcodec_send_packet(m_codecContext.get(), m_packet.get());
+        av_packet_unref(m_packet.get());
+        if (sendResult < 0 && sendResult != AVERROR(EAGAIN)) {
+            qCWarning(logVideo) << "Could not send video packet:" << avErrorToString(sendResult);
+        }
+    }
+}
+
+void VideoFrameReader::Impl::close() {
+    m_frame.reset();
+    m_packet.reset();
+    m_codecContext.reset();
+    m_formatContext.reset();
+    m_stream = nullptr;
+    m_streamIndex = -1;
+    m_draining = false;
+}
+
+bool VideoFrameReader::Impl::isOpen() const {
+    return m_formatContext && m_codecContext && m_stream && m_streamIndex >= 0;
+}
+
+std::optional<DecodedVideoFrame> VideoFrameReader::Impl::receiveFrame(QString* errorMessage) {
+    const int receiveResult = avcodec_receive_frame(m_codecContext.get(), m_frame.get());
+    if (receiveResult == AVERROR(EAGAIN) || receiveResult == AVERROR_EOF) {
+        return std::nullopt;
+    }
+    if (receiveResult < 0) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Could not receive frame: %1").arg(avErrorToString(receiveResult));
+        }
+        return std::nullopt;
+    }
+
+    DecodedVideoFrame decoded{
+        frameToImage(m_frame.get(), m_codecContext.get()),
+        frameTimestampMs(m_frame.get(), m_stream)
+    };
+    av_frame_unref(m_frame.get());
+
+    if (decoded.image.isNull()) {
+        return std::nullopt;
+    }
+    return decoded;
+}
+
+#else
+
+class VideoFrameReader::Impl {
+public:
+    bool open(const QString&, QString* errorMessage) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("FFmpeg libraries were not found at build time");
+        }
+        qCInfo(logVideo) << "Skipping video decode; FFmpeg libraries are not linked";
+        return false;
+    }
+
+    std::optional<DecodedVideoFrame> readNextFrame(QString*) {
+        return std::nullopt;
+    }
+
+    void close() {
+    }
+
+    bool isOpen() const {
+        return false;
+    }
+};
+
+#endif
+
+VideoFrameReader::VideoFrameReader()
+    : m_impl(std::make_unique<Impl>()) {
+}
+
+VideoFrameReader::~VideoFrameReader() = default;
+
+bool VideoFrameReader::open(const QString& path, QString* errorMessage) {
+    return m_impl->open(path, errorMessage);
+}
+
+std::optional<DecodedVideoFrame> VideoFrameReader::readNextFrame(QString* errorMessage) {
+    return m_impl->readNextFrame(errorMessage);
+}
+
+void VideoFrameReader::close() {
+    m_impl->close();
+}
+
+bool VideoFrameReader::isOpen() const {
+    return m_impl->isOpen();
+}
+
+QImage extractFirstVideoFrame(const QString& path, QString* errorMessage) {
+    VideoFrameReader reader;
+    if (!reader.open(path, errorMessage)) {
         return {};
     }
 
-    while (av_read_frame(formatContext.get(), packet.get()) >= 0) {
-        if (packet->stream_index != streamIndex) {
-            av_packet_unref(packet.get());
-            continue;
+    std::optional<DecodedVideoFrame> frame = reader.readNextFrame(errorMessage);
+    if (!frame) {
+        if (errorMessage && errorMessage->isEmpty()) {
+            *errorMessage = QStringLiteral("No decodable video frame found");
         }
-
-        result = avcodec_send_packet(codecContext.get(), packet.get());
-        av_packet_unref(packet.get());
-        if (result < 0) {
-            continue;
-        }
-
-        while ((result = avcodec_receive_frame(codecContext.get(), frame.get())) >= 0) {
-            QImage image = frameToImage(frame.get(), codecContext.get());
-            if (!image.isNull()) {
-                qCInfo(logVideo) << "Extracted first video frame" << image.size() << "from" << path;
-                return image;
-            }
-            av_frame_unref(frame.get());
-        }
-
-        if (result != AVERROR(EAGAIN) && result != AVERROR_EOF) {
-            break;
-        }
+        return {};
     }
 
-    avcodec_send_packet(codecContext.get(), nullptr);
-    while (avcodec_receive_frame(codecContext.get(), frame.get()) >= 0) {
-        QImage image = frameToImage(frame.get(), codecContext.get());
-        if (!image.isNull()) {
-            qCInfo(logVideo) << "Extracted first flushed video frame" << image.size() << "from" << path;
-            return image;
-        }
-        av_frame_unref(frame.get());
-    }
-
-    if (errorMessage) {
-        *errorMessage = QStringLiteral("No decodable video frame found");
-    }
-    return {};
-#endif
+    qCInfo(logVideo) << "Extracted first video frame" << frame->image.size() << "from" << path;
+    return frame->image;
 }

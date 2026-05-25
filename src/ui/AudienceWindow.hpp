@@ -8,6 +8,7 @@
 #include <QOpenGLVertexArrayObject>
 #include <QOpenGLWindow>
 #include <QPointer>
+#include <QRectF>
 #include <QScreen>
 #include <QString>
 #include <QVector>
@@ -25,6 +26,8 @@ public:
     void setSlideImage(const QString& textureKey, const QImage& image);
     void clearSlideImage();
     void cacheSlideImage(const QString& textureKey, const QImage& image);
+    void setVideoFrame(const QImage& image, QRectF slideRect);
+    void clearVideoOverlay();
     void setAudienceScreen(QScreen* screen);
     void enterFullscreen();
     void toggleFullscreen();
@@ -37,6 +40,7 @@ signals:
     void previousRequested();
     void firstRequested();
     void lastRequested();
+    void playPauseRequested();
     void renderTargetChanged();
 
 protected:
@@ -65,7 +69,8 @@ private:
     };
 
     void uploadPendingTextures();
-    void updateVertexBuffer(QSize viewportSize);
+    void uploadPendingVideoTexture();
+    void updateVertexBuffer(QSize viewportSize, QSize textureSize, QRectF slideRect);
     CachedTexture* currentTexture();
     bool hasTexture(const QString& textureKey) const;
     void evictOldTextures();
@@ -75,6 +80,12 @@ private:
     QString m_currentTextureKey;
     std::vector<CachedTexture> m_textureCache;
     QVector<PendingTextureUpload> m_pendingUploads;
+    QImage m_pendingVideoFrame;
+    QRectF m_videoRect;
+    QSize m_videoTextureSize;
+    std::unique_ptr<QOpenGLTexture> m_videoTexture;
+    bool m_videoFrameDirty = false;
+    bool m_hasVideoOverlay = false;
     bool m_openGLReady = false;
     QPointer<QScreen> m_screen;
     bool m_isFullscreen = false;

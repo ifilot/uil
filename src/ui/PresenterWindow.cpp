@@ -184,6 +184,9 @@ void PresenterWindow::createActions() {
     m_startPresentationAction = new QAction(QStringLiteral("Start Presentation"), this);
     m_startPresentationAction->setShortcut(Qt::Key_F5);
 
+    m_playPauseMediaAction = new QAction(QStringLiteral("Play/Pause Media"), this);
+    m_playPauseMediaAction->setShortcut(Qt::Key_Return);
+
     m_fullscreenAction = new QAction(QStringLiteral("Toggle Audience Fullscreen"), this);
     m_fullscreenAction->setShortcut(Qt::Key_F11);
 
@@ -201,6 +204,8 @@ void PresenterWindow::createActions() {
     presentationMenu->addAction(m_firstAction);
     presentationMenu->addAction(m_lastAction);
     presentationMenu->addSeparator();
+    presentationMenu->addAction(m_playPauseMediaAction);
+    presentationMenu->addSeparator();
     presentationMenu->addAction(m_fullscreenAction);
 
     addAction(m_openAction);
@@ -209,6 +214,7 @@ void PresenterWindow::createActions() {
     addAction(m_firstAction);
     addAction(m_lastAction);
     addAction(m_startPresentationAction);
+    addAction(m_playPauseMediaAction);
     addAction(m_fullscreenAction);
 }
 
@@ -254,6 +260,7 @@ void PresenterWindow::createConnections() {
         m_controller->goToPage(m_controller->pageCount() - 1);
     });
     connect(m_startPresentationAction, &QAction::triggered, this, &PresenterWindow::startPresentationMode);
+    connect(m_playPauseMediaAction, &QAction::triggered, m_controller, &AppController::toggleMediaPlayback);
     connect(m_fullscreenAction, &QAction::triggered, m_controller, &AppController::toggleAudienceFullscreen);
     connect(m_screenCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &PresenterWindow::selectScreenFromCombo);
 

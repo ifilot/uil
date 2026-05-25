@@ -12,6 +12,7 @@
 #include <QtMath>
 
 #include <algorithm>
+#include <optional>
 
 Q_LOGGING_CATEGORY(logRender, "render")
 Q_LOGGING_CATEGORY(logScreens, "screens")
@@ -23,6 +24,7 @@ AppController::AppController(QObject* parent)
       m_renderScheduler(this) {
     connect(&m_renderScheduler, &RenderScheduler::renderStarted, this, &AppController::handleRenderStarted);
     connect(&m_renderScheduler, &RenderScheduler::renderFinished, this, &AppController::handleRenderFinished);
+    connect(&m_videoTimer, &QTimer::timeout, this, &AppController::advanceVideoFrame);
     refreshScreens();
 }
 
@@ -38,6 +40,7 @@ void AppController::setAudienceWindow(AudienceWindow* audienceWindow) {
 }
 
 bool AppController::openPdf(const QString& path) {
+    stopMediaPlayback();
     auto backend = std::make_unique<QtPdfBackend>();
     QString errorMessage;
     if (!backend->open(path, &errorMessage)) {
@@ -91,6 +94,7 @@ void AppController::goToPage(int pageIndex) {
         return;
     }
 
+    stopMediaPlayback();
     m_currentPageIndex = clampedPage;
     emit pageChanged(m_currentPageIndex, pageCount());
     updateVisibleSlides();
@@ -179,6 +183,16 @@ void AppController::toggleAudienceFullscreen() {
     }
 }
 
+void AppController::toggleMediaPlayback() {
+    if (m_videoPlaying) {
+        stopMediaPlayback();
+        emit statusMessageChanged(QStringLiteral("Media stopped"));
+        return;
+    }
+
+    startMediaPlayback();
+}
+
 void AppController::enterAudienceFullscreen() {
     if (m_audienceWindow) {
         m_audienceWindow->enterFullscreen();
@@ -254,12 +268,16 @@ void AppController::updateVisibleSlides() {
         emit currentSlideImageChanged(*currentImage);
         if (m_audienceWindow) {
             m_audienceWindow->setSlideImage(textureKeyForCacheKey(currentKey), *currentImage);
+            if (!m_videoPlaying) {
+                m_audienceWindow->clearVideoOverlay();
+            }
         }
         emit statusMessageChanged(QStringLiteral("Cache hit: page %1").arg(m_currentPageIndex + 1));
     } else {
         emit currentSlideImageChanged(QImage());
         if (m_audienceWindow) {
             m_audienceWindow->clearSlideImage();
+            m_audienceWindow->clearVideoOverlay();
         }
         emit statusMessageChanged(QStringLiteral("Rendering page %1").arg(m_currentPageIndex + 1));
     }
@@ -334,6 +352,101 @@ QImage AppController::imageWithMediaFrames(int pageIndex, const QImage& image) c
     }
 
     return result;
+}
+
+const PdfMediaAnnotation* AppController::currentPlayableMediaAnnotation() const {
+    for (const PdfMediaAnnotation& annotation : m_mediaScanResult.annotations) {
+        if (annotation.pageIndex == m_currentPageIndex
+            && annotation.isMp4()
+            && !annotation.resolvedFilePath.isEmpty()
+            && annotation.rect.isValid()) {
+            return &annotation;
+        }
+    }
+    return nullptr;
+}
+
+QRectF AppController::normalizedMediaRect(const PdfMediaAnnotation& annotation) const {
+    if (!m_backend || !annotation.rect.isValid()) {
+        return {};
+    }
+
+    const QSizeF pageSize = m_backend->pageSizePoints(annotation.pageIndex);
+    if (!pageSize.isValid()) {
+        return {};
+    }
+
+    return QRectF(
+        annotation.rect.left() / pageSize.width(),
+        (pageSize.height() - annotation.rect.bottom()) / pageSize.height(),
+        annotation.rect.width() / pageSize.width(),
+        annotation.rect.height() / pageSize.height());
+}
+
+void AppController::startMediaPlayback() {
+    const PdfMediaAnnotation* annotation = currentPlayableMediaAnnotation();
+    if (!annotation) {
+        emit statusMessageChanged(QStringLiteral("No playable MP4 media on this slide"));
+        return;
+    }
+
+    auto reader = std::make_unique<VideoFrameReader>();
+    QString errorMessage;
+    if (!reader->open(annotation->resolvedFilePath, &errorMessage)) {
+        emit statusMessageChanged(QStringLiteral("Could not play media: %1").arg(errorMessage));
+        return;
+    }
+
+    m_videoReader = std::move(reader);
+    m_activeVideoRect = normalizedMediaRect(*annotation);
+    m_lastVideoPtsMs = -1;
+    m_videoPlaying = true;
+    emit statusMessageChanged(QStringLiteral("Playing media: %1").arg(annotation->fileName));
+    advanceVideoFrame();
+}
+
+void AppController::stopMediaPlayback() {
+    m_videoTimer.stop();
+    if (m_videoReader) {
+        m_videoReader->close();
+        m_videoReader.reset();
+    }
+    m_videoPlaying = false;
+    m_activeVideoRect = {};
+    m_lastVideoPtsMs = -1;
+    if (m_audienceWindow) {
+        m_audienceWindow->clearVideoOverlay();
+    }
+}
+
+void AppController::advanceVideoFrame() {
+    if (!m_videoReader || !m_videoPlaying) {
+        stopMediaPlayback();
+        return;
+    }
+
+    QString errorMessage;
+    std::optional<DecodedVideoFrame> frame = m_videoReader->readNextFrame(&errorMessage);
+    if (!frame) {
+        stopMediaPlayback();
+        if (!errorMessage.isEmpty()) {
+            emit statusMessageChanged(QStringLiteral("Media stopped: %1").arg(errorMessage));
+        } else {
+            emit statusMessageChanged(QStringLiteral("Media finished"));
+        }
+        return;
+    }
+
+    if (m_audienceWindow) {
+        m_audienceWindow->setVideoFrame(frame->image, m_activeVideoRect);
+    }
+
+    int nextDelayMs = 33;
+    if (m_lastVideoPtsMs >= 0 && frame->ptsMs > m_lastVideoPtsMs) {
+        nextDelayMs = int(std::clamp<qint64>(frame->ptsMs - m_lastVideoPtsMs, 1, 100));
+    }
+    m_lastVideoPtsMs = frame->ptsMs;
+    m_videoTimer.start(nextDelayMs);
 }
 
 void AppController::handleAudienceRenderTargetChanged() {
