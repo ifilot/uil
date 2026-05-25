@@ -1,0 +1,340 @@
+#include "PresenterWindow.hpp"
+
+#include "AppController.hpp"
+#include "util/ImageUtil.hpp"
+
+#include <QAction>
+#include <QComboBox>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QGuiApplication>
+#include <QHBoxLayout>
+#include <QKeySequence>
+#include <QMenuBar>
+#include <QPainter>
+#include <QScreen>
+#include <QSettings>
+#include <QSignalBlocker>
+#include <QSizePolicy>
+#include <QStatusBar>
+#include <QVariant>
+#include <QVBoxLayout>
+#include <QWindow>
+
+namespace {
+constexpr int maxRecentPdfPaths = 5;
+constexpr auto recentPdfPathsKey = "recentPdfPaths";
+
+QString menuSafePathText(QString path) {
+    return path.replace(QStringLiteral("&"), QStringLiteral("&&"));
+}
+}
+
+SlidePreview::SlidePreview(QWidget* parent)
+    : QLabel(parent) {
+    setMinimumSize(320, 180);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setFrameShape(QFrame::StyledPanel);
+    setAlignment(Qt::AlignCenter);
+}
+
+void SlidePreview::setPreviewImage(const QImage& image) {
+    m_image = image;
+    update();
+}
+
+void SlidePreview::paintEvent(QPaintEvent*) {
+    QPainter painter(this);
+    painter.fillRect(rect(), palette().base());
+
+    if (m_image.isNull()) {
+        painter.setPen(palette().placeholderText().color());
+        painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("No slide"));
+        return;
+    }
+
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    const QRect target = centeredRectForImage(m_image.size(), rect().adjusted(8, 8, -8, -8));
+    painter.drawImage(target, m_image);
+}
+
+PresenterWindow::PresenterWindow(AppController* controller, QWidget* parent)
+    : QMainWindow(parent),
+      m_controller(controller) {
+    setWindowTitle(QStringLiteral("uil Presenter"));
+    createActions();
+    createLayout();
+    createConnections();
+    updateScreenList();
+    resize(1100, 650);
+}
+
+void PresenterWindow::openPdf() {
+    const QString path = QFileDialog::getOpenFileName(
+        this,
+        QStringLiteral("Open PDF"),
+        QString(),
+        QStringLiteral("PDF files (*.pdf);;All files (*.*)"));
+
+    if (path.isEmpty()) {
+        return;
+    }
+
+    openPdfPath(path);
+}
+
+void PresenterWindow::startPresentationMode() {
+    QScreen* primaryScreen = QGuiApplication::primaryScreen();
+    if (primaryScreen) {
+        if (windowHandle()) {
+            windowHandle()->setScreen(primaryScreen);
+        }
+
+        const QRect availableGeometry = primaryScreen->availableGeometry();
+        const QSize targetSize = size().boundedTo(availableGeometry.size());
+        const QPoint centeredTopLeft(
+            availableGeometry.x() + (availableGeometry.width() - targetSize.width()) / 2,
+            availableGeometry.y() + (availableGeometry.height() - targetSize.height()) / 2);
+
+        showNormal();
+        setGeometry(QRect(centeredTopLeft, targetSize));
+    }
+
+    show();
+    raise();
+    activateWindow();
+    m_controller->enterAudienceFullscreen();
+}
+
+void PresenterWindow::updateMediaLabel(const PdfMediaScanResult& result) {
+    if (!result.hasMedia()) {
+        m_mediaLabel->setText(QStringLiteral("Media: none"));
+        m_mediaLabel->setToolTip(QString());
+        return;
+    }
+
+    m_mediaLabel->setText(QStringLiteral("Media: %1 item(s)").arg(result.annotations.size()));
+    m_mediaLabel->setToolTip(result.summary());
+    statusBar()->showMessage(result.summary());
+}
+
+void PresenterWindow::updatePageLabel(int pageIndex, int pageCount) {
+    if (pageCount <= 0) {
+        m_pageLabel->setText(QStringLiteral("Page: - / -"));
+        return;
+    }
+
+    m_pageLabel->setText(QStringLiteral("Page: %1 / %2").arg(pageIndex + 1).arg(pageCount));
+}
+
+void PresenterWindow::updateScreenList() {
+    QSignalBlocker blocker(m_screenCombo);
+    m_screenCombo->clear();
+
+    const QList<QScreen*> screens = QGuiApplication::screens();
+    for (QScreen* screen : screens) {
+        const QString label = QStringLiteral("%1 (%2x%3)")
+            .arg(screen->name())
+            .arg(screen->geometry().width())
+            .arg(screen->geometry().height());
+        m_screenCombo->addItem(label, QVariant::fromValue(screen));
+    }
+
+    updateAudienceScreenSelection(m_controller->selectedAudienceScreen());
+}
+
+void PresenterWindow::updateAudienceScreenSelection(QScreen* screen) {
+    if (!screen) {
+        return;
+    }
+
+    for (int i = 0; i < m_screenCombo->count(); ++i) {
+        if (m_screenCombo->itemData(i).value<QScreen*>() == screen) {
+            QSignalBlocker blocker(m_screenCombo);
+            m_screenCombo->setCurrentIndex(i);
+            return;
+        }
+    }
+}
+
+void PresenterWindow::createActions() {
+    m_openAction = new QAction(QStringLiteral("&Open PDF"), this);
+    m_openAction->setShortcut(QKeySequence::Open);
+
+    m_nextAction = new QAction(QStringLiteral("Next"), this);
+    m_nextAction->setShortcuts({
+        QKeySequence(Qt::Key_Right),
+        QKeySequence(Qt::Key_PageDown),
+        QKeySequence(Qt::Key_Space)
+    });
+
+    m_previousAction = new QAction(QStringLiteral("Previous"), this);
+    m_previousAction->setShortcuts({
+        QKeySequence(Qt::Key_Left),
+        QKeySequence(Qt::Key_PageUp),
+        QKeySequence(Qt::Key_Backspace)
+    });
+
+    m_firstAction = new QAction(QStringLiteral("First"), this);
+    m_firstAction->setShortcut(Qt::Key_Home);
+
+    m_lastAction = new QAction(QStringLiteral("Last"), this);
+    m_lastAction->setShortcut(Qt::Key_End);
+
+    m_startPresentationAction = new QAction(QStringLiteral("Start Presentation"), this);
+    m_startPresentationAction->setShortcut(Qt::Key_F5);
+
+    m_fullscreenAction = new QAction(QStringLiteral("Toggle Audience Fullscreen"), this);
+    m_fullscreenAction->setShortcut(Qt::Key_F11);
+
+    QMenu* fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
+    fileMenu->addAction(m_openAction);
+    m_openRecentMenu = fileMenu->addMenu(QStringLiteral("Open &Recent"));
+    rebuildOpenRecentMenu();
+
+    QMenu* presentationMenu = menuBar()->addMenu(QStringLiteral("&Presentation"));
+    presentationMenu->addAction(m_startPresentationAction);
+    presentationMenu->addSeparator();
+    presentationMenu->addAction(m_nextAction);
+    presentationMenu->addAction(m_previousAction);
+    presentationMenu->addSeparator();
+    presentationMenu->addAction(m_firstAction);
+    presentationMenu->addAction(m_lastAction);
+    presentationMenu->addSeparator();
+    presentationMenu->addAction(m_fullscreenAction);
+
+    addAction(m_openAction);
+    addAction(m_nextAction);
+    addAction(m_previousAction);
+    addAction(m_firstAction);
+    addAction(m_lastAction);
+    addAction(m_startPresentationAction);
+    addAction(m_fullscreenAction);
+}
+
+void PresenterWindow::createLayout() {
+    auto* central = new QWidget(this);
+    auto* rootLayout = new QVBoxLayout(central);
+
+    auto* previewLayout = new QHBoxLayout;
+    m_currentPreview = new SlidePreview(central);
+    m_nextPreview = new SlidePreview(central);
+    previewLayout->addWidget(m_currentPreview, 1);
+    previewLayout->addWidget(m_nextPreview, 1);
+
+    auto* statusLayout = new QHBoxLayout;
+    m_pageLabel = new QLabel(QStringLiteral("Page: - / -"), central);
+    m_timerLabel = new QLabel(QStringLiteral("Timer: 00:00:00"), central);
+    m_mediaLabel = new QLabel(QStringLiteral("Media: none"), central);
+    auto* screenLabel = new QLabel(QStringLiteral("Audience:"), central);
+    m_screenCombo = new QComboBox(central);
+    statusLayout->addWidget(m_pageLabel);
+    statusLayout->addSpacing(24);
+    statusLayout->addWidget(m_timerLabel);
+    statusLayout->addSpacing(24);
+    statusLayout->addWidget(m_mediaLabel);
+    statusLayout->addStretch(1);
+    statusLayout->addWidget(screenLabel);
+    statusLayout->addWidget(m_screenCombo);
+
+    rootLayout->addLayout(previewLayout, 1);
+    rootLayout->addLayout(statusLayout);
+    setCentralWidget(central);
+    statusBar()->showMessage(QStringLiteral("Ready"));
+}
+
+void PresenterWindow::createConnections() {
+    connect(m_openAction, &QAction::triggered, this, &PresenterWindow::openPdf);
+    connect(m_nextAction, &QAction::triggered, m_controller, &AppController::nextPage);
+    connect(m_previousAction, &QAction::triggered, m_controller, &AppController::previousPage);
+    connect(m_firstAction, &QAction::triggered, this, [this] {
+        m_controller->goToPage(0);
+    });
+    connect(m_lastAction, &QAction::triggered, this, [this] {
+        m_controller->goToPage(m_controller->pageCount() - 1);
+    });
+    connect(m_startPresentationAction, &QAction::triggered, this, &PresenterWindow::startPresentationMode);
+    connect(m_fullscreenAction, &QAction::triggered, m_controller, &AppController::toggleAudienceFullscreen);
+    connect(m_screenCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &PresenterWindow::selectScreenFromCombo);
+
+    connect(m_controller, &AppController::pageChanged, this, &PresenterWindow::updatePageLabel);
+    connect(m_controller, &AppController::mediaScanChanged, this, &PresenterWindow::updateMediaLabel);
+    connect(m_controller, &AppController::currentSlideImageChanged, m_currentPreview, &SlidePreview::setPreviewImage);
+    connect(m_controller, &AppController::nextSlideImageChanged, m_nextPreview, &SlidePreview::setPreviewImage);
+    connect(m_controller, &AppController::statusMessageChanged, this, [this](const QString& message) {
+        statusBar()->showMessage(message);
+    });
+    connect(m_controller, &AppController::screenListChanged, this, &PresenterWindow::updateScreenList);
+    connect(m_controller, &AppController::audienceScreenChanged, this, &PresenterWindow::updateAudienceScreenSelection);
+}
+
+void PresenterWindow::selectScreenFromCombo(int index) {
+    if (index < 0) {
+        return;
+    }
+
+    QScreen* screen = m_screenCombo->itemData(index).value<QScreen*>();
+    m_controller->setAudienceScreen(screen);
+}
+
+bool PresenterWindow::openPdfPath(const QString& path) {
+    const QString absolutePath = QFileInfo(path).absoluteFilePath();
+    if (m_controller->openPdf(absolutePath)) {
+        addRecentPdfPath(absolutePath);
+        return true;
+    }
+
+    removeRecentPdfPath(absolutePath);
+    return false;
+}
+
+QStringList PresenterWindow::recentPdfPaths() const {
+    QSettings settings;
+    return settings.value(QString::fromLatin1(recentPdfPathsKey)).toStringList();
+}
+
+void PresenterWindow::saveRecentPdfPaths(const QStringList& paths) {
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(recentPdfPathsKey), paths);
+}
+
+void PresenterWindow::addRecentPdfPath(const QString& path) {
+    QStringList paths = recentPdfPaths();
+    paths.removeAll(path);
+    paths.prepend(path);
+
+    while (paths.size() > maxRecentPdfPaths) {
+        paths.removeLast();
+    }
+
+    saveRecentPdfPaths(paths);
+    rebuildOpenRecentMenu();
+}
+
+void PresenterWindow::removeRecentPdfPath(const QString& path) {
+    QStringList paths = recentPdfPaths();
+    if (!paths.removeAll(path)) {
+        return;
+    }
+
+    saveRecentPdfPaths(paths);
+    rebuildOpenRecentMenu();
+}
+
+void PresenterWindow::rebuildOpenRecentMenu() {
+    if (!m_openRecentMenu) {
+        return;
+    }
+
+    m_openRecentMenu->clear();
+
+    const QStringList paths = recentPdfPaths();
+    m_openRecentMenu->setEnabled(!paths.isEmpty());
+    for (const QString& path : paths) {
+        QAction* action = m_openRecentMenu->addAction(menuSafePathText(path));
+        action->setData(path);
+        connect(action, &QAction::triggered, this, [this, action] {
+            openPdfPath(action->data().toString());
+        });
+    }
+}

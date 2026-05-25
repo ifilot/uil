@@ -1,0 +1,378 @@
+#include "AudienceWindow.hpp"
+
+#include <QElapsedTimer>
+#include <QKeyEvent>
+#include <QLoggingCategory>
+#include <QOpenGLContext>
+#include <QtMath>
+#include <QtGlobal>
+
+Q_LOGGING_CATEGORY(logUi, "ui")
+
+namespace {
+constexpr int maxAudienceTextures = 4;
+
+constexpr char vertexShaderSource[] = R"(
+attribute vec2 position;
+attribute vec2 texCoord;
+varying vec2 vTexCoord;
+
+void main() {
+    vTexCoord = texCoord;
+    gl_Position = vec4(position, 0.0, 1.0);
+}
+)";
+
+constexpr char fragmentShaderSource[] = R"(
+uniform sampler2D slideTexture;
+varying vec2 vTexCoord;
+
+void main() {
+    gl_FragColor = texture2D(slideTexture, vTexCoord);
+}
+)";
+
+QImage verticallyFlipped(QImage image) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    return std::move(image).flipped(Qt::Vertical);
+#else
+    return std::move(image).mirrored(false, true);
+#endif
+}
+}
+
+AudienceWindow::AudienceWindow()
+    : QOpenGLWindow(QOpenGLWindow::NoPartialUpdate) {
+    setTitle(QStringLiteral("uil Audience"));
+    resize(960, 540);
+}
+
+AudienceWindow::~AudienceWindow() {
+    if (context()) {
+        makeCurrent();
+        releaseOpenGLResources();
+        doneCurrent();
+    }
+}
+
+void AudienceWindow::setSlideImage(const QString& textureKey, const QImage& image) {
+    if (textureKey.isEmpty() || image.isNull()) {
+        clearSlideImage();
+        return;
+    }
+
+    m_currentTextureKey = textureKey;
+    cacheSlideImage(textureKey, image);
+    update();
+}
+
+void AudienceWindow::clearSlideImage() {
+    m_currentTextureKey.clear();
+    update();
+}
+
+void AudienceWindow::cacheSlideImage(const QString& textureKey, const QImage& image) {
+    if (textureKey.isEmpty() || image.isNull() || hasTexture(textureKey)) {
+        return;
+    }
+
+    for (PendingTextureUpload& upload : m_pendingUploads) {
+        if (upload.key == textureKey) {
+            upload.image = image;
+            update();
+            return;
+        }
+    }
+
+    m_pendingUploads.push_back(PendingTextureUpload{textureKey, image});
+    update();
+}
+
+void AudienceWindow::setAudienceScreen(QScreen* screen) {
+    if (!screen) {
+        return;
+    }
+
+    m_screen = screen;
+    applyScreenGeometry(m_isFullscreen);
+    if (m_isFullscreen) {
+        showFullScreen();
+    }
+    emit renderTargetChanged();
+}
+
+void AudienceWindow::enterFullscreen() {
+    applyScreenGeometry(true);
+    showFullScreen();
+    m_isFullscreen = true;
+    qCInfo(logUi) << "Audience fullscreen entered";
+}
+
+void AudienceWindow::toggleFullscreen() {
+    if (!m_isFullscreen) {
+        enterFullscreen();
+    } else {
+        exitFullscreen();
+    }
+}
+
+void AudienceWindow::exitFullscreen() {
+    if (!m_isFullscreen) {
+        return;
+    }
+
+    showNormal();
+    hide();
+    m_isFullscreen = false;
+    qCInfo(logUi) << "Audience fullscreen closed";
+}
+
+QSize AudienceWindow::renderLogicalSize() const {
+    if (m_screen) {
+        return m_screen->geometry().size();
+    }
+
+    return size();
+}
+
+qreal AudienceWindow::renderDevicePixelRatio() const {
+    if (m_screen) {
+        return m_screen->devicePixelRatio();
+    }
+
+    return devicePixelRatio();
+}
+
+void AudienceWindow::initializeGL() {
+    initializeOpenGLFunctions();
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    if (!m_program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource)
+        || !m_program.addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource)
+        || !m_program.link()) {
+        qCWarning(logUi) << "Audience OpenGL shader setup failed:" << m_program.log();
+        return;
+    }
+
+    m_vertexArray.create();
+    QOpenGLVertexArrayObject::Binder vertexArrayBinder(&m_vertexArray);
+
+    m_vertexBuffer.create();
+    m_vertexBuffer.setUsagePattern(QOpenGLBuffer::DynamicDraw);
+    m_vertexBuffer.bind();
+    m_vertexBuffer.allocate(4 * int(sizeof(Vertex)));
+
+    m_program.bind();
+    const int positionLocation = m_program.attributeLocation("position");
+    const int texCoordLocation = m_program.attributeLocation("texCoord");
+    m_program.enableAttributeArray(positionLocation);
+    m_program.setAttributeBuffer(positionLocation, GL_FLOAT, offsetof(Vertex, x), 2, sizeof(Vertex));
+    m_program.enableAttributeArray(texCoordLocation);
+    m_program.setAttributeBuffer(texCoordLocation, GL_FLOAT, offsetof(Vertex, u), 2, sizeof(Vertex));
+    m_program.setUniformValue("slideTexture", 0);
+    m_program.release();
+    m_vertexBuffer.release();
+    m_openGLReady = true;
+}
+
+void AudienceWindow::resizeGL(int width, int height) {
+    updateVertexBuffer(QSize(width, height));
+}
+
+void AudienceWindow::paintGL() {
+    if (!m_openGLReady || !context() || QOpenGLContext::currentContext() != context()) {
+        return;
+    }
+
+    const qreal dpr = devicePixelRatio();
+    const QSize viewportSize(qMax(1, int(qRound(width() * dpr))),
+                             qMax(1, int(qRound(height() * dpr))));
+    glViewport(0, 0, viewportSize.width(), viewportSize.height());
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    uploadPendingTextures();
+
+    CachedTexture* texture = currentTexture();
+    if (!texture || !texture->texture || !m_program.isLinked()) {
+        return;
+    }
+
+    updateVertexBuffer(viewportSize);
+
+    m_program.bind();
+    QOpenGLVertexArrayObject::Binder vertexArrayBinder(&m_vertexArray);
+    glActiveTexture(GL_TEXTURE0);
+    texture->texture->bind();
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    texture->texture->release();
+    m_program.release();
+}
+
+void AudienceWindow::keyPressEvent(QKeyEvent* event) {
+    switch (event->key()) {
+    case Qt::Key_Right:
+    case Qt::Key_PageDown:
+    case Qt::Key_Space:
+        emit nextRequested();
+        event->accept();
+        return;
+    case Qt::Key_Left:
+    case Qt::Key_PageUp:
+    case Qt::Key_Backspace:
+        emit previousRequested();
+        event->accept();
+        return;
+    case Qt::Key_Home:
+        emit firstRequested();
+        event->accept();
+        return;
+    case Qt::Key_End:
+        emit lastRequested();
+        event->accept();
+        return;
+    case Qt::Key_F11:
+        toggleFullscreen();
+        event->accept();
+        return;
+    case Qt::Key_Escape:
+        exitFullscreen();
+        event->accept();
+        return;
+    default:
+        break;
+    }
+
+    QOpenGLWindow::keyPressEvent(event);
+}
+
+void AudienceWindow::uploadPendingTextures() {
+    if (m_pendingUploads.isEmpty()) {
+        return;
+    }
+
+    QElapsedTimer timer;
+    timer.start();
+
+    int uploaded = 0;
+    while (!m_pendingUploads.isEmpty()) {
+        const PendingTextureUpload upload = m_pendingUploads.takeFirst();
+        if (hasTexture(upload.key) || upload.image.isNull()) {
+            continue;
+        }
+
+        const QImage textureImage = verticallyFlipped(upload.image.convertToFormat(QImage::Format_RGBA8888));
+
+        auto texture = std::make_unique<QOpenGLTexture>(textureImage);
+        texture->setMinificationFilter(QOpenGLTexture::Linear);
+        texture->setMagnificationFilter(QOpenGLTexture::Linear);
+        texture->setWrapMode(QOpenGLTexture::ClampToEdge);
+
+        m_textureCache.insert(m_textureCache.begin(), CachedTexture{upload.key, textureImage.size(), std::move(texture)});
+        ++uploaded;
+    }
+
+    evictOldTextures();
+
+    if (uploaded > 0) {
+        qCInfo(logUi) << "Uploaded" << uploaded << "audience texture(s) in" << timer.elapsed() << "ms";
+    }
+}
+
+void AudienceWindow::updateVertexBuffer(QSize viewportSize) {
+    CachedTexture* texture = currentTexture();
+    if (!m_vertexBuffer.isCreated() || !viewportSize.isValid() || !texture || !texture->size.isValid()) {
+        return;
+    }
+
+    const float viewportAspect = float(viewportSize.width()) / float(viewportSize.height());
+    const float textureAspect = float(texture->size.width()) / float(texture->size.height());
+
+    float halfWidth = 1.0f;
+    float halfHeight = 1.0f;
+    if (textureAspect > viewportAspect) {
+        halfHeight = viewportAspect / textureAspect;
+    } else {
+        halfWidth = textureAspect / viewportAspect;
+    }
+
+    const Vertex vertices[] = {
+        {-halfWidth, -halfHeight, 0.0f, 0.0f},
+        { halfWidth, -halfHeight, 1.0f, 0.0f},
+        {-halfWidth,  halfHeight, 0.0f, 1.0f},
+        { halfWidth,  halfHeight, 1.0f, 1.0f},
+    };
+
+    m_vertexBuffer.bind();
+    m_vertexBuffer.write(0, vertices, int(sizeof(vertices)));
+    m_vertexBuffer.release();
+}
+
+AudienceWindow::CachedTexture* AudienceWindow::currentTexture() {
+    if (m_currentTextureKey.isEmpty()) {
+        return nullptr;
+    }
+
+    for (CachedTexture& texture : m_textureCache) {
+        if (texture.key == m_currentTextureKey) {
+            return &texture;
+        }
+    }
+
+    return nullptr;
+}
+
+bool AudienceWindow::hasTexture(const QString& textureKey) const {
+    for (const CachedTexture& texture : m_textureCache) {
+        if (texture.key == textureKey) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void AudienceWindow::evictOldTextures() {
+    for (int i = int(m_textureCache.size()) - 1; int(m_textureCache.size()) > maxAudienceTextures && i >= 0; --i) {
+        if (m_textureCache.at(size_t(i)).key == m_currentTextureKey) {
+            continue;
+        }
+        m_textureCache.erase(m_textureCache.begin() + i);
+    }
+}
+
+void AudienceWindow::applyScreenGeometry(bool fullscreen) {
+    if (!m_screen) {
+        return;
+    }
+
+    setScreen(m_screen);
+    if (fullscreen) {
+        setGeometry(m_screen->geometry());
+        return;
+    }
+
+    const QRect availableGeometry = m_screen->availableGeometry();
+    QSize targetSize = size();
+    if (!targetSize.isValid()) {
+        targetSize = QSize(960, 540);
+    }
+    targetSize = targetSize.boundedTo(availableGeometry.size());
+
+    const QPoint topLeft(
+        availableGeometry.x() + (availableGeometry.width() - targetSize.width()) / 2,
+        availableGeometry.y() + (availableGeometry.height() - targetSize.height()) / 2);
+    setGeometry(QRect(topLeft, targetSize));
+}
+
+void AudienceWindow::releaseOpenGLResources() {
+    m_openGLReady = false;
+    m_textureCache.clear();
+    m_pendingUploads.clear();
+    if (m_vertexBuffer.isCreated()) {
+        m_vertexBuffer.destroy();
+    }
+    if (m_vertexArray.isCreated()) {
+        m_vertexArray.destroy();
+    }
+    m_program.removeAllShaders();
+}
