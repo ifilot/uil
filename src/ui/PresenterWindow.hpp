@@ -43,6 +43,7 @@ private slots:
     void openPdf();
     void jumpToPage();
     void showSlideOverview();
+    void showAbout();
     void startPresentationMode();
     void resetPresentationTimer();
     void updateTimerLabel();
@@ -86,6 +87,7 @@ private:
     QAction* m_blackScreenAction = nullptr;
     QAction* m_whiteScreenAction = nullptr;
     QAction* m_fullscreenAction = nullptr;
+    QAction* m_aboutAction = nullptr;
     QElapsedTimer m_elapsedTimer;
     QTimer m_timerUpdateTimer;
     bool m_timerRunning = false;

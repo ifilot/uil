@@ -14,6 +14,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     OpenGLWidgets
     Pdf
     PdfWidgets
+    Svg
 )
 find_package(ZLIB REQUIRED)
 find_package(PkgConfig QUIET)
@@ -56,6 +57,14 @@ qt_add_executable(uil
     src/media/VideoFrameBuffer.cpp
 )
 
+qt_add_resources(uil "uil_resources"
+    PREFIX "/"
+    BASE "resources"
+    FILES
+        resources/icons/uil.svg
+        resources/styles/vscode.qss
+)
+
 target_include_directories(uil PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -68,7 +77,13 @@ target_link_libraries(uil PRIVATE
     Qt6::OpenGLWidgets
     Qt6::Pdf
     Qt6::PdfWidgets
+    Qt6::Svg
     ZLIB::ZLIB
+)
+
+target_compile_definitions(uil PRIVATE
+    UIL_VERSION="${PROJECT_VERSION}"
+    UIL_VERSION_DISPLAY="v${PROJECT_VERSION}"
 )
 
 if(FFMPEG_FOUND)

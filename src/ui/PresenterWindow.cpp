@@ -12,10 +12,12 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QListWidget>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QPainter>
 #include <QScreen>
 #include <QSettings>
@@ -25,6 +27,7 @@
 #include <QVariant>
 #include <QVBoxLayout>
 #include <QWindow>
+#include <QtGlobal>
 
 namespace {
 constexpr int maxRecentPdfPaths = 5;
@@ -43,7 +46,7 @@ SlidePreview::SlidePreview(QWidget* parent)
     : QLabel(parent) {
     setMinimumSize(320, 180);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    setFrameShape(QFrame::StyledPanel);
+    setFrameShape(QFrame::NoFrame);
     setAlignment(Qt::AlignCenter);
 }
 
@@ -54,10 +57,10 @@ void SlidePreview::setPreviewImage(const QImage& image) {
 
 void SlidePreview::paintEvent(QPaintEvent*) {
     QPainter painter(this);
-    painter.fillRect(rect(), palette().base());
+    painter.fillRect(rect(), QColor(0x11, 0x11, 0x11));
 
     if (m_image.isNull()) {
-        painter.setPen(palette().placeholderText().color());
+        painter.setPen(QColor(0x85, 0x85, 0x85));
         painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("No slide"));
         return;
     }
@@ -71,6 +74,7 @@ PresenterWindow::PresenterWindow(AppController* controller, QWidget* parent)
     : QMainWindow(parent),
       m_controller(controller) {
     setWindowTitle(QStringLiteral("uil Presenter"));
+    setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
     createActions();
     createLayout();
     createConnections();
@@ -85,6 +89,7 @@ PresenterWindow::PresenterWindow(AppController* controller, QWidget* parent)
 
 void PresenterWindow::closeEvent(QCloseEvent* event) {
     saveSettings();
+    m_controller->closeAudienceWindow();
     QMainWindow::closeEvent(event);
 }
 
@@ -150,6 +155,19 @@ void PresenterWindow::showSlideOverview() {
     if (dialog.exec() == QDialog::Accepted && list->currentItem()) {
         m_controller->goToPage(list->currentItem()->data(Qt::UserRole).toInt());
     }
+}
+
+void PresenterWindow::showAbout() {
+    QMessageBox aboutBox(this);
+    aboutBox.setWindowTitle(QStringLiteral("About uil"));
+    aboutBox.setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
+    aboutBox.setIconPixmap(QIcon(QStringLiteral(":/icons/uil.svg")).pixmap(QSize(96, 96)));
+    aboutBox.setText(QStringLiteral("<h2>uil %1</h2>").arg(QStringLiteral(UIL_VERSION_DISPLAY)));
+    aboutBox.setInformativeText(QStringLiteral(
+        "A Windows-focused Qt PDF presentation app for Beamer-style slide decks.\n\n"
+        "Built with Qt %1.").arg(QString::fromLatin1(qVersion())));
+    aboutBox.setStandardButtons(QMessageBox::Ok);
+    aboutBox.exec();
 }
 
 void PresenterWindow::startPresentationMode() {
@@ -297,6 +315,8 @@ void PresenterWindow::createActions() {
     m_fullscreenAction = new QAction(QStringLiteral("Toggle Audience Fullscreen"), this);
     m_fullscreenAction->setShortcut(Qt::Key_F11);
 
+    m_aboutAction = new QAction(QIcon(QStringLiteral(":/icons/uil.svg")), QStringLiteral("About uil"), this);
+
     QMenu* fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
     fileMenu->addAction(m_openAction);
     m_openRecentMenu = fileMenu->addMenu(QStringLiteral("Open &Recent"));
@@ -320,6 +340,9 @@ void PresenterWindow::createActions() {
     presentationMenu->addSeparator();
     presentationMenu->addAction(m_fullscreenAction);
 
+    QMenu* helpMenu = menuBar()->addMenu(QStringLiteral("&Help"));
+    helpMenu->addAction(m_aboutAction);
+
     addAction(m_openAction);
     addAction(m_nextAction);
     addAction(m_previousAction);
@@ -337,24 +360,48 @@ void PresenterWindow::createActions() {
 
 void PresenterWindow::createLayout() {
     auto* central = new QWidget(this);
+    central->setObjectName(QStringLiteral("presenterRoot"));
     auto* rootLayout = new QVBoxLayout(central);
+    rootLayout->setContentsMargins(16, 16, 16, 10);
+    rootLayout->setSpacing(12);
+
+    auto createPreviewPane = [](const QString& title, SlidePreview* preview) {
+        auto* pane = new QWidget;
+        pane->setObjectName(QStringLiteral("previewPane"));
+        auto* paneLayout = new QVBoxLayout(pane);
+        paneLayout->setContentsMargins(0, 0, 0, 0);
+        paneLayout->setSpacing(0);
+
+        auto* heading = new QLabel(title, pane);
+        heading->setObjectName(QStringLiteral("previewHeading"));
+        paneLayout->addWidget(heading);
+        paneLayout->addWidget(preview, 1);
+        return pane;
+    };
 
     auto* previewLayout = new QHBoxLayout;
+    previewLayout->setContentsMargins(0, 0, 0, 0);
+    previewLayout->setSpacing(12);
     m_currentPreview = new SlidePreview(central);
     m_nextPreview = new SlidePreview(central);
-    previewLayout->addWidget(m_currentPreview, 1);
-    previewLayout->addWidget(m_nextPreview, 1);
+    previewLayout->addWidget(createPreviewPane(QStringLiteral("Current"), m_currentPreview), 1);
+    previewLayout->addWidget(createPreviewPane(QStringLiteral("Next"), m_nextPreview), 1);
 
     auto* statusLayout = new QHBoxLayout;
+    statusLayout->setContentsMargins(0, 0, 0, 0);
+    statusLayout->setSpacing(8);
     m_pageLabel = new QLabel(QStringLiteral("Page: - / -"), central);
     m_timerLabel = new QLabel(QStringLiteral("Timer: 00:00:00"), central);
     m_mediaLabel = new QLabel(QStringLiteral("Media: none"), central);
     auto* screenLabel = new QLabel(QStringLiteral("Audience:"), central);
     m_screenCombo = new QComboBox(central);
+    m_screenCombo->setMinimumWidth(280);
+    for (QLabel* label : {m_pageLabel, m_timerLabel, m_mediaLabel}) {
+        label->setObjectName(QStringLiteral("statusPill"));
+    }
+    screenLabel->setObjectName(QStringLiteral("fieldLabel"));
     statusLayout->addWidget(m_pageLabel);
-    statusLayout->addSpacing(24);
     statusLayout->addWidget(m_timerLabel);
-    statusLayout->addSpacing(24);
     statusLayout->addWidget(m_mediaLabel);
     statusLayout->addStretch(1);
     statusLayout->addWidget(screenLabel);
@@ -380,6 +427,7 @@ void PresenterWindow::createConnections() {
     connect(m_playPauseMediaAction, &QAction::triggered, m_controller, &AppController::toggleMediaPlayback);
     connect(m_jumpToPageAction, &QAction::triggered, this, &PresenterWindow::jumpToPage);
     connect(m_slideOverviewAction, &QAction::triggered, this, &PresenterWindow::showSlideOverview);
+    connect(m_aboutAction, &QAction::triggered, this, &PresenterWindow::showAbout);
     connect(m_resetTimerAction, &QAction::triggered, this, &PresenterWindow::resetPresentationTimer);
     connect(m_blackScreenAction, &QAction::triggered, m_controller, &AppController::toggleBlackScreen);
     connect(m_whiteScreenAction, &QAction::triggered, m_controller, &AppController::toggleWhiteScreen);

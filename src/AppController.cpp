@@ -205,6 +205,13 @@ void AppController::toggleWhiteScreen() {
     }
 }
 
+void AppController::closeAudienceWindow() {
+    stopMediaPlayback();
+    if (m_audienceWindow) {
+        m_audienceWindow->close();
+    }
+}
+
 void AppController::enterAudienceFullscreen() {
     if (m_audienceWindow) {
         m_audienceWindow->enterFullscreen();

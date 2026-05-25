@@ -2,6 +2,7 @@
 
 #include <QElapsedTimer>
 #include <QCursor>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QLoggingCategory>
 #include <QMouseEvent>
@@ -48,6 +49,7 @@ QImage verticallyFlipped(QImage image) {
 AudienceWindow::AudienceWindow()
     : QOpenGLWindow(QOpenGLWindow::NoPartialUpdate) {
     setTitle(QStringLiteral("uil Audience"));
+    setIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
     resize(960, 540);
     m_cursorHideTimer.setSingleShot(true);
     m_cursorHideTimer.setInterval(2000);

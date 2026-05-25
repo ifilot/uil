@@ -43,6 +43,7 @@ public:
     void toggleBlackScreen();
     void toggleWhiteScreen();
     void toggleMediaPlayback();
+    void closeAudienceWindow();
 
 signals:
     void documentChanged(int pageCount);
