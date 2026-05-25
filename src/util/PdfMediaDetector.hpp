@@ -3,6 +3,7 @@
 #include <QImage>
 #include <QRectF>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 struct PdfMediaAnnotation {
@@ -25,4 +26,7 @@ struct PdfMediaScanResult {
     QString summary() const;
 };
 
-PdfMediaScanResult scanPdfMediaAnnotations(const QString& path);
+PdfMediaScanResult scanPdfMediaAnnotations(
+    const QString& path,
+    const QString& packageRootPath = QString(),
+    const QStringList& packageMovieAssetPaths = {});

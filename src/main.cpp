@@ -24,7 +24,7 @@ void applyApplicationTheme(QApplication& app) {
     palette.setColor(QPalette::Button, QColor(0x3c, 0x3c, 0x3c));
     palette.setColor(QPalette::ButtonText, QColor(0xcc, 0xcc, 0xcc));
     palette.setColor(QPalette::BrightText, QColor(0xff, 0xff, 0xff));
-    palette.setColor(QPalette::Highlight, QColor(0x00, 0x7a, 0xcc));
+    palette.setColor(QPalette::Highlight, QColor(0x00, 0x8c, 0x8c));
     palette.setColor(QPalette::HighlightedText, QColor(0xff, 0xff, 0xff));
     palette.setColor(QPalette::PlaceholderText, QColor(0x85, 0x85, 0x85));
     app.setPalette(palette);
@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     QApplication::setApplicationName(QStringLiteral("uil"));
     QApplication::setOrganizationName(QStringLiteral("uil"));
     QApplication::setApplicationVersion(QStringLiteral(UIL_VERSION));
-    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/uil-white.svg")));
     applyApplicationTheme(app);
 
     AppController controller;
@@ -62,9 +62,6 @@ int main(int argc, char* argv[]) {
     QObject::connect(&audienceWindow, &AudienceWindow::playPauseRequested, &controller, &AppController::toggleMediaPlayback);
 
     audienceWindow.setAudienceScreen(controller.selectedAudienceScreen());
-    if (QGuiApplication::platformName() != QStringLiteral("offscreen")) {
-        audienceWindow.show();
-    }
     presenterWindow.show();
 
     return app.exec();

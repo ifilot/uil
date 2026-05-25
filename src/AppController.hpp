@@ -13,6 +13,7 @@
 #include <QRectF>
 #include <QScreen>
 #include <QString>
+#include <QTemporaryDir>
 #include <QTimer>
 
 #include <memory>
@@ -33,6 +34,7 @@ public:
     void goToPage(int pageIndex);
     int currentPage() const;
     int pageCount() const;
+    void requestDeckOverviewRenders(const QSize& boundingPixelSize, int focusedPageIndex = -1);
 
     QString currentPath() const;
     QScreen* selectedAudienceScreen() const;
@@ -49,7 +51,9 @@ signals:
     void documentChanged(int pageCount);
     void pageChanged(int pageIndex, int pageCount);
     void currentSlideImageChanged(const QImage& image);
+    void currentAnnotationOverlayChanged(const QImage& image);
     void nextSlideImageChanged(const QImage& image);
+    void deckSlideImageChanged(int pageIndex, const QSize& boundingPixelSize, const QImage& image);
     void statusMessageChanged(const QString& message);
     void audienceScreenChanged(QScreen* screen);
     void screenListChanged();
@@ -57,11 +61,14 @@ signals:
 
 private:
     QSize audienceRenderPixelSize(int pageIndex) const;
+    SlideCacheKey cacheKeyForPageAtSize(int pageIndex, const QSize& boundingPixelSize) const;
     SlideCacheKey cacheKeyForPage(int pageIndex) const;
     QString textureKeyForCacheKey(const SlideCacheKey& key) const;
+    RenderRequest renderRequestForPageAtSize(int pageIndex, const QSize& boundingPixelSize) const;
     RenderRequest renderRequestForPage(int pageIndex) const;
     void updateVisibleSlides();
     void schedulePredictiveRenders();
+    void requestPageRenderAtSize(int pageIndex, const QSize& boundingPixelSize, int priority);
     void requestPageRender(int pageIndex, int priority);
     QImage imageWithMediaFrames(int pageIndex, const QImage& image) const;
     const PdfMediaAnnotation* currentPlayableMediaAnnotation() const;
@@ -82,12 +89,14 @@ private:
     RenderScheduler m_renderScheduler;
     QTimer m_videoTimer;
     std::unique_ptr<VideoFrameBuffer> m_videoBuffer;
+    std::unique_ptr<QTemporaryDir> m_packageTempDir;
     QPointer<AudienceWindow> m_audienceWindow;
     QPointer<QScreen> m_audienceScreen;
     QString m_currentPath;
     QString m_documentHash;
     PdfMediaScanResult m_mediaScanResult;
     QRectF m_activeVideoRect;
+    QSize m_deckOverviewRenderSize;
     qint64 m_lastVideoPtsMs = -1;
     bool m_waitingForVideoFrame = false;
     bool m_videoPlaying = false;

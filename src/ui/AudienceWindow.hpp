@@ -1,23 +1,26 @@
 #pragma once
 
+#include <QColor>
+#include <QHash>
 #include <QImage>
-#include <QOpenGLBuffer>
-#include <QOpenGLFunctions>
-#include <QOpenGLShaderProgram>
-#include <QOpenGLTexture>
-#include <QOpenGLVertexArrayObject>
-#include <QOpenGLWindow>
 #include <QPointer>
 #include <QRectF>
 #include <QScreen>
 #include <QString>
 #include <QTimer>
-#include <QVector>
+#include <QWidget>
 
-#include <memory>
 #include <vector>
 
-class AudienceWindow : public QOpenGLWindow, protected QOpenGLFunctions {
+class QCloseEvent;
+class QContextMenuEvent;
+class QEvent;
+class QKeyEvent;
+class QMenu;
+class QMouseEvent;
+class QPaintEvent;
+
+class AudienceWindow : public QWidget {
     Q_OBJECT
 
 public:
@@ -36,6 +39,16 @@ public:
     void toggleBlackScreen();
     void toggleWhiteScreen();
     void clearBlankScreen();
+    void setCursorTool();
+    void setPointerTool();
+    void setPenTool();
+    void setEraserTool();
+    void setPointerColor(const QColor& color);
+    void setAnnotationColor(const QColor& color);
+    void setAnnotationThickness(int thickness);
+    void clearAnnotations();
+    QImage currentAnnotatedSlideImage() const;
+    QImage currentAnnotationOverlayImage() const;
     QSize renderLogicalSize() const;
     qreal renderDevicePixelRatio() const;
 
@@ -46,66 +59,70 @@ signals:
     void lastRequested();
     void playPauseRequested();
     void renderTargetChanged();
+    void annotationOverlayChanged(const QImage& image);
+    void presentationClosed();
 
 protected:
-    void initializeGL() override;
-    void resizeGL(int width, int height) override;
-    void paintGL() override;
+    void closeEvent(QCloseEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void leaveEvent(QEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
+    enum class InteractionTool {
+        Cursor,
+        Pointer,
+        Pen,
+        Eraser
+    };
+
     enum class BlankMode {
         None,
         Black,
         White
     };
 
-    struct Vertex {
-        float x = 0.0f;
-        float y = 0.0f;
-        float u = 0.0f;
-        float v = 0.0f;
-    };
-
-    struct CachedTexture {
-        QString key;
-        QSize size;
-        std::unique_ptr<QOpenGLTexture> texture;
-    };
-
-    struct PendingTextureUpload {
+    struct CachedSlide {
         QString key;
         QImage image;
     };
 
-    void uploadPendingTextures();
-    void uploadPendingVideoTexture();
-    void updateVertexBuffer(QSize viewportSize, QSize textureSize, QRectF slideRect);
-    CachedTexture* currentTexture();
-    bool hasTexture(const QString& textureKey) const;
-    void evictOldTextures();
+    void evictOldSlides();
     void applyScreenGeometry(bool fullscreen);
     void showCursorTemporarily();
     void hideCursor();
-    void releaseOpenGLResources();
+    void updateCursorAppearance();
+    QRectF slideLogicalRect(QSize textureSize) const;
+    QPointF slideImagePoint(QPointF windowPoint, QSize textureSize, bool* inside) const;
+    QImage& annotationImageForCurrentSlide(QSize size);
+    const QImage* currentAnnotationImage() const;
+    void drawAnnotationSegment(QPointF fromWindowPoint, QPointF toWindowPoint);
+    void drawPointer(QPainter& painter) const;
+    void showFeatureMenu(const QPoint& globalPosition);
+    void saveAnnotatedSlideImage();
 
     QString m_currentTextureKey;
-    std::vector<CachedTexture> m_textureCache;
-    QVector<PendingTextureUpload> m_pendingUploads;
-    QImage m_pendingVideoFrame;
+    QImage m_currentSlideImage;
+    std::vector<CachedSlide> m_slideCache;
+    QImage m_videoFrame;
     QRectF m_videoRect;
-    QSize m_videoTextureSize;
-    std::unique_ptr<QOpenGLTexture> m_videoTexture;
-    bool m_videoFrameDirty = false;
+    QHash<QString, QImage> m_annotationImages;
+    QColor m_pointerColor = QColor(255, 36, 36);
+    QColor m_annotationColor = QColor(255, 36, 36);
+    QPointF m_lastAnnotationPoint;
+    QPointF m_pointerPosition;
+    InteractionTool m_interactionTool = InteractionTool::Cursor;
+    bool m_isAnnotating = false;
+    bool m_pointerVisible = false;
     bool m_hasVideoOverlay = false;
-    bool m_openGLReady = false;
     QPointer<QScreen> m_screen;
     QTimer m_cursorHideTimer;
     BlankMode m_blankMode = BlankMode::None;
     bool m_isFullscreen = false;
-
-    QOpenGLShaderProgram m_program;
-    QOpenGLBuffer m_vertexBuffer{QOpenGLBuffer::VertexBuffer};
-    QOpenGLVertexArrayObject m_vertexArray;
+    int m_annotationThickness = 6;
+    QPointer<QMenu> m_featureMenu;
 };

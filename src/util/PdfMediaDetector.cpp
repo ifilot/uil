@@ -350,7 +350,16 @@ PdfMediaAnnotation annotationFromObject(int pageIndex, int objectNumber, const Q
     };
 }
 
-QString resolveMediaPath(const QString& pdfPath, const QString& fileName) {
+QString normalizedPackagePath(QString path) {
+    path.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    return QDir::cleanPath(path);
+}
+
+QString resolveMediaPath(
+    const QString& pdfPath,
+    const QString& fileName,
+    const QString& packageRootPath,
+    const QStringList& packageMovieAssetPaths) {
     if (fileName.isEmpty()) {
         return {};
     }
@@ -360,13 +369,26 @@ QString resolveMediaPath(const QString& pdfPath, const QString& fileName) {
         return mediaInfo.absoluteFilePath();
     }
 
+    const QString normalizedTarget = normalizedPackagePath(fileName);
+    if (!packageRootPath.isEmpty()) {
+        for (const QString& assetPath : packageMovieAssetPaths) {
+            if (normalizedTarget == normalizedPackagePath(assetPath)) {
+                return QFileInfo(QDir(packageRootPath), normalizedTarget).absoluteFilePath();
+            }
+        }
+    }
+
     const QFileInfo pdfInfo(pdfPath);
     return QFileInfo(pdfInfo.absoluteDir(), fileName).absoluteFilePath();
 }
 
-void resolveAndExtractMediaFrames(PdfMediaScanResult& result, const QString& pdfPath) {
+void resolveAndExtractMediaFrames(
+    PdfMediaScanResult& result,
+    const QString& pdfPath,
+    const QString& packageRootPath,
+    const QStringList& packageMovieAssetPaths) {
     for (PdfMediaAnnotation& annotation : result.annotations) {
-        annotation.resolvedFilePath = resolveMediaPath(pdfPath, annotation.fileName);
+        annotation.resolvedFilePath = resolveMediaPath(pdfPath, annotation.fileName, packageRootPath, packageMovieAssetPaths);
         if (annotation.isMp4()) {
             QString errorMessage;
             annotation.firstFrame = extractFirstVideoFrame(annotation.resolvedFilePath, &errorMessage);
@@ -413,7 +435,10 @@ QString PdfMediaScanResult::summary() const {
     return QStringLiteral("%1 media annotation(s): %2").arg(annotations.size()).arg(parts.join(QStringLiteral("; ")));
 }
 
-PdfMediaScanResult scanPdfMediaAnnotations(const QString& path) {
+PdfMediaScanResult scanPdfMediaAnnotations(
+    const QString& path,
+    const QString& packageRootPath,
+    const QStringList& packageMovieAssetPaths) {
     PdfMediaScanResult result;
 
     QFile file(path);
@@ -445,7 +470,7 @@ PdfMediaScanResult scanPdfMediaAnnotations(const QString& path) {
         result.annotations.push_back(annotationFromObject(-1, it.key(), it.value()));
     }
 
-    resolveAndExtractMediaFrames(result, path);
+    resolveAndExtractMediaFrames(result, path, packageRootPath, packageMovieAssetPaths);
     qCInfo(logMedia) << result.summary();
     return result;
 }

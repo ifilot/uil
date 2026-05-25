@@ -1,0 +1,124 @@
+name: Windows Installer
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - '*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    name: Build Windows installer
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-ffmpeg
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-pdf
+            mingw-w64-ucrt-x86_64-qt6-svg
+            mingw-w64-ucrt-x86_64-qt6-tools
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+
+      - name: Determine version
+        id: version
+        run: |
+          version="$(bash scripts/windows/project-version.sh)"
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+
+          output_base="uil-${version}-windows-x64-setup"
+          {
+            echo "UIL_VERSION=$version"
+            echo "UIL_OUTPUT_BASE=$output_base"
+          } >> "$GITHUB_ENV"
+          {
+            echo "version=$version"
+            echo "output_base=$output_base"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure
+        run: cmake -S . -B build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build-windows --parallel
+
+      - name: Stage runtime dependencies
+        run: >
+          bash scripts/windows/deploy-msys2.sh
+          --build-dir build-windows
+          --stage-dir dist/uil-windows-x64
+
+      - name: Compile installer
+        run: >
+          bash scripts/windows/build-inno-installer.sh
+          --stage-dir dist/uil-windows-x64
+          --output-dir dist
+          --version "$UIL_VERSION"
+          --output-base "$UIL_OUTPUT_BASE"
+
+      - name: Write release notes
+        run: >
+          bash scripts/windows/write-release-notes.sh
+          --version "$UIL_VERSION"
+          --installer "dist/$UIL_OUTPUT_BASE.exe"
+          --manifest dist/uil-windows-x64/deployment-manifest.txt
+          --output dist/release-notes.md
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uil-windows-x64-installer
+          if-no-files-found: error
+          path: |
+            dist/${{ steps.version.outputs.output_base }}.exe
+            dist/${{ steps.version.outputs.output_base }}.exe.sha256
+            dist/release-notes.md
+            dist/uil-windows-x64/deployment-manifest.txt
+            dist/uil-windows-x64/deployment-summary.md
+            dist/uil-windows-x64/deployment-imports.txt
+            dist/uil-windows-x64/deployment-ldd.txt
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: uil ${{ github.ref_name }}
+          body_path: dist/release-notes.md
+          files: |
+            dist/${{ steps.version.outputs.output_base }}.exe
+            dist/${{ steps.version.outputs.output_base }}.exe.sha256
+            dist/uil-windows-x64/deployment-manifest.txt
+            dist/uil-windows-x64/deployment-summary.md
+            dist/uil-windows-x64/deployment-imports.txt
+            dist/uil-windows-x64/deployment-ldd.txt

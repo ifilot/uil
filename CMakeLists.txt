@@ -10,8 +10,6 @@ find_package(Qt6 REQUIRED COMPONENTS
     Core
     Gui
     Widgets
-    OpenGL
-    OpenGLWidgets
     Pdf
     PdfWidgets
     Svg
@@ -29,6 +27,10 @@ endif()
 
 qt_standard_project_setup()
 
+file(GLOB_RECURSE FONT_AWESOME_SVG_FILES CONFIGURE_DEPENDS
+    resources/fontawesome/svgs/*.svg
+)
+
 qt_add_executable(uil
     src/main.cpp
     src/AppController.hpp
@@ -43,6 +45,8 @@ qt_add_executable(uil
     src/render/RenderScheduler.cpp
     src/ui/AudienceWindow.hpp
     src/ui/AudienceWindow.cpp
+    src/ui/FontAwesome.hpp
+    src/ui/FontAwesome.cpp
     src/ui/PresenterWindow.hpp
     src/ui/PresenterWindow.cpp
     src/util/DocumentHash.hpp
@@ -55,6 +59,8 @@ qt_add_executable(uil
     src/media/VideoFrameExtractor.cpp
     src/media/VideoFrameBuffer.hpp
     src/media/VideoFrameBuffer.cpp
+    src/package/UilPackage.hpp
+    src/package/UilPackage.cpp
 )
 
 qt_add_resources(uil "uil_resources"
@@ -62,6 +68,10 @@ qt_add_resources(uil "uil_resources"
     BASE "resources"
     FILES
         resources/icons/uil.svg
+        resources/icons/uil-white.svg
+        resources/fontawesome/LICENSE.txt
+        resources/fontawesome/package.json
+        ${FONT_AWESOME_SVG_FILES}
         resources/styles/vscode.qss
 )
 
@@ -73,8 +83,6 @@ target_link_libraries(uil PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
-    Qt6::OpenGL
-    Qt6::OpenGLWidgets
     Qt6::Pdf
     Qt6::PdfWidgets
     Qt6::Svg

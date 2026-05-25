@@ -14,6 +14,19 @@ cmake --build build-windows
 ./build-windows/uil.exe
 ```
 
+## Windows installer
+
+GitHub Actions builds the Windows installer with MSYS2 UCRT64, Qt 6, FFmpeg, and Inno Setup. The workflow uploads the installer on every run and creates a GitHub Release when a tag is pushed.
+
+To run the deployment locally from an MSYS2 UCRT64 shell after building:
+
+```bash
+scripts/windows/deploy-msys2.sh --build-dir build-windows --stage-dir dist/uil-windows-x64
+scripts/windows/build-inno-installer.sh --stage-dir dist/uil-windows-x64 --output-dir dist
+```
+
+The deployment script runs `windeployqt`, then recursively bundles non-system MSYS2 runtime DLLs discovered through `ldd` and writes dependency audit files into the staging directory.
+
 For MP4 first-frame extraction from Beamer `multimedia` annotations, install FFmpeg libraries:
 
 ```bash
