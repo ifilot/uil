@@ -390,28 +390,32 @@ void AppController::startMediaPlayback() {
         return;
     }
 
-    auto reader = std::make_unique<VideoFrameReader>();
-    QString errorMessage;
-    if (!reader->open(annotation->resolvedFilePath, &errorMessage)) {
-        emit statusMessageChanged(QStringLiteral("Could not play media: %1").arg(errorMessage));
-        return;
-    }
+    auto buffer = std::make_unique<VideoFrameBuffer>();
+    connect(buffer.get(), &VideoFrameBuffer::frameAvailable, this, &AppController::handleBufferedVideoFrameAvailable);
+    connect(buffer.get(), &VideoFrameBuffer::finished, this, &AppController::handleVideoDecodeFinished);
+    connect(buffer.get(), &VideoFrameBuffer::failed, this, &AppController::handleVideoDecodeFailed);
+    connect(buffer.get(), &VideoFrameBuffer::bufferChanged, this, [](int bufferedDurationMs, int frameCount) {
+        qCDebug(logRender) << "Video buffer" << bufferedDurationMs << "ms" << frameCount << "frames";
+    });
 
-    m_videoReader = std::move(reader);
+    m_videoBuffer = std::move(buffer);
     m_activeVideoRect = normalizedMediaRect(*annotation);
     m_lastVideoPtsMs = -1;
+    m_waitingForVideoFrame = true;
     m_videoPlaying = true;
     emit statusMessageChanged(QStringLiteral("Playing media: %1").arg(annotation->fileName));
+    m_videoBuffer->start(annotation->resolvedFilePath, 3000);
     advanceVideoFrame();
 }
 
 void AppController::stopMediaPlayback() {
     m_videoTimer.stop();
-    if (m_videoReader) {
-        m_videoReader->close();
-        m_videoReader.reset();
+    if (m_videoBuffer) {
+        m_videoBuffer->stop();
+        m_videoBuffer.reset();
     }
     m_videoPlaying = false;
+    m_waitingForVideoFrame = false;
     m_activeVideoRect = {};
     m_lastVideoPtsMs = -1;
     if (m_audienceWindow) {
@@ -420,23 +424,29 @@ void AppController::stopMediaPlayback() {
 }
 
 void AppController::advanceVideoFrame() {
-    if (!m_videoReader || !m_videoPlaying) {
+    if (!m_videoBuffer || !m_videoPlaying) {
         stopMediaPlayback();
         return;
     }
 
-    QString errorMessage;
-    std::optional<DecodedVideoFrame> frame = m_videoReader->readNextFrame(&errorMessage);
+    std::optional<DecodedVideoFrame> frame = m_videoBuffer->takeFrame();
     if (!frame) {
-        stopMediaPlayback();
-        if (!errorMessage.isEmpty()) {
-            emit statusMessageChanged(QStringLiteral("Media stopped: %1").arg(errorMessage));
-        } else {
-            emit statusMessageChanged(QStringLiteral("Media finished"));
+        if (m_videoBuffer->isFinished()) {
+            const QString errorMessage = m_videoBuffer->errorMessage();
+            stopMediaPlayback();
+            if (!errorMessage.isEmpty()) {
+                emit statusMessageChanged(QStringLiteral("Media stopped: %1").arg(errorMessage));
+            } else {
+                emit statusMessageChanged(QStringLiteral("Media finished"));
+            }
+            return;
         }
+        m_waitingForVideoFrame = true;
+        emit statusMessageChanged(QStringLiteral("Buffering media..."));
         return;
     }
 
+    m_waitingForVideoFrame = false;
     if (m_audienceWindow) {
         m_audienceWindow->setVideoFrame(frame->image, m_activeVideoRect);
     }
@@ -447,6 +457,32 @@ void AppController::advanceVideoFrame() {
     }
     m_lastVideoPtsMs = frame->ptsMs;
     m_videoTimer.start(nextDelayMs);
+}
+
+void AppController::handleBufferedVideoFrameAvailable() {
+    if (m_videoPlaying && m_waitingForVideoFrame && !m_videoTimer.isActive()) {
+        advanceVideoFrame();
+    }
+}
+
+void AppController::handleVideoDecodeFinished() {
+    if (m_videoPlaying && m_waitingForVideoFrame && (!m_videoBuffer || !m_videoBuffer->hasFrames())) {
+        stopMediaPlayback();
+        emit statusMessageChanged(QStringLiteral("Media finished"));
+    }
+}
+
+void AppController::handleVideoDecodeFailed(const QString& errorMessage) {
+    if (!m_videoPlaying) {
+        return;
+    }
+
+    if (m_videoBuffer && m_videoBuffer->hasFrames()) {
+        return;
+    }
+
+    stopMediaPlayback();
+    emit statusMessageChanged(QStringLiteral("Media stopped: %1").arg(errorMessage));
 }
 
 void AppController::handleAudienceRenderTargetChanged() {

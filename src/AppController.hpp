@@ -2,6 +2,7 @@
 
 #include "cache/SlideCache.hpp"
 #include "pdf/PdfBackend.hpp"
+#include "media/VideoFrameBuffer.hpp"
 #include "media/VideoFrameExtractor.hpp"
 #include "render/RenderScheduler.hpp"
 #include "util/PdfMediaDetector.hpp"
@@ -65,6 +66,9 @@ private:
     void startMediaPlayback();
     void stopMediaPlayback();
     void advanceVideoFrame();
+    void handleBufferedVideoFrameAvailable();
+    void handleVideoDecodeFinished();
+    void handleVideoDecodeFailed(const QString& errorMessage);
     void handleAudienceRenderTargetChanged();
     void handleRenderStarted(const RenderRequest& request);
     void handleRenderFinished(const RenderRequest& request, const QImage& image, qint64 elapsedMs, const QString& errorMessage);
@@ -74,7 +78,7 @@ private:
     SlideCache m_slideCache;
     RenderScheduler m_renderScheduler;
     QTimer m_videoTimer;
-    std::unique_ptr<VideoFrameReader> m_videoReader;
+    std::unique_ptr<VideoFrameBuffer> m_videoBuffer;
     QPointer<AudienceWindow> m_audienceWindow;
     QPointer<QScreen> m_audienceScreen;
     QString m_currentPath;
@@ -82,6 +86,7 @@ private:
     PdfMediaScanResult m_mediaScanResult;
     QRectF m_activeVideoRect;
     qint64 m_lastVideoPtsMs = -1;
+    bool m_waitingForVideoFrame = false;
     bool m_videoPlaying = false;
     int m_currentPageIndex = 0;
     int m_renderGeneration = 0;

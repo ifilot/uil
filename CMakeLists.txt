@@ -52,6 +52,8 @@ qt_add_executable(uil
     src/util/PdfMediaDetector.cpp
     src/media/VideoFrameExtractor.hpp
     src/media/VideoFrameExtractor.cpp
+    src/media/VideoFrameBuffer.hpp
+    src/media/VideoFrameBuffer.cpp
 )
 
 target_include_directories(uil PRIVATE
