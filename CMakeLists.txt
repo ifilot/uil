@@ -6,12 +6,17 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(UIL_APP_AUTHOR "Ivo Filot")
+set(UIL_APP_EMAIL "ivo@ivofilot.nl")
+set(UIL_APP_COPYRIGHT "Copyright (C) 2026 Ivo Filot")
+set(UIL_APP_LICENSE "GNU Lesser General Public License v3.0 only")
+set(UIL_REPOSITORY_URL "https://github.com/ifilot/uil")
+
 find_package(Qt6 REQUIRED COMPONENTS
     Core
     Gui
     Widgets
     Pdf
-    PdfWidgets
     Svg
 )
 find_package(ZLIB REQUIRED)
@@ -30,6 +35,26 @@ qt_standard_project_setup()
 file(GLOB_RECURSE FONT_AWESOME_SVG_FILES CONFIGURE_DEPENDS
     resources/fontawesome/svgs/*.svg
 )
+
+set(UIL_WINDOWS_RESOURCES)
+if(WIN32)
+    set(UIL_WINDOWS_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/uil.ico")
+    set(UIL_WINDOWS_VERSION_TWEAK "${PROJECT_VERSION_TWEAK}")
+    if(UIL_WINDOWS_VERSION_TWEAK STREQUAL "")
+        set(UIL_WINDOWS_VERSION_TWEAK 0)
+    endif()
+    set(UIL_WINDOWS_FILE_VERSION
+        "${PROJECT_VERSION_MAJOR},${PROJECT_VERSION_MINOR},${PROJECT_VERSION_PATCH},${UIL_WINDOWS_VERSION_TWEAK}"
+    )
+    configure_file(
+        resources/windows/uil.rc.in
+        "${CMAKE_CURRENT_BINARY_DIR}/uil.rc"
+        @ONLY
+    )
+    list(APPEND UIL_WINDOWS_RESOURCES
+        "${CMAKE_CURRENT_BINARY_DIR}/uil.rc"
+    )
+endif()
 
 qt_add_executable(uil
     src/main.cpp
@@ -61,6 +86,7 @@ qt_add_executable(uil
     src/media/VideoFrameBuffer.cpp
     src/package/UilPackage.hpp
     src/package/UilPackage.cpp
+    ${UIL_WINDOWS_RESOURCES}
 )
 
 qt_add_resources(uil "uil_resources"
@@ -69,6 +95,7 @@ qt_add_resources(uil "uil_resources"
     FILES
         resources/icons/uil.svg
         resources/icons/uil-white.svg
+        resources/icons/uil.ico
         resources/fontawesome/LICENSE.txt
         resources/fontawesome/package.json
         ${FONT_AWESOME_SVG_FILES}
@@ -84,7 +111,6 @@ target_link_libraries(uil PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::Pdf
-    Qt6::PdfWidgets
     Qt6::Svg
     ZLIB::ZLIB
 )
@@ -92,6 +118,19 @@ target_link_libraries(uil PRIVATE
 target_compile_definitions(uil PRIVATE
     UIL_VERSION="${PROJECT_VERSION}"
     UIL_VERSION_DISPLAY="v${PROJECT_VERSION}"
+    UIL_APP_AUTHOR="${UIL_APP_AUTHOR}"
+    UIL_APP_EMAIL="${UIL_APP_EMAIL}"
+    UIL_APP_COPYRIGHT="${UIL_APP_COPYRIGHT}"
+    UIL_APP_LICENSE="${UIL_APP_LICENSE}"
+    UIL_REPOSITORY_URL="${UIL_REPOSITORY_URL}"
+    UIL_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+    UIL_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
+    UIL_CMAKE_VERSION="${CMAKE_VERSION}"
+    UIL_BUILD_CONFIG="$<CONFIG>"
+)
+
+set_target_properties(uil PROPERTIES
+    WIN32_EXECUTABLE TRUE
 )
 
 if(FFMPEG_FOUND)

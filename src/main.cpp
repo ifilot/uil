@@ -39,9 +39,10 @@ void applyApplicationTheme(QApplication& app) {
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("uil"));
-    QApplication::setOrganizationName(QStringLiteral("uil"));
+    QApplication::setOrganizationName(QStringLiteral(UIL_APP_AUTHOR));
+    QApplication::setOrganizationDomain(QStringLiteral("ivofilot.nl"));
     QApplication::setApplicationVersion(QStringLiteral(UIL_VERSION));
-    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/uil-white.svg")));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
     applyApplicationTheme(app);
 
     AppController controller;

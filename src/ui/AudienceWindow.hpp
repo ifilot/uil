@@ -16,7 +16,6 @@ class QCloseEvent;
 class QContextMenuEvent;
 class QEvent;
 class QKeyEvent;
-class QMenu;
 class QMouseEvent;
 class QPaintEvent;
 
@@ -46,6 +45,7 @@ public:
     void setPointerColor(const QColor& color);
     void setAnnotationColor(const QColor& color);
     void setAnnotationThickness(int thickness);
+    void setEraserThickness(int thickness);
     void clearAnnotations();
     QImage currentAnnotatedSlideImage() const;
     QImage currentAnnotationOverlayImage() const;
@@ -73,6 +73,8 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
+    class FeatureMenuPanel;
+
     enum class InteractionTool {
         Cursor,
         Pointer,
@@ -102,6 +104,8 @@ private:
     const QImage* currentAnnotationImage() const;
     void drawAnnotationSegment(QPointF fromWindowPoint, QPointF toWindowPoint);
     void drawPointer(QPainter& painter) const;
+    void drawEraserCursor(QPainter& painter) const;
+    qreal eraserLogicalDiameter() const;
     void showFeatureMenu(const QPoint& globalPosition);
     void saveAnnotatedSlideImage();
 
@@ -112,17 +116,20 @@ private:
     QRectF m_videoRect;
     QHash<QString, QImage> m_annotationImages;
     QColor m_pointerColor = QColor(255, 36, 36);
-    QColor m_annotationColor = QColor(255, 36, 36);
+    QColor m_annotationColor = QColor(0xe3, 0x1a, 0x1c);
     QPointF m_lastAnnotationPoint;
     QPointF m_pointerPosition;
+    QPointF m_eraserCursorPosition;
     InteractionTool m_interactionTool = InteractionTool::Cursor;
     bool m_isAnnotating = false;
     bool m_pointerVisible = false;
+    bool m_eraserCursorVisible = false;
     bool m_hasVideoOverlay = false;
     QPointer<QScreen> m_screen;
     QTimer m_cursorHideTimer;
     BlankMode m_blankMode = BlankMode::None;
     bool m_isFullscreen = false;
     int m_annotationThickness = 6;
-    QPointer<QMenu> m_featureMenu;
+    int m_eraserThickness = 24;
+    QPointer<QWidget> m_featureMenu;
 };

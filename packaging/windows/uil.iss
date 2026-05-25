@@ -1,8 +1,10 @@
 #define AppName GetEnv("UIL_APP_NAME")
 #define AppDisplayName GetEnv("UIL_APP_DISPLAY_NAME")
 #define AppPublisher GetEnv("UIL_APP_PUBLISHER")
+#define AppUrl GetEnv("UIL_APP_URL")
 #define AppVersion GetEnv("UIL_VERSION")
 #define ExeName GetEnv("UIL_EXE_NAME")
+#define LicenseFile GetEnv("UIL_LICENSE_FILE")
 #define SourceDir GetEnv("UIL_STAGE_DIR")
 #define OutputDir GetEnv("UIL_OUTPUT_DIR")
 #define OutputBaseFilename GetEnv("UIL_OUTPUT_BASE")
@@ -13,9 +15,13 @@ AppName={#AppDisplayName}
 AppVersion={#AppVersion}
 AppVerName={#AppDisplayName} {#AppVersion}
 AppPublisher={#AppPublisher}
+AppPublisherURL={#AppUrl}
+AppSupportURL={#AppUrl}
+AppUpdatesURL={#AppUrl}
 DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppDisplayName}
 DisableProgramGroupPage=yes
+LicenseFile={#LicenseFile}
 OutputDir={#OutputDir}
 OutputBaseFilename={#OutputBaseFilename}
 Compression=lzma2/ultra64
@@ -30,8 +36,11 @@ CloseApplications=yes
 RestartApplications=no
 MinVersion=10.0
 VersionInfoDescription={#AppDisplayName} Windows Installer
+VersionInfoCompany={#AppPublisher}
+VersionInfoCopyright=Copyright (C) 2026 Ivo Filot
 VersionInfoProductName={#AppDisplayName}
 VersionInfoProductVersion={#AppVersion}
+VersionInfoVersion={#AppVersion}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

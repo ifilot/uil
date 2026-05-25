@@ -63,13 +63,13 @@ QMenuBar::item:pressed {
 QMenu {
     background-color: #252526;
     border: 1px solid #454545;
-    padding: 5px 0;
-    icon-size: 18px;
+    padding: 4px 0;
+    icon-size: 16px;
 }
 
 QMenu::item {
-    min-height: 22px;
-    padding: 6px 32px 6px 34px;
+    min-height: 20px;
+    padding: 2px 28px 2px 30px;
     background-color: transparent;
 }
 
@@ -79,15 +79,125 @@ QMenu::item:selected {
 }
 
 QMenu::icon {
-    left: 9px;
-    width: 18px;
-    height: 18px;
+    left: 8px;
+    width: 16px;
+    height: 16px;
 }
 
 QMenu::separator {
     height: 1px;
     background-color: #3c3c3c;
-    margin: 4px 8px;
+    margin: 3px 8px;
+}
+
+QWidget#featureMenuPanel {
+    background-color: #252526;
+    border: 1px solid #454545;
+    border-radius: 5px;
+}
+
+QFrame#featureSettingsRow {
+    background-color: #1e1e1e;
+    border: 1px solid #3c3c3c;
+    border-radius: 3px;
+    min-height: 62px;
+}
+
+QLabel#featureSettingsLabel {
+    color: #cccccc;
+    background-color: transparent;
+    font-size: 9pt;
+}
+
+QWidget#featureEraserPreview {
+    background-color: #252526;
+    border: 1px solid #3c3c3c;
+    border-radius: 3px;
+}
+
+QToolButton#featureToolButton {
+    background-color: #2d2d2d;
+    border: 1px solid #3c3c3c;
+    border-radius: 3px;
+    color: #cccccc;
+    padding: 9px 6px 8px 6px;
+}
+
+QToolButton#featureToolButton:hover {
+    background-color: #333333;
+    border-color: #5a5a5a;
+}
+
+QToolButton#featureToolButton:checked {
+    background-color: #006f6f;
+    border-color: #00b3b3;
+    color: #ffffff;
+}
+
+QToolButton#featureSwatchButton,
+QToolButton#featureSizeButton {
+    background-color: #2d2d2d;
+    border: 1px solid #3c3c3c;
+    border-radius: 3px;
+    color: #cccccc;
+    padding: 0;
+}
+
+QToolButton#featureSwatchButton:hover,
+QToolButton#featureSizeButton:hover {
+    background-color: #333333;
+    border-color: #5a5a5a;
+}
+
+QToolButton#featureSwatchButton:checked,
+QToolButton#featureSizeButton:checked {
+    background-color: #006f6f;
+    border-color: #00b3b3;
+    color: #ffffff;
+}
+
+QToolButton#featureNavButton,
+QToolButton#featureDangerButton,
+QToolButton#featureCloseButton {
+    background-color: #008c8c;
+    border: 1px solid #008c8c;
+    border-radius: 3px;
+    color: #ffffff;
+    padding: 6px 12px;
+}
+
+QToolButton#featureNavButton:hover,
+QToolButton#featureCloseButton:hover {
+    background-color: #009e9e;
+    border-color: #009e9e;
+}
+
+QToolButton#featureDangerButton {
+    background-color: #6f2a24;
+    border-color: #8f352d;
+}
+
+QToolButton#featureDangerButton:hover {
+    background-color: #8f352d;
+    border-color: #b2463a;
+}
+
+QSlider#featureSizeSlider {
+    background-color: transparent;
+    min-height: 24px;
+}
+
+QSlider#featureSizeSlider::groove:horizontal {
+    background-color: #3c3c3c;
+    height: 4px;
+}
+
+QSlider#featureSizeSlider::handle:horizontal {
+    background-color: #00b3b3;
+    border: 1px solid #00d0d0;
+    width: 14px;
+    height: 14px;
+    margin: -6px 0;
 }
 
 QToolButton#windowControlButton,

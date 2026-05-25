@@ -15,6 +15,7 @@ Options:
   --output-base NAME    Output filename without .exe
   --version VERSION     App version. Defaults to the CMake project version.
   --script PATH         Inno Setup script path (default: packaging/windows/uil.iss)
+  --license-file PATH   Installer license text (default: LICENSE)
   --help                Show this help text
 EOF
 }
@@ -88,6 +89,7 @@ OUTPUT_DIR="dist"
 OUTPUT_BASE=""
 VERSION=""
 INNO_SCRIPT="packaging/windows/uil.iss"
+LICENSE_FILE="LICENSE"
 
 while (($#)); do
     case "$1" in
@@ -119,6 +121,10 @@ while (($#)); do
             INNO_SCRIPT="${2:-}"
             shift 2
             ;;
+        --license-file)
+            LICENSE_FILE="${2:-}"
+            shift 2
+            ;;
         --help)
             usage
             exit 0
@@ -134,6 +140,7 @@ done
 [[ -n "$STAGE_DIR" ]] || die "--stage-dir must not be empty"
 [[ -n "$OUTPUT_DIR" ]] || die "--output-dir must not be empty"
 [[ -n "$INNO_SCRIPT" ]] || die "--script must not be empty"
+[[ -n "$LICENSE_FILE" ]] || die "--license-file must not be empty"
 
 if [[ -z "$VERSION" ]]; then
     VERSION="$(project_version)"
@@ -150,19 +157,23 @@ command -v cygpath >/dev/null 2>&1 || die "cygpath is required"
 STAGE_DIR="$(absolute_path "$STAGE_DIR")"
 OUTPUT_DIR="$(absolute_path "$OUTPUT_DIR")"
 INNO_SCRIPT="$(absolute_path "$INNO_SCRIPT")"
+LICENSE_FILE="$(absolute_path "$LICENSE_FILE")"
 
 [[ -d "$STAGE_DIR" ]] || die "stage directory does not exist: $STAGE_DIR"
 [[ -f "$STAGE_DIR/$APP_NAME.exe" ]] || die "stage directory does not contain $APP_NAME.exe"
 [[ -f "$INNO_SCRIPT" ]] || die "Inno Setup script does not exist: $INNO_SCRIPT"
+[[ -f "$LICENSE_FILE" ]] || die "license file does not exist: $LICENSE_FILE"
 mkdir -p "$OUTPUT_DIR"
 
 ISCC_PATH="$(find_iscc)" || die "could not find Inno Setup compiler (ISCC.exe). Install Inno Setup 6 or set ISCC."
 
 export UIL_APP_NAME="$APP_NAME"
 export UIL_APP_DISPLAY_NAME="$DISPLAY_NAME"
-export UIL_APP_PUBLISHER="${UIL_APP_PUBLISHER:-uil}"
+export UIL_APP_PUBLISHER="${UIL_APP_PUBLISHER:-Ivo Filot}"
+export UIL_APP_URL="${UIL_APP_URL:-https://github.com/ifilot/uil}"
 export UIL_EXE_NAME="$APP_NAME.exe"
 export UIL_VERSION="$VERSION"
+export UIL_LICENSE_FILE="$(cygpath -w "$LICENSE_FILE")"
 export UIL_STAGE_DIR="$(cygpath -w "$STAGE_DIR")"
 export UIL_OUTPUT_DIR="$(cygpath -w "$OUTPUT_DIR")"
 export UIL_OUTPUT_BASE="$OUTPUT_BASE"

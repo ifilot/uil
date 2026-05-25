@@ -90,8 +90,7 @@ find_tool() {
     return 1
 }
 
-parse_ldd_paths() {
-    local binary="$1"
+parse_ldd_output_paths() {
     local line
     local dep
 
@@ -115,7 +114,12 @@ parse_ldd_paths() {
         if [[ "$dep" == /* || "$dep" =~ ^[A-Za-z]:\\ ]]; then
             to_posix_path "$dep"
         fi
-    done < <(ldd "$binary" 2>&1 || true)
+    done
+}
+
+parse_ldd_paths() {
+    local binary="$1"
+    { ldd "$binary" 2>&1 || true; } | parse_ldd_output_paths
 }
 
 is_windows_system_path() {
@@ -151,40 +155,49 @@ find_stage_binaries() {
 }
 
 copy_runtime_dependency_closure() {
-    local iteration=0
-    local added
+    local -a pending
+    local index=0
     local binary
     local dep
     local dep_base
     local dest
+    local key
+    local copied=0
+    local scanned=0
+    declare -A processed=()
 
-    while :; do
-        iteration=$((iteration + 1))
-        added=0
+    mapfile -t pending < <(find_stage_binaries)
 
-        while IFS= read -r binary; do
-            while IFS= read -r dep; do
-                dep="$(canonical_file_path "$dep")"
-                if should_copy_dependency "$dep"; then
-                    dep_base="$(basename "$dep")"
-                    dest="$STAGE_DIR/$dep_base"
-                    if [[ ! -f "$dest" ]]; then
-                        log "Bundling $dep_base"
-                        cp -f "$dep" "$dest"
-                        chmod u+w "$dest"
-                        added=$((added + 1))
-                    fi
+    while (( index < ${#pending[@]} )); do
+        binary="$(canonical_file_path "${pending[$index]}")"
+        index=$((index + 1))
+
+        [[ -f "$binary" ]] || continue
+
+        key="${binary,,}"
+        if [[ -n "${processed[$key]+x}" ]]; then
+            continue
+        fi
+        processed[$key]=1
+        scanned=$((scanned + 1))
+
+        while IFS= read -r dep; do
+            dep="$(canonical_file_path "$dep")"
+            if should_copy_dependency "$dep"; then
+                dep_base="$(basename "$dep")"
+                dest="$STAGE_DIR/$dep_base"
+                if [[ ! -f "$dest" ]]; then
+                    log "Bundling $dep_base"
+                    cp -f "$dep" "$dest"
+                    chmod u+w "$dest"
+                    pending+=("$dest")
+                    copied=$((copied + 1))
                 fi
-            done < <(parse_ldd_paths "$binary")
-        done < <(find_stage_binaries)
-
-        if (( added == 0 )); then
-            break
-        fi
-        if (( iteration > 50 )); then
-            die "dependency copy did not converge after $iteration iterations"
-        fi
+            fi
+        done < <(parse_ldd_paths "$binary")
     done
+
+    log "Bundled $copied dependency DLL(s) after scanning $scanned binary file(s)"
 }
 
 verify_dependency_closure() {
@@ -202,13 +215,14 @@ verify_dependency_closure() {
 
     while IFS= read -r binary; do
         rel="${binary#"$STAGE_DIR"/}"
+        ldd_output="$(ldd "$binary" 2>&1 || true)"
+
         {
             printf '### %s\n' "$rel"
-            ldd "$binary" 2>&1 || true
+            printf '%s\n' "$ldd_output"
             printf '\n'
         } >> "$ldd_log"
 
-        ldd_output="$(ldd "$binary" 2>&1 || true)"
         if grep -qi 'not found' <<<"$ldd_output"; then
             printf 'unresolved dependency in %s:\n%s\n' "$rel" "$ldd_output" >&2
             problems=$((problems + 1))
@@ -239,7 +253,7 @@ verify_dependency_closure() {
             printf 'dependency is outside the staged app, Windows system directories, and %s: %s -> %s\n' \
                 "$MINGW_PREFIX" "$rel" "$dep" >&2
             problems=$((problems + 1))
-        done < <(parse_ldd_paths "$binary")
+        done < <(parse_ldd_output_paths <<<"$ldd_output")
 
         if command -v objdump >/dev/null 2>&1; then
             {

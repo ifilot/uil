@@ -21,6 +21,7 @@
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QListWidget>
+#include <QLibraryInfo>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -321,15 +322,13 @@ PresenterWindow::PresenterWindow(AppController* controller, QWidget* parent)
     : QMainWindow(parent),
       m_controller(controller) {
     setWindowTitle(QStringLiteral("uil Presenter"));
-    setWindowIcon(QIcon(QStringLiteral(":/icons/uil-white.svg")));
+    setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
     setWindowFlag(Qt::FramelessWindowHint, true);
     createActions();
     createLayout();
     createConnections();
     qApp->installEventFilter(this);
     updateScreenList();
-    m_timerUpdateTimer.setInterval(1000);
-    connect(&m_timerUpdateTimer, &QTimer::timeout, this, &PresenterWindow::updateTimerLabel);
     loadSettings();
     if (size().isEmpty()) {
         resize(1100, 650);
@@ -505,10 +504,31 @@ void PresenterWindow::showSlideOverview() {
 void PresenterWindow::showAbout() {
     QMessageBox aboutBox(this);
     aboutBox.setWindowTitle(QStringLiteral("About uil"));
-    aboutBox.setWindowIcon(QIcon(QStringLiteral(":/icons/uil-white.svg")));
-    aboutBox.setIconPixmap(QIcon(QStringLiteral(":/icons/uil-white.svg")).pixmap(QSize(96, 96)));
+    aboutBox.setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
+    aboutBox.setIconPixmap(QIcon(QStringLiteral(":/icons/uil.svg")).pixmap(QSize(96, 96)));
     aboutBox.setTextFormat(Qt::RichText);
-    aboutBox.setText(QStringLiteral("<h2>uil %1</h2>").arg(QStringLiteral(UIL_VERSION_DISPLAY)));
+    aboutBox.setTextInteractionFlags(Qt::TextBrowserInteraction);
+    aboutBox.setText(QStringLiteral(
+        "<h2>uil %1</h2>"
+        "<p>%2<br>"
+        "Author: %3 &lt;<a href=\"mailto:%4\">%4</a>&gt;<br>"
+        "Repository: <a href=\"%5\">%5</a><br>"
+        "License: %6.</p>")
+        .arg(
+            QStringLiteral(UIL_VERSION_DISPLAY),
+            QStringLiteral(UIL_APP_COPYRIGHT),
+            QStringLiteral(UIL_APP_AUTHOR),
+            QStringLiteral(UIL_APP_EMAIL),
+            QStringLiteral(UIL_REPOSITORY_URL),
+            QStringLiteral(UIL_APP_LICENSE)));
+
+    const QString buildConfig = QStringLiteral(UIL_BUILD_CONFIG).isEmpty()
+        ? QStringLiteral("unspecified")
+        : QStringLiteral(UIL_BUILD_CONFIG);
+    const QString compiler = QStringLiteral(UIL_COMPILER_ID " " UIL_COMPILER_VERSION).trimmed();
+    const QString compilerTimestamp = QStringLiteral(__DATE__ " " __TIME__);
+    const QString cppStandard = QString::number(__cplusplus);
+
     QString ffmpegLine;
 #ifdef UIL_HAVE_FFMPEG
     ffmpegLine = QStringLiteral("<li><b>FFmpeg libraries</b>: libavformat, libavcodec, libavutil, libswscale for MP4/media frame extraction. FFmpeg is licensed under LGPL/GPL depending on the linked build configuration.</li>");
@@ -517,15 +537,31 @@ void PresenterWindow::showAbout() {
 #endif
     aboutBox.setInformativeText(QStringLiteral(
         "<p>A Windows-focused Qt PDF presentation app for Beamer-style slide decks.</p>"
+        "<p><b>Compilation details:</b></p>"
+        "<ul>"
+        "<li><b>Compiled</b>: %1.</li>"
+        "<li><b>Compiler</b>: %2; C++ value %3.</li>"
+        "<li><b>Build configuration</b>: %4; CMake %5.</li>"
+        "<li><b>Qt runtime</b>: %6; Qt build: %7.</li>"
+        "</ul>"
         "<p><b>External packages and assets used by this build:</b></p>"
         "<ul>"
-        "<li><b>Qt %1</b>: Core, Gui, Widgets, Pdf, PdfWidgets, and Svg modules for the application framework, PDF rendering, audience output, and SVG rendering. Qt is available under LGPL/GPL/commercial licensing depending on distribution.</li>"
-        "<li><b>zlib</b>: compression library used through ZLIB::ZLIB; zlib License.</li>"
-        "%2"
+        "<li><b>Qt %6</b>: Core, Gui, Widgets, Pdf, and Svg modules for the application framework, PDF rendering, audience output, and SVG rendering. The Windows deployment also includes Qt plugins such as the platform and SVG icon plugins. Qt is available under LGPL/GPL/commercial licensing depending on distribution; Qt Pdf includes PDFium and its third-party components.</li>"
+        "<li><b>zlib</b>: compression library used through ZLIB::ZLIB for PDF media stream handling and .uil package extraction; zlib License.</li>"
+        "%8"
         "<li><b>Font Awesome Free 7.2.0</b>: vendored SVG icon assets under resources/fontawesome. The SVG icons are licensed under CC BY 4.0. The upstream package also includes MIT-licensed code and SIL OFL 1.1 fonts; this app uses the SVG assets. Copyright Fonticons, Inc.</li>"
+        "<li><b>MSYS2/GCC runtime libraries</b>: deployed on Windows as needed by the toolchain and audited by the installer staging script.</li>"
         "</ul>"
         "<p>Application rendering, scheduling, caching, and presentation control code is local to uil.</p>")
-        .arg(QString::fromLatin1(qVersion()), ffmpegLine));
+        .arg(
+            compilerTimestamp,
+            compiler,
+            cppStandard,
+            buildConfig,
+            QStringLiteral(UIL_CMAKE_VERSION),
+            QString::fromLatin1(qVersion()),
+            QLibraryInfo::build(),
+            ffmpegLine));
     aboutBox.setStandardButtons(QMessageBox::Ok);
     aboutBox.exec();
 }
@@ -551,29 +587,6 @@ void PresenterWindow::startPresentationMode() {
     raise();
     activateWindow();
     m_controller->enterAudienceFullscreen();
-}
-
-void PresenterWindow::resetPresentationTimer() {
-    m_elapsedTimer.restart();
-    m_timerRunning = true;
-    m_timerUpdateTimer.start();
-    updateTimerLabel();
-}
-
-void PresenterWindow::updateTimerLabel() {
-    if (!m_timerRunning) {
-        m_timerLabel->setText(QStringLiteral("Timer: 00:00:00"));
-        return;
-    }
-
-    const qint64 totalSeconds = m_elapsedTimer.elapsed() / 1000;
-    const qint64 hours = totalSeconds / 3600;
-    const qint64 minutes = (totalSeconds % 3600) / 60;
-    const qint64 seconds = totalSeconds % 60;
-    m_timerLabel->setText(QStringLiteral("Timer: %1:%2:%3")
-        .arg(hours, 2, 10, QLatin1Char('0'))
-        .arg(minutes, 2, 10, QLatin1Char('0'))
-        .arg(seconds, 2, 10, QLatin1Char('0')));
 }
 
 void PresenterWindow::updateMediaLabel(const PdfMediaScanResult& result) {
@@ -684,9 +697,6 @@ void PresenterWindow::createActions() {
     m_slideOverviewAction = new QAction(QStringLiteral("Slide Overview"), this);
     m_slideOverviewAction->setShortcut(Qt::Key_O);
 
-    m_resetTimerAction = new QAction(QStringLiteral("Reset Timer"), this);
-    m_resetTimerAction->setShortcut(Qt::Key_T);
-
     m_blackScreenAction = new QAction(QStringLiteral("Black Screen"), this);
     m_blackScreenAction->setShortcut(Qt::Key_B);
 
@@ -726,7 +736,6 @@ void PresenterWindow::createActions() {
     presentationMenu->addAction(m_playPauseMediaAction);
     presentationMenu->addAction(m_blackScreenAction);
     presentationMenu->addAction(m_whiteScreenAction);
-    presentationMenu->addAction(m_resetTimerAction);
     presentationMenu->addAction(m_showAudienceOverlayAction);
     presentationMenu->addSeparator();
     presentationMenu->addAction(m_fullscreenAction);
@@ -743,7 +752,6 @@ void PresenterWindow::createActions() {
     addAction(m_playPauseMediaAction);
     addAction(m_jumpToPageAction);
     addAction(m_slideOverviewAction);
-    addAction(m_resetTimerAction);
     addAction(m_blackScreenAction);
     addAction(m_whiteScreenAction);
     addAction(m_fullscreenAction);
@@ -881,17 +889,15 @@ void PresenterWindow::createLayout() {
     statusLayout->setContentsMargins(0, 0, 0, 0);
     statusLayout->setSpacing(8);
     m_pageLabel = new QLabel(QStringLiteral("Page: - / -"), central);
-    m_timerLabel = new QLabel(QStringLiteral("Timer: 00:00:00"), central);
     m_mediaLabel = new QLabel(QStringLiteral("Media: none"), central);
     auto* screenLabel = new QLabel(QStringLiteral("Audience:"), central);
     m_screenCombo = new QComboBox(central);
     m_screenCombo->setMinimumWidth(280);
-    for (QLabel* label : {m_pageLabel, m_timerLabel, m_mediaLabel}) {
+    for (QLabel* label : {m_pageLabel, m_mediaLabel}) {
         label->setObjectName(QStringLiteral("statusPill"));
     }
     screenLabel->setObjectName(QStringLiteral("fieldLabel"));
     statusLayout->addWidget(m_pageLabel);
-    statusLayout->addWidget(m_timerLabel);
     statusLayout->addWidget(m_mediaLabel);
     statusLayout->addStretch(1);
     statusLayout->addWidget(screenLabel);
@@ -1067,7 +1073,6 @@ void PresenterWindow::createConnections() {
     connect(m_slideOverviewAction, &QAction::triggered, this, &PresenterWindow::showSlideOverview);
     connect(m_quitAction, &QAction::triggered, qApp, &QApplication::quit);
     connect(m_aboutAction, &QAction::triggered, this, &PresenterWindow::showAbout);
-    connect(m_resetTimerAction, &QAction::triggered, this, &PresenterWindow::resetPresentationTimer);
     connect(m_blackScreenAction, &QAction::triggered, m_controller, &AppController::toggleBlackScreen);
     connect(m_whiteScreenAction, &QAction::triggered, m_controller, &AppController::toggleWhiteScreen);
     connect(m_fullscreenAction, &QAction::triggered, m_controller, &AppController::toggleAudienceFullscreen);
@@ -1075,7 +1080,6 @@ void PresenterWindow::createConnections() {
     connect(m_screenCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &PresenterWindow::selectScreenFromCombo);
 
     connect(m_controller, &AppController::pageChanged, this, &PresenterWindow::updatePageLabel);
-    connect(m_controller, &AppController::documentChanged, this, &PresenterWindow::resetPresentationTimer);
     connect(m_controller, &AppController::documentChanged, this, &PresenterWindow::updateDocumentOverview);
     connect(m_controller, &AppController::mediaScanChanged, this, &PresenterWindow::updateMediaLabel);
     connect(m_controller, &AppController::currentSlideImageChanged, m_currentPreview, &SlidePreview::setPreviewImage);

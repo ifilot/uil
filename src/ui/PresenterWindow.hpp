@@ -1,13 +1,11 @@
 #pragma once
 
 #include <QImage>
-#include <QElapsedTimer>
 #include <QLabel>
 #include <QMainWindow>
 #include <QPointer>
 #include <QScreen>
 #include <QStringList>
-#include <QTimer>
 
 #include "util/PdfMediaDetector.hpp"
 
@@ -57,8 +55,6 @@ private slots:
     void showSlideOverview();
     void showAbout();
     void startPresentationMode();
-    void resetPresentationTimer();
-    void updateTimerLabel();
     void updateMediaLabel(const PdfMediaScanResult& result);
     void updateDocumentOverview(int pageCount);
     void updatePageLabel(int pageIndex, int pageCount);
@@ -96,7 +92,6 @@ private:
     SlidePreview* m_currentPreview = nullptr;
     SlideDeckOverview* m_deckOverview = nullptr;
     QLabel* m_pageLabel = nullptr;
-    QLabel* m_timerLabel = nullptr;
     QLabel* m_mediaLabel = nullptr;
     QComboBox* m_screenCombo = nullptr;
     QMenuBar* m_menuBar = nullptr;
@@ -114,20 +109,16 @@ private:
     QAction* m_playPauseMediaAction = nullptr;
     QAction* m_jumpToPageAction = nullptr;
     QAction* m_slideOverviewAction = nullptr;
-    QAction* m_resetTimerAction = nullptr;
     QAction* m_blackScreenAction = nullptr;
     QAction* m_whiteScreenAction = nullptr;
     QAction* m_fullscreenAction = nullptr;
     QAction* m_showAudienceOverlayAction = nullptr;
     QAction* m_quitAction = nullptr;
     QAction* m_aboutAction = nullptr;
-    QElapsedTimer m_elapsedTimer;
-    QTimer m_timerUpdateTimer;
     Qt::Edges m_resizeEdges;
     QRect m_resizeStartGeometry;
     QPoint m_resizeStartGlobalPosition;
     QPoint m_moveOffset;
-    bool m_timerRunning = false;
     bool m_manualResizeActive = false;
     bool m_manualMoveActive = false;
     bool m_resizeCursorActive = false;
