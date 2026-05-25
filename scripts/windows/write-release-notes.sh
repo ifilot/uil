@@ -60,17 +60,17 @@ short_sha="${short_sha:0:7}"
     printf '# uil %s\n\n' "$VERSION"
     printf 'Windows installer for the `%s` release.\n\n' "$VERSION"
     printf '## Download\n\n'
-    printf '- `%s`\n' "$installer_name"
-    printf '- Size: `%s`\n' "$installer_size"
-    printf '- SHA-256: `%s`\n' "$installer_sha"
+    printf -- '- `%s`\n' "$installer_name"
+    printf -- '- Size: `%s`\n' "$installer_size"
+    printf -- '- SHA-256: `%s`\n' "$installer_sha"
     if [[ -n "$short_sha" ]]; then
-        printf '- Build commit: `%s`\n' "$short_sha"
+        printf -- '- Build commit: `%s`\n' "$short_sha"
     fi
     printf '\n## Packaging\n\n'
-    printf '- Built on GitHub Actions with MSYS2 UCRT64 and Qt 6.\n'
-    printf '- Qt runtime libraries and plugins are deployed with `windeployqt`.\n'
-    printf '- Non-Qt runtime DLLs are collected recursively with `ldd` and verified before installer creation.\n'
+    printf -- '- Built on GitHub Actions with MSYS2 UCRT64 and Qt 6.\n'
+    printf -- '- Qt runtime libraries and plugins are deployed with `windeployqt`.\n'
+    printf -- '- Non-Qt runtime DLLs are collected recursively with `ldd` and verified before installer creation.\n'
     if [[ -n "$MANIFEST" && -f "$MANIFEST" ]]; then
-        printf '- The deployment manifest is attached as a release asset for auditing.\n'
+        printf -- '- The deployment manifest is attached as a release asset for auditing.\n'
     fi
 } > "$OUTPUT"

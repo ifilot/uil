@@ -289,12 +289,12 @@ write_manifest() {
 
     {
         printf '# Windows Deployment Summary\n\n'
-        printf '- App: `%s.exe`\n' "$APP_NAME"
-        printf '- MSYS2 environment: `%s`\n' "${MSYSTEM:-}"
-        printf '- Toolchain prefix: `%s`\n' "$MINGW_PREFIX"
-        printf '- Qt deploy tool: `%s`\n' "$WINDEPLOYQT"
-        printf '- Files staged: `%s`\n' "$file_count"
-        printf '- DLLs staged: `%s`\n' "$dll_count"
+        printf -- '- App: `%s.exe`\n' "$APP_NAME"
+        printf -- '- MSYS2 environment: `%s`\n' "${MSYSTEM:-}"
+        printf -- '- Toolchain prefix: `%s`\n' "$MINGW_PREFIX"
+        printf -- '- Qt deploy tool: `%s`\n' "$WINDEPLOYQT"
+        printf -- '- Files staged: `%s`\n' "$file_count"
+        printf -- '- DLLs staged: `%s`\n' "$dll_count"
         printf '\nThe staging directory was populated with `windeployqt`, then completed by recursively copying non-system DLL dependencies resolved by `ldd` from the active MSYS2 toolchain.\n'
     } > "$summary"
 }
