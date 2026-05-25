@@ -279,6 +279,245 @@ verify_dependency_closure() {
     fi
 }
 
+resolve_staged_source_path() {
+    local staged_file="$1"
+    local rel="${staged_file#"$STAGE_DIR"/}"
+    local base
+    local candidate
+    base="$(basename "$staged_file")"
+
+    local -a candidates=(
+        "$MINGW_PREFIX/bin/$base"
+        "$MINGW_PREFIX/share/qt6/plugins/$rel"
+        "$MINGW_PREFIX/lib/qt6/plugins/$rel"
+        "$MINGW_PREFIX/qt6/plugins/$rel"
+        "$MINGW_PREFIX/share/qt6/translations/$base"
+        "$MINGW_PREFIX/share/qt6/resources/$base"
+    )
+
+    for candidate in "${candidates[@]}"; do
+        if [[ -f "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+package_field() {
+    local package="$1"
+    local field="$2"
+
+    pacman -Qi "$package" 2>/dev/null \
+        | sed -nE "s/^${field}[[:space:]]*: //p" \
+        | head -n 1
+}
+
+package_version() {
+    local package="$1"
+    pacman -Q "$package" 2>/dev/null | awk '{print $2}'
+}
+
+copy_package_license_files() {
+    local package="$1"
+    local destination="$2"
+    local file
+    local rel
+    local copied=0
+
+    mkdir -p "$destination/files"
+    pacman -Qi "$package" > "$destination/PACMAN_INFO.txt" 2>/dev/null || true
+
+    while IFS= read -r file; do
+        [[ -f "$file" ]] || continue
+        rel="${file#/}"
+        mkdir -p "$destination/files/$(dirname "$rel")"
+        cp -f "$file" "$destination/files/$rel"
+        copied=$((copied + 1))
+    done < <(pacman -Qlq "$package" 2>/dev/null \
+        | grep -Ei '(^|/)(copying|copyright|licen[cs]e|notice|authors)([._ -]?[^/]*)?$' \
+        | sort -u)
+
+    if (( copied == 0 )); then
+        printf 'No installed license-like files were found for %s by pacman -Qlq.\n' "$package" \
+            > "$destination/NO_INSTALLED_LICENSE_FILES_FOUND.txt"
+    fi
+}
+
+write_third_party_notices() {
+    local notices="$STAGE_DIR/THIRD_PARTY_NOTICES.txt"
+    local third_party_dir="$STAGE_DIR/third-party"
+    local stage_inventory="$third_party_dir/staged-file-inventory.tsv"
+    local package_inventory="$third_party_dir/package-inventory.tsv"
+    local review="$third_party_dir/license-review.md"
+    local licenses_dir="$third_party_dir/licenses"
+    local generated_utc
+    local staged_file
+    local rel
+    local source_path
+    local package
+    local version
+    local licenses
+    local url
+    local description
+    local license_l
+    local package_slug
+    local review_required=0
+    local -a packages=()
+    local -a unresolved=()
+    declare -A package_by_name=()
+    declare -A staged_by_package=()
+    declare -A unresolved_files=()
+
+    command -v pacman >/dev/null 2>&1 || die "pacman is required to write third-party notices"
+
+    generated_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    mapfile -t STAGED_NOTICE_FILES < <(find "$STAGE_DIR" -type f | sort)
+
+    rm -rf -- "$third_party_dir"
+    mkdir -p "$licenses_dir"
+
+    {
+        printf 'staged_path\tsource_path\tpackage\tversion\tlicenses\n'
+    } > "$stage_inventory"
+
+    for staged_file in "${STAGED_NOTICE_FILES[@]}"; do
+        rel="${staged_file#"$STAGE_DIR"/}"
+
+        if [[ "$rel" == "$APP_NAME.exe" || "$rel" == "LICENSE.txt" ]]; then
+            continue
+        fi
+
+        source_path=""
+        package=""
+        version=""
+        licenses=""
+
+        if source_path="$(resolve_staged_source_path "$staged_file")"; then
+            if package="$(pacman -Qoq "$source_path" 2>/dev/null | head -n 1)"; then
+                version="$(package_version "$package")"
+                licenses="$(package_field "$package" "Licenses")"
+                package_by_name["$package"]=1
+                staged_by_package["$package"]+="${rel}"$'\n'
+            else
+                unresolved_files["$rel"]="no owning package for resolved source $source_path"
+            fi
+        else
+            unresolved_files["$rel"]="could not map staged file back to an MSYS2 source path"
+        fi
+
+        printf '%s\t%s\t%s\t%s\t%s\n' "$rel" "$source_path" "$package" "$version" "$licenses" \
+            >> "$stage_inventory"
+    done
+
+    {
+        printf 'package\tversion\tlicenses\turl\tdescription\tmsys2_package_page\n'
+    } > "$package_inventory"
+
+    mapfile -t packages < <(printf '%s\n' "${!package_by_name[@]}" | sed '/^$/d' | sort)
+    mapfile -t unresolved < <(printf '%s\n' "${!unresolved_files[@]}" | sed '/^$/d' | sort)
+
+    for package in "${packages[@]}"; do
+        version="$(package_version "$package")"
+        licenses="$(package_field "$package" "Licenses")"
+        url="$(package_field "$package" "URL")"
+        description="$(package_field "$package" "Description")"
+        printf '%s\t%s\t%s\t%s\t%s\thttps://packages.msys2.org/package/%s\n' \
+            "$package" "$version" "$licenses" "$url" "$description" "$package" \
+            >> "$package_inventory"
+
+        package_slug="${package//[^A-Za-z0-9_.+-]/_}"
+        copy_package_license_files "$package" "$licenses_dir/$package_slug"
+    done
+
+    if [[ -f LICENSE ]]; then
+        cp -f LICENSE "$STAGE_DIR/LICENSE.txt"
+    fi
+    if [[ -d LICENSES ]] && compgen -G "LICENSES/*" >/dev/null; then
+        mkdir -p "$STAGE_DIR/LICENSES"
+        cp -f LICENSES/* "$STAGE_DIR/LICENSES/"
+    fi
+
+    {
+        printf 'Third-party notices for uil\n'
+        printf 'Generated UTC: %s\n\n' "$generated_utc"
+        printf 'This file describes third-party software redistributed with the Windows build of uil.\n'
+        printf 'The detailed machine-readable inventories are installed next to this file under third-party/.\n\n'
+        printf 'uil application code:\n'
+        printf '  Copyright (C) 2026 Ivo Filot\n'
+        printf '  License: GNU Lesser General Public License v3.0 only\n'
+        printf '  Repository: https://github.com/ifilot/uil\n'
+        printf '  Installed license texts: LICENSE.txt and LICENSES/GPL-3.0-only.txt\n\n'
+        printf 'Important compliance note:\n'
+        printf '  MSYS2 packages are independent upstream projects with their own licenses.\n'
+        printf '  The package license strings below are generated from the local pacman database.\n'
+        printf '  Installed license and notice files, when present in the packages, are copied under third-party/licenses/.\n\n'
+        printf 'Package inventory:\n'
+        for package in "${packages[@]}"; do
+            version="$(package_version "$package")"
+            licenses="$(package_field "$package" "Licenses")"
+            url="$(package_field "$package" "URL")"
+            printf '\n%s %s\n' "$package" "$version"
+            printf '  Licenses: %s\n' "${licenses:-unknown}"
+            printf '  Upstream: %s\n' "${url:-unknown}"
+            printf '  MSYS2 package: https://packages.msys2.org/package/%s\n' "$package"
+            printf '  Staged files:\n'
+            while IFS= read -r rel; do
+                [[ -n "$rel" ]] || continue
+                printf '    - %s\n' "$rel"
+            done <<<"${staged_by_package[$package]}"
+        done
+
+        if ((${#unresolved[@]} > 0)); then
+            printf '\nFiles without pacman package attribution:\n'
+            for rel in "${unresolved[@]}"; do
+                printf '  - %s: %s\n' "$rel" "${unresolved_files[$rel]}"
+            done
+        fi
+    } > "$notices"
+
+    {
+        printf '# Third-party License Review\n\n'
+        printf 'Generated UTC: `%s`\n\n' "$generated_utc"
+        printf 'This review is generated from staged files and MSYS2 pacman metadata. It is an audit aid, not legal advice.\n\n'
+        printf '## Copyleft Attention Items\n\n'
+    } > "$review"
+
+    for package in "${packages[@]}"; do
+        licenses="$(package_field "$package" "Licenses")"
+        license_l="${licenses,,}"
+        if [[ "$license_l" == *gpl* ]]; then
+            review_required=1
+            {
+                printf -- '- `%s`: `%s`\n' "$package" "${licenses:-unknown}"
+            } >> "$review"
+        fi
+    done
+
+    if (( review_required == 0 )); then
+        printf 'No GPL/LGPL-family license strings were detected in package metadata.\n' >> "$review"
+    else
+        {
+            printf '\nReview these packages before release, especially FFmpeg-related packages, because GPL-enabled codec libraries can affect redistribution obligations.\n'
+            printf 'See FFmpeg legal guidance: https://www.ffmpeg.org/legal.html\n'
+        } >> "$review"
+        log "Third-party license review contains copyleft attention items"
+    fi
+
+    if ((${#unresolved[@]} > 0)); then
+        {
+            printf '\n## Files Without Package Attribution\n\n'
+            for rel in "${unresolved[@]}"; do
+                printf -- '- `%s`: %s\n' "$rel" "${unresolved_files[$rel]}"
+            done
+        } >> "$review"
+        log "Third-party notice generation could not attribute ${#unresolved[@]} staged file(s)"
+    fi
+
+    log "Wrote third-party notices for ${#packages[@]} package(s)"
+}
+
 write_manifest() {
     local manifest="$STAGE_DIR/deployment-manifest.txt"
     local summary="$STAGE_DIR/deployment-summary.md"
@@ -400,6 +639,9 @@ copy_runtime_dependency_closure
 
 log "Verifying staged runtime dependency closure"
 verify_dependency_closure
+
+log "Writing third-party notices"
+write_third_party_notices
 
 log "Writing deployment manifest"
 write_manifest

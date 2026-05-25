@@ -75,6 +75,13 @@ To create a deployable Windows staging directory after building:
 scripts/windows/deploy-msys2.sh
 ```
 
+The deployment script writes a complete staged dependency audit to
+`dist/uil-windows-x64/THIRD_PARTY_NOTICES.txt` and
+`dist/uil-windows-x64/third-party/`. Those files include the staged file
+inventory, owning MSYS2 packages, package versions, package license metadata,
+copied installed license/notice files, and a generated review file for
+GPL/LGPL-family attention items.
+
 To build the installer, install Inno Setup 6 for Windows, make sure `ISCC.exe`
 is available on `PATH` or set `ISCC=/path/to/ISCC.exe`, then run:
 
@@ -87,4 +94,9 @@ scripts/windows/build-inno-installer.sh
 `uil` is licensed under the GNU Lesser General Public License v3.0 only. The
 application links Qt 6 modules that are available under Qt's commercial or
 open-source licensing options, including LGPL/GPL terms depending on module and
-distribution. See [LICENSE](LICENSE) for the application license.
+distribution. Windows release builds also redistribute the MSYS2 runtime
+dependency closure, including optional FFmpeg dependencies when FFmpeg is
+available at configure time. See [LICENSE](LICENSE) for the application LGPLv3
+text, [LICENSES/GPL-3.0-only.txt](LICENSES/GPL-3.0-only.txt) for the GPLv3
+terms incorporated by LGPLv3, and the generated third-party notices in release
+artifacts for redistributed dependency licenses.

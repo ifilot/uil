@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: write-release-notes.sh --version VERSION --installer PATH --output PATH [--manifest PATH]
+Usage: write-release-notes.sh --version VERSION --installer PATH --output PATH [--manifest PATH] [--notices PATH] [--license-review PATH]
 EOF
 }
 
@@ -16,6 +16,8 @@ VERSION=""
 INSTALLER=""
 OUTPUT=""
 MANIFEST=""
+NOTICES=""
+LICENSE_REVIEW=""
 
 while (($#)); do
     case "$1" in
@@ -33,6 +35,14 @@ while (($#)); do
             ;;
         --manifest)
             MANIFEST="${2:-}"
+            shift 2
+            ;;
+        --notices)
+            NOTICES="${2:-}"
+            shift 2
+            ;;
+        --license-review)
+            LICENSE_REVIEW="${2:-}"
             shift 2
             ;;
         --help)
@@ -72,5 +82,11 @@ short_sha="${short_sha:0:7}"
     printf -- '- Non-Qt runtime DLLs are collected recursively with `ldd` and verified before installer creation.\n'
     if [[ -n "$MANIFEST" && -f "$MANIFEST" ]]; then
         printf -- '- The deployment manifest is attached as a release asset for auditing.\n'
+    fi
+    if [[ -n "$NOTICES" && -f "$NOTICES" ]]; then
+        printf -- '- Third-party notices and license files are included in the installer and attached as release assets.\n'
+    fi
+    if [[ -n "$LICENSE_REVIEW" && -f "$LICENSE_REVIEW" ]]; then
+        printf -- '- The generated third-party license review is attached for release checks.\n'
     fi
 } > "$OUTPUT"

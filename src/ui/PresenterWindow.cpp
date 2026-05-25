@@ -552,7 +552,8 @@ void PresenterWindow::showAbout() {
         "<li><b>Font Awesome Free 7.2.0</b>: vendored SVG icon assets under resources/fontawesome. The SVG icons are licensed under CC BY 4.0. The upstream package also includes MIT-licensed code and SIL OFL 1.1 fonts; this app uses the SVG assets. Copyright Fonticons, Inc.</li>"
         "<li><b>MSYS2/GCC runtime libraries</b>: deployed on Windows as needed by the toolchain and audited by the installer staging script.</li>"
         "</ul>"
-        "<p>Application rendering, scheduling, caching, and presentation control code is local to uil.</p>")
+        "<p>Application rendering, scheduling, caching, and presentation control code is local to uil.</p>"
+        "<p>Windows installers include THIRD_PARTY_NOTICES.txt and third-party/package-inventory.tsv with the complete staged dependency inventory and copied license files.</p>")
         .arg(
             compilerTimestamp,
             compiler,

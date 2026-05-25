@@ -93,7 +93,19 @@ jobs:
           --version "$UIL_VERSION"
           --installer "dist/$UIL_OUTPUT_BASE.exe"
           --manifest dist/uil-windows-x64/deployment-manifest.txt
+          --notices dist/uil-windows-x64/THIRD_PARTY_NOTICES.txt
+          --license-review dist/uil-windows-x64/third-party/license-review.md
           --output dist/release-notes.md
+
+      - name: Archive third-party notices
+        shell: powershell
+        run: >
+          Compress-Archive
+          -Path dist/uil-windows-x64/THIRD_PARTY_NOTICES.txt,dist/uil-windows-x64/third-party
+          -DestinationPath dist/uil-third-party-notices.zip
+
+      - name: Show license review
+        run: cat dist/uil-windows-x64/third-party/license-review.md
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -103,11 +115,17 @@ jobs:
           path: |
             dist/${{ steps.version.outputs.output_base }}.exe
             dist/${{ steps.version.outputs.output_base }}.exe.sha256
+            dist/uil-third-party-notices.zip
             dist/release-notes.md
             dist/uil-windows-x64/deployment-manifest.txt
             dist/uil-windows-x64/deployment-summary.md
             dist/uil-windows-x64/deployment-imports.txt
             dist/uil-windows-x64/deployment-ldd.txt
+            dist/uil-windows-x64/THIRD_PARTY_NOTICES.txt
+            dist/uil-windows-x64/third-party/package-inventory.tsv
+            dist/uil-windows-x64/third-party/staged-file-inventory.tsv
+            dist/uil-windows-x64/third-party/license-review.md
+            dist/uil-windows-x64/third-party/licenses/**
 
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
@@ -118,7 +136,12 @@ jobs:
           files: |
             dist/${{ steps.version.outputs.output_base }}.exe
             dist/${{ steps.version.outputs.output_base }}.exe.sha256
+            dist/uil-third-party-notices.zip
             dist/uil-windows-x64/deployment-manifest.txt
             dist/uil-windows-x64/deployment-summary.md
             dist/uil-windows-x64/deployment-imports.txt
             dist/uil-windows-x64/deployment-ldd.txt
+            dist/uil-windows-x64/THIRD_PARTY_NOTICES.txt
+            dist/uil-windows-x64/third-party/package-inventory.tsv
+            dist/uil-windows-x64/third-party/staged-file-inventory.tsv
+            dist/uil-windows-x64/third-party/license-review.md
