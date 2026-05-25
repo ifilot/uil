@@ -11,6 +11,7 @@
 #include <QRectF>
 #include <QScreen>
 #include <QString>
+#include <QTimer>
 #include <QVector>
 
 #include <memory>
@@ -32,6 +33,9 @@ public:
     void enterFullscreen();
     void toggleFullscreen();
     void exitFullscreen();
+    void toggleBlackScreen();
+    void toggleWhiteScreen();
+    void clearBlankScreen();
     QSize renderLogicalSize() const;
     qreal renderDevicePixelRatio() const;
 
@@ -48,8 +52,15 @@ protected:
     void resizeGL(int width, int height) override;
     void paintGL() override;
     void keyPressEvent(QKeyEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
 
 private:
+    enum class BlankMode {
+        None,
+        Black,
+        White
+    };
+
     struct Vertex {
         float x = 0.0f;
         float y = 0.0f;
@@ -75,6 +86,8 @@ private:
     bool hasTexture(const QString& textureKey) const;
     void evictOldTextures();
     void applyScreenGeometry(bool fullscreen);
+    void showCursorTemporarily();
+    void hideCursor();
     void releaseOpenGLResources();
 
     QString m_currentTextureKey;
@@ -88,6 +101,8 @@ private:
     bool m_hasVideoOverlay = false;
     bool m_openGLReady = false;
     QPointer<QScreen> m_screen;
+    QTimer m_cursorHideTimer;
+    BlankMode m_blankMode = BlankMode::None;
     bool m_isFullscreen = false;
 
     QOpenGLShaderProgram m_program;

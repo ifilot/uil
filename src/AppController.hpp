@@ -40,6 +40,8 @@ public:
     void refreshScreens();
     void enterAudienceFullscreen();
     void toggleAudienceFullscreen();
+    void toggleBlackScreen();
+    void toggleWhiteScreen();
     void toggleMediaPlayback();
 
 signals:

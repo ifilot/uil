@@ -1,11 +1,15 @@
 #include "AudienceWindow.hpp"
 
 #include <QElapsedTimer>
+#include <QCursor>
 #include <QKeyEvent>
 #include <QLoggingCategory>
+#include <QMouseEvent>
 #include <QOpenGLContext>
 #include <QtMath>
 #include <QtGlobal>
+
+#include <utility>
 
 Q_LOGGING_CATEGORY(logUi, "ui")
 
@@ -45,6 +49,9 @@ AudienceWindow::AudienceWindow()
     : QOpenGLWindow(QOpenGLWindow::NoPartialUpdate) {
     setTitle(QStringLiteral("uil Audience"));
     resize(960, 540);
+    m_cursorHideTimer.setSingleShot(true);
+    m_cursorHideTimer.setInterval(2000);
+    connect(&m_cursorHideTimer, &QTimer::timeout, this, &AudienceWindow::hideCursor);
 }
 
 AudienceWindow::~AudienceWindow() {
@@ -128,6 +135,7 @@ void AudienceWindow::enterFullscreen() {
     applyScreenGeometry(true);
     showFullScreen();
     m_isFullscreen = true;
+    showCursorTemporarily();
     qCInfo(logUi) << "Audience fullscreen entered";
 }
 
@@ -147,7 +155,27 @@ void AudienceWindow::exitFullscreen() {
     showNormal();
     hide();
     m_isFullscreen = false;
+    clearBlankScreen();
+    unsetCursor();
     qCInfo(logUi) << "Audience fullscreen closed";
+}
+
+void AudienceWindow::toggleBlackScreen() {
+    m_blankMode = (m_blankMode == BlankMode::Black) ? BlankMode::None : BlankMode::Black;
+    update();
+}
+
+void AudienceWindow::toggleWhiteScreen() {
+    m_blankMode = (m_blankMode == BlankMode::White) ? BlankMode::None : BlankMode::White;
+    update();
+}
+
+void AudienceWindow::clearBlankScreen() {
+    if (m_blankMode == BlankMode::None) {
+        return;
+    }
+    m_blankMode = BlankMode::None;
+    update();
 }
 
 QSize AudienceWindow::renderLogicalSize() const {
@@ -214,7 +242,18 @@ void AudienceWindow::paintGL() {
     const QSize viewportSize(qMax(1, int(qRound(width() * dpr))),
                              qMax(1, int(qRound(height() * dpr))));
     glViewport(0, 0, viewportSize.width(), viewportSize.height());
+
+    if (m_blankMode == BlankMode::White) {
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        return;
+    }
+
     glClear(GL_COLOR_BUFFER_BIT);
+    if (m_blankMode == BlankMode::Black) {
+        return;
+    }
 
     uploadPendingTextures();
     uploadPendingVideoTexture();
@@ -243,6 +282,7 @@ void AudienceWindow::paintGL() {
 }
 
 void AudienceWindow::keyPressEvent(QKeyEvent* event) {
+    showCursorTemporarily();
     switch (event->key()) {
     case Qt::Key_Right:
     case Qt::Key_PageDown:
@@ -269,19 +309,40 @@ void AudienceWindow::keyPressEvent(QKeyEvent* event) {
         emit playPauseRequested();
         event->accept();
         return;
+    case Qt::Key_B:
+        toggleBlackScreen();
+        event->accept();
+        return;
+    case Qt::Key_W:
+        toggleWhiteScreen();
+        event->accept();
+        return;
     case Qt::Key_F11:
         toggleFullscreen();
         event->accept();
         return;
     case Qt::Key_Escape:
-        exitFullscreen();
-        event->accept();
-        return;
+        if (m_isFullscreen) {
+            exitFullscreen();
+            event->accept();
+            return;
+        }
+        if (m_blankMode != BlankMode::None) {
+            clearBlankScreen();
+            event->accept();
+            return;
+        }
+        break;
     default:
         break;
     }
 
     QOpenGLWindow::keyPressEvent(event);
+}
+
+void AudienceWindow::mouseMoveEvent(QMouseEvent* event) {
+    showCursorTemporarily();
+    QOpenGLWindow::mouseMoveEvent(event);
 }
 
 void AudienceWindow::uploadPendingTextures() {
@@ -427,6 +488,19 @@ void AudienceWindow::applyScreenGeometry(bool fullscreen) {
         availableGeometry.x() + (availableGeometry.width() - targetSize.width()) / 2,
         availableGeometry.y() + (availableGeometry.height() - targetSize.height()) / 2);
     setGeometry(QRect(topLeft, targetSize));
+}
+
+void AudienceWindow::showCursorTemporarily() {
+    unsetCursor();
+    if (m_isFullscreen) {
+        m_cursorHideTimer.start();
+    }
+}
+
+void AudienceWindow::hideCursor() {
+    if (m_isFullscreen) {
+        setCursor(QCursor(Qt::BlankCursor));
+    }
 }
 
 void AudienceWindow::releaseOpenGLResources() {

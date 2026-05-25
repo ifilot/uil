@@ -1,15 +1,18 @@
 #pragma once
 
 #include <QImage>
+#include <QElapsedTimer>
 #include <QLabel>
 #include <QMainWindow>
 #include <QPointer>
 #include <QScreen>
 #include <QStringList>
+#include <QTimer>
 
 #include "util/PdfMediaDetector.hpp"
 
 class AppController;
+class QCloseEvent;
 class QComboBox;
 class QMenu;
 
@@ -33,9 +36,16 @@ class PresenterWindow final : public QMainWindow {
 public:
     explicit PresenterWindow(AppController* controller, QWidget* parent = nullptr);
 
+protected:
+    void closeEvent(QCloseEvent* event) override;
+
 private slots:
     void openPdf();
+    void jumpToPage();
+    void showSlideOverview();
     void startPresentationMode();
+    void resetPresentationTimer();
+    void updateTimerLabel();
     void updateMediaLabel(const PdfMediaScanResult& result);
     void updatePageLabel(int pageIndex, int pageCount);
     void updateScreenList();
@@ -52,6 +62,8 @@ private:
     void addRecentPdfPath(const QString& path);
     void removeRecentPdfPath(const QString& path);
     void rebuildOpenRecentMenu();
+    void loadSettings();
+    void saveSettings();
 
     AppController* m_controller = nullptr;
     SlidePreview* m_currentPreview = nullptr;
@@ -68,5 +80,13 @@ private:
     QAction* m_lastAction = nullptr;
     QAction* m_startPresentationAction = nullptr;
     QAction* m_playPauseMediaAction = nullptr;
+    QAction* m_jumpToPageAction = nullptr;
+    QAction* m_slideOverviewAction = nullptr;
+    QAction* m_resetTimerAction = nullptr;
+    QAction* m_blackScreenAction = nullptr;
+    QAction* m_whiteScreenAction = nullptr;
     QAction* m_fullscreenAction = nullptr;
+    QElapsedTimer m_elapsedTimer;
+    QTimer m_timerUpdateTimer;
+    bool m_timerRunning = false;
 };

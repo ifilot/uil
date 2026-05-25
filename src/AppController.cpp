@@ -193,6 +193,18 @@ void AppController::toggleMediaPlayback() {
     startMediaPlayback();
 }
 
+void AppController::toggleBlackScreen() {
+    if (m_audienceWindow) {
+        m_audienceWindow->toggleBlackScreen();
+    }
+}
+
+void AppController::toggleWhiteScreen() {
+    if (m_audienceWindow) {
+        m_audienceWindow->toggleWhiteScreen();
+    }
+}
+
 void AppController::enterAudienceFullscreen() {
     if (m_audienceWindow) {
         m_audienceWindow->enterFullscreen();
