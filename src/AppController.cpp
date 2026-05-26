@@ -45,6 +45,9 @@ void AppController::setAudienceWindow(AudienceWindow* audienceWindow) {
         connect(m_audienceWindow, &AudienceWindow::renderTargetChanged, this, &AppController::handleAudienceRenderTargetChanged);
         connect(m_audienceWindow, &AudienceWindow::annotationOverlayChanged, this, &AppController::currentAnnotationOverlayChanged);
         connect(m_audienceWindow, &AudienceWindow::presentationClosed, this, &AppController::stopMediaPlayback);
+        if (m_audienceScreen) {
+            m_audienceWindow->setAudienceScreen(m_audienceScreen);
+        }
     }
 }
 
@@ -436,6 +439,9 @@ void AppController::refreshScreens() {
 
 void AppController::toggleAudienceFullscreen() {
     if (m_audienceWindow) {
+        if (m_audienceScreen) {
+            m_audienceWindow->setAudienceScreen(m_audienceScreen);
+        }
         m_audienceWindow->toggleFullscreen();
     }
 }
@@ -471,6 +477,12 @@ void AppController::closeAudienceWindow() {
 
 void AppController::enterAudienceFullscreen() {
     if (m_audienceWindow) {
+        if (!m_audienceScreen) {
+            refreshScreens();
+        }
+        if (m_audienceScreen) {
+            m_audienceWindow->setAudienceScreen(m_audienceScreen);
+        }
         m_audienceWindow->enterFullscreen();
     }
 }

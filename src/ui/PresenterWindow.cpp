@@ -887,6 +887,14 @@ void PresenterWindow::startPresentationMode() {
     show();
     raise();
     activateWindow();
+
+    if (m_screenCombo) {
+        if (QScreen* screen = m_screenCombo->currentData().value<QScreen*>()) {
+            if (screen != m_controller->selectedAudienceScreen()) {
+                m_controller->setAudienceScreen(screen);
+            }
+        }
+    }
     m_controller->enterAudienceFullscreen();
 }
 
@@ -950,11 +958,7 @@ void PresenterWindow::updateScreenList() {
 
     const QList<QScreen*> screens = QGuiApplication::screens();
     for (QScreen* screen : screens) {
-        const QString label = QStringLiteral("%1 (%2x%3)")
-            .arg(screen->name())
-            .arg(screen->geometry().width())
-            .arg(screen->geometry().height());
-        m_screenCombo->addItem(label, QVariant::fromValue(screen));
+        m_screenCombo->addItem(screen->name(), QVariant::fromValue(screen));
     }
 
     updateAudienceScreenSelection(m_controller->selectedAudienceScreen());
