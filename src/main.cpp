@@ -54,6 +54,8 @@ int main(int argc, char* argv[]) {
     QObject::connect(&app, &QGuiApplication::screenRemoved, &controller, &AppController::refreshScreens);
     QObject::connect(&audienceWindow, &AudienceWindow::nextRequested, &controller, &AppController::nextPage);
     QObject::connect(&audienceWindow, &AudienceWindow::previousRequested, &controller, &AppController::previousPage);
+    QObject::connect(&audienceWindow, &AudienceWindow::pageRequested, &controller, &AppController::goToPage);
+    QObject::connect(&audienceWindow, &AudienceWindow::deckOverviewRendersRequested, &controller, &AppController::requestDeckOverviewRenders);
     QObject::connect(&audienceWindow, &AudienceWindow::firstRequested, &controller, [&controller] {
         controller.goToPage(0);
     });
@@ -61,6 +63,8 @@ int main(int argc, char* argv[]) {
         controller.goToPage(controller.pageCount() - 1);
     });
     QObject::connect(&audienceWindow, &AudienceWindow::playPauseRequested, &controller, &AppController::toggleMediaPlayback);
+    QObject::connect(&controller, &AppController::pageChanged, &audienceWindow, &AudienceWindow::setDocumentOverview);
+    QObject::connect(&controller, &AppController::deckSlideImageChanged, &audienceWindow, &AudienceWindow::setDeckOverviewSlideImage);
 
     audienceWindow.setAudienceScreen(controller.selectedAudienceScreen());
     presenterWindow.show();

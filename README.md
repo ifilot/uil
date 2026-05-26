@@ -1,4 +1,6 @@
-# uil
+# UIL
+
+Pronunciation: `/ œyl /`
 
 [![Windows Installer](https://github.com/ifilot/uil/actions/workflows/windows-installer.yml/badge.svg)](https://github.com/ifilot/uil/actions/workflows/windows-installer.yml)
 [![License: LGPL v3](https://img.shields.io/badge/license-LGPL--3.0--only-blue.svg)](LICENSE)

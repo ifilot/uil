@@ -6,6 +6,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QBitmap>
 #include <QComboBox>
 #include <QCloseEvent>
 #include <QCursor>
@@ -26,6 +27,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPushButton>
 #include <QResizeEvent>
 #include <QScreen>
 #include <QScrollArea>
@@ -34,6 +36,7 @@
 #include <QSizePolicy>
 #include <QStatusBar>
 #include <QStyle>
+#include <QStyleOptionToolButton>
 #include <QToolButton>
 #include <QVariant>
 #include <QVBoxLayout>
@@ -52,6 +55,9 @@ constexpr auto windowGeometryKey = "presenterWindowGeometry";
 constexpr auto windowStateKey = "presenterWindowState";
 constexpr auto audienceScreenNameKey = "audienceScreenName";
 constexpr int resizeBorderWidth = 6;
+constexpr int defaultWindowWidth = 1280;
+constexpr int defaultWindowHeight = 800;
+constexpr qreal windowCornerRadius = 12.0;
 
 QString menuSafePathText(QString path) {
     return path.replace(QStringLiteral("&"), QStringLiteral("&&"));
@@ -117,10 +123,16 @@ class SlideThumbnail final : public QWidget {
 public:
     explicit SlideThumbnail(int pageIndex, QWidget* parent = nullptr)
         : QWidget(parent),
-          m_pageIndex(pageIndex) {
+          m_pageIndex(pageIndex),
+          m_overlayVisibleIcon(FontAwesome::icon(FontAwesome::Style::Regular, QStringLiteral("eye"), QColor(0xff, 0xff, 0xff), QSize(16, 16))),
+          m_overlayHiddenIcon(FontAwesome::icon(FontAwesome::Style::Regular, QStringLiteral("eye-slash"), QColor(0x8a, 0x8a, 0x8a), QSize(16, 16))),
+          m_clearOverlayIcon(FontAwesome::icon(FontAwesome::Style::Solid, QStringLiteral("eraser"), QColor(0xff, 0xff, 0xff), QSize(16, 16))) {
         setObjectName(QStringLiteral("slideThumbnail"));
         setFixedSize(180, 128);
         setCursor(Qt::PointingHandCursor);
+        setMouseTracking(true);
+        setAttribute(Qt::WA_Hover, true);
+        setToolTip(QStringLiteral("Click the thumbnail to jump to this slide. Click the eye to show or hide its drawing overlay. Click the eraser to clear this slide's overlay."));
     }
 
     int pageIndex() const {
@@ -140,10 +152,61 @@ public:
         update();
     }
 
+    void setOverlayImage(const QImage& image) {
+        m_overlayImage = image;
+        update();
+    }
+
+    void setOverlayVisible(bool visible) {
+        if (m_overlayVisible == visible) {
+            return;
+        }
+
+        m_overlayVisible = visible;
+        update();
+    }
+
+    void setOverlaysGloballyVisible(bool visible) {
+        if (m_overlaysGloballyVisible == visible) {
+            return;
+        }
+
+        m_overlaysGloballyVisible = visible;
+        update();
+    }
+
     std::function<void(int)> activated;
+    std::function<void(int, bool)> overlayVisibilityChanged;
+    std::function<void(int)> overlayClearRequested;
 
 protected:
+    bool event(QEvent* event) override {
+        if (event->type() == QEvent::Leave) {
+            setHoveredButton(HoveredButton::None);
+        }
+
+        return QWidget::event(event);
+    }
+
     void mousePressEvent(QMouseEvent* event) override {
+        if (event->button() == Qt::LeftButton && overlayIconRect().contains(event->position().toPoint())) {
+            m_overlayVisible = !m_overlayVisible;
+            update();
+            if (overlayVisibilityChanged) {
+                overlayVisibilityChanged(m_pageIndex, m_overlayVisible);
+            }
+            event->accept();
+            return;
+        }
+
+        if (event->button() == Qt::LeftButton && clearOverlayIconRect().contains(event->position().toPoint())) {
+            if (overlayClearRequested) {
+                overlayClearRequested(m_pageIndex);
+            }
+            event->accept();
+            return;
+        }
+
         if (event->button() == Qt::LeftButton && activated) {
             activated(m_pageIndex);
             event->accept();
@@ -151,6 +214,18 @@ protected:
         }
 
         QWidget::mousePressEvent(event);
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override {
+        if (overlayIconRect().contains(event->position().toPoint())) {
+            setHoveredButton(HoveredButton::OverlayVisibility);
+        } else if (clearOverlayIconRect().contains(event->position().toPoint())) {
+            setHoveredButton(HoveredButton::ClearOverlay);
+        } else {
+            setHoveredButton(HoveredButton::None);
+        }
+
+        QWidget::mouseMoveEvent(event);
     }
 
     void paintEvent(QPaintEvent*) override {
@@ -165,6 +240,9 @@ protected:
             painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
             const QRect imageRect = centeredRectForImage(m_image.size(), slideFrame.adjusted(1, 1, -1, -1));
             painter.drawImage(imageRect, m_image);
+            if (m_overlayVisible && m_overlaysGloballyVisible && !m_overlayImage.isNull()) {
+                painter.drawImage(imageRect, m_overlayImage);
+            }
         } else {
             painter.setPen(QColor(0x85, 0x85, 0x85));
             painter.drawText(slideFrame, Qt::AlignCenter, QStringLiteral("..."));
@@ -174,14 +252,65 @@ protected:
         painter.setPen(QPen(borderColor, m_selected ? 2 : 1));
         painter.drawRect(slideFrame.adjusted(0, 0, -1, -1));
 
+        const QRect iconRect = overlayIconRect();
+        drawIconHighlight(painter, iconRect, m_hoveredButton == HoveredButton::OverlayVisibility);
+        drawIconHighlight(painter, clearOverlayIconRect(), m_hoveredButton == HoveredButton::ClearOverlay);
+        const QIcon& overlayIcon = m_overlayVisible ? m_overlayVisibleIcon : m_overlayHiddenIcon;
+        overlayIcon.paint(&painter, iconRect);
+        m_clearOverlayIcon.paint(&painter, clearOverlayIconRect());
+
         painter.setPen(m_selected ? QColor(0xff, 0xff, 0xff) : QColor(0x8a, 0x8a, 0x8a));
-        painter.drawText(QRect(0, height() - 21, width(), 18), Qt::AlignCenter, QString::number(m_pageIndex + 1));
+        painter.drawText(QRect(width() - 52, height() - 21, 42, 18), Qt::AlignRight | Qt::AlignVCenter, QString::number(m_pageIndex + 1));
     }
 
 private:
+    enum class HoveredButton {
+        None,
+        OverlayVisibility,
+        ClearOverlay
+    };
+
+    void setHoveredButton(HoveredButton hoveredButton) {
+        if (m_hoveredButton == hoveredButton) {
+            return;
+        }
+
+        m_hoveredButton = hoveredButton;
+        update();
+    }
+
+    void drawIconHighlight(QPainter& painter, const QRect& iconRect, bool hovered) const {
+        if (!hovered) {
+            return;
+        }
+
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setBrush(QColor(0x00, 0x8c, 0x8c));
+        painter.setPen(QPen(QColor(0x00, 0xb3, 0xb3), 1));
+        painter.drawRoundedRect(iconRect.adjusted(-4, -2, 4, 2), 3, 3);
+        painter.restore();
+    }
+
+    QRect overlayIconRect() const {
+        const int groupWidth = 42;
+        return QRect((width() - groupWidth) / 2, height() - 21, 18, 18);
+    }
+
+    QRect clearOverlayIconRect() const {
+        return overlayIconRect().translated(24, 0);
+    }
+
     QImage m_image;
+    QImage m_overlayImage;
+    QIcon m_overlayVisibleIcon;
+    QIcon m_overlayHiddenIcon;
+    QIcon m_clearOverlayIcon;
     int m_pageIndex = -1;
     bool m_selected = false;
+    bool m_overlayVisible = true;
+    bool m_overlaysGloballyVisible = true;
+    HoveredButton m_hoveredButton = HoveredButton::None;
 };
 
 class SlideDeckOverview final : public QScrollArea {
@@ -221,6 +350,16 @@ public:
                     pageActivated(pageIndex);
                 }
             };
+            thumbnail->overlayVisibilityChanged = [this](int pageIndex, bool visible) {
+                if (pageOverlayVisibilityChanged) {
+                    pageOverlayVisibilityChanged(pageIndex, visible);
+                }
+            };
+            thumbnail->overlayClearRequested = [this](int pageIndex) {
+                if (pageOverlayClearRequested) {
+                    pageOverlayClearRequested(pageIndex);
+                }
+            };
             m_thumbnails.append(thumbnail);
         }
 
@@ -249,7 +388,31 @@ public:
         m_thumbnails.at(pageIndex)->setImage(image);
     }
 
+    void setPageOverlayVisible(int pageIndex, bool visible) {
+        if (pageIndex < 0 || pageIndex >= m_thumbnails.size()) {
+            return;
+        }
+
+        m_thumbnails.at(pageIndex)->setOverlayVisible(visible);
+    }
+
+    void setPageOverlayImage(int pageIndex, const QImage& image) {
+        if (pageIndex < 0 || pageIndex >= m_thumbnails.size()) {
+            return;
+        }
+
+        m_thumbnails.at(pageIndex)->setOverlayImage(image);
+    }
+
+    void setOverlaysGloballyVisible(bool visible) {
+        for (SlideThumbnail* thumbnail : std::as_const(m_thumbnails)) {
+            thumbnail->setOverlaysGloballyVisible(visible);
+        }
+    }
+
     std::function<void(int)> pageActivated;
+    std::function<void(int, bool)> pageOverlayVisibilityChanged;
+    std::function<void(int)> pageOverlayClearRequested;
     std::function<void(const QSize&, int)> renderBatchRequested;
 
 protected:
@@ -318,6 +481,66 @@ private:
     bool m_isHovered = false;
 };
 
+class SlideNavButton final : public QToolButton {
+public:
+    explicit SlideNavButton(const QString& text, const QString& iconName, bool iconOnRight, QWidget* parent = nullptr)
+        : QToolButton(parent),
+          m_iconOnRight(iconOnRight) {
+        setObjectName(QStringLiteral("slideNavButton"));
+        setText(text);
+        setIcon(FontAwesome::icon(FontAwesome::Style::Solid, iconName, QColor(0xff, 0xff, 0xff), QSize(16, 16)));
+        setIconSize(QSize(14, 14));
+        setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        setFocusPolicy(Qt::NoFocus);
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        setMinimumSize(sizeHint());
+    }
+
+    QSize sizeHint() const override {
+        const QFontMetrics metrics(font());
+        const int contentWidth = iconSize().width() + iconTextSpacing + metrics.horizontalAdvance(text());
+        return QSize(std::max(86, contentWidth + 28), 34);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+
+        QStyleOptionToolButton option;
+        initStyleOption(&option);
+        option.text.clear();
+        option.icon = {};
+        style()->drawComplexControl(QStyle::CC_ToolButton, &option, &painter, this);
+
+        const QFontMetrics metrics(font());
+        const int textWidth = metrics.horizontalAdvance(text());
+        const QSize iconExtent = iconSize();
+        const int contentWidth = iconExtent.width() + iconTextSpacing + textWidth;
+        const int contentLeft = (width() - contentWidth) / 2;
+        const int centerY = height() / 2;
+        const QRect textRect(
+            m_iconOnRight ? contentLeft : contentLeft + iconExtent.width() + iconTextSpacing,
+            0,
+            textWidth,
+            height());
+        const QRect iconRect(
+            m_iconOnRight ? contentLeft + textWidth + iconTextSpacing : contentLeft,
+            centerY - iconExtent.height() / 2,
+            iconExtent.width(),
+            iconExtent.height());
+
+        const QIcon::Mode iconMode = isEnabled() ? QIcon::Normal : QIcon::Disabled;
+        icon().paint(&painter, iconRect, Qt::AlignCenter, iconMode, isDown() ? QIcon::On : QIcon::Off);
+        const QPalette::ColorGroup colorGroup = isEnabled() ? QPalette::Active : QPalette::Disabled;
+        painter.setPen(palette().color(colorGroup, QPalette::ButtonText));
+        painter.drawText(textRect, Qt::AlignCenter, text());
+    }
+
+private:
+    static constexpr int iconTextSpacing = 8;
+    bool m_iconOnRight = false;
+};
+
 PresenterWindow::PresenterWindow(AppController* controller, QWidget* parent)
     : QMainWindow(parent),
       m_controller(controller) {
@@ -331,8 +554,9 @@ PresenterWindow::PresenterWindow(AppController* controller, QWidget* parent)
     updateScreenList();
     loadSettings();
     if (size().isEmpty()) {
-        resize(1100, 650);
+        resize(defaultWindowWidth, defaultWindowHeight);
     }
+    applyRoundedWindowMask();
 }
 
 PresenterWindow::~PresenterWindow() {
@@ -428,6 +652,7 @@ void PresenterWindow::changeEvent(QEvent* event) {
     if (event->type() == QEvent::WindowStateChange) {
         clearResizeCursor();
         updateMaximizeButton();
+        applyRoundedWindowMask();
     }
 }
 
@@ -435,6 +660,11 @@ void PresenterWindow::closeEvent(QCloseEvent* event) {
     saveSettings();
     m_controller->closeAudienceWindow();
     QMainWindow::closeEvent(event);
+}
+
+void PresenterWindow::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    applyRoundedWindowMask();
 }
 
 void PresenterWindow::openPdf() {
@@ -450,6 +680,75 @@ void PresenterWindow::openPdf() {
     }
 
     openPdfPath(path);
+}
+
+void PresenterWindow::savePackage() {
+    const QString packagePath = m_controller->currentPackagePath();
+    if (packagePath.isEmpty()) {
+        savePackageAs();
+        return;
+    }
+
+    savePackageToPath(packagePath);
+}
+
+void PresenterWindow::savePackageAs() {
+    if (m_controller->currentPath().isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("Save UIL Package"), QStringLiteral("Open a presentation before saving."));
+        return;
+    }
+
+    QSettings settings;
+    QString suggestedPath = m_controller->currentPackagePath();
+    if (suggestedPath.isEmpty()) {
+        const QFileInfo currentInfo(m_controller->currentPath());
+        suggestedPath = QFileInfo(
+            settings.value(QString::fromLatin1(lastOpenDirectoryKey), currentInfo.absolutePath()).toString(),
+            currentInfo.completeBaseName() + QStringLiteral(".uil")).absoluteFilePath();
+    }
+
+    QString path = QFileDialog::getSaveFileName(
+        this,
+        QStringLiteral("Save UIL Package"),
+        suggestedPath,
+        QStringLiteral("UIL packages (*.uil);;All files (*.*)"));
+    if (path.isEmpty()) {
+        return;
+    }
+
+    if (QFileInfo(path).suffix().compare(QStringLiteral("uil"), Qt::CaseInsensitive) != 0) {
+        path += QStringLiteral(".uil");
+    }
+
+    savePackageToPath(path);
+}
+
+void PresenterWindow::exportAsPdf() {
+    if (m_controller->currentPath().isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("Export as PDF"), QStringLiteral("Open a presentation before exporting."));
+        return;
+    }
+
+    const QFileInfo currentInfo(m_controller->currentPath());
+    QString path = QFileDialog::getSaveFileName(
+        this,
+        QStringLiteral("Export as PDF"),
+        QFileInfo(currentInfo.absolutePath(), currentInfo.completeBaseName() + QStringLiteral("-annotated.pdf")).absoluteFilePath(),
+        QStringLiteral("PDF files (*.pdf);;All files (*.*)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    if (QFileInfo(path).suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) != 0) {
+        path += QStringLiteral(".pdf");
+    }
+
+    QString errorMessage;
+    if (!m_controller->exportAnnotatedPdf(path, packageOverlayImagesForSave(), &errorMessage)) {
+        QMessageBox::warning(this, QStringLiteral("Export as PDF"), errorMessage);
+        return;
+    }
+
+    statusBar()->showMessage(QStringLiteral("Exported annotated PDF: %1").arg(QFileInfo(path).absoluteFilePath()));
 }
 
 void PresenterWindow::jumpToPage() {
@@ -510,6 +809,7 @@ void PresenterWindow::showAbout() {
     aboutBox.setTextInteractionFlags(Qt::TextBrowserInteraction);
     aboutBox.setText(QStringLiteral(
         "<h2>uil %1</h2>"
+        "<p>Pronunciation: /&#8239;&oelig;yl&#8239;/</p>"
         "<p>%2<br>"
         "Author: %3 &lt;<a href=\"mailto:%4\">%4</a>&gt;<br>"
         "Repository: <a href=\"%5\">%5</a><br>"
@@ -607,8 +907,23 @@ void PresenterWindow::updateDocumentOverview(int pageCount) {
         return;
     }
 
+    m_hiddenOverlayPages = m_controller->loadedHiddenOverlayPages();
+    m_pageOverlayImages = m_controller->loadedOverlayImages();
+    if (m_showAudienceOverlayAction) {
+        QSignalBlocker blocker(m_showAudienceOverlayAction);
+        m_showAudienceOverlayAction->setChecked(m_controller->loadedOverlaysGloballyVisible());
+        updateOverlayVisibilityButton(m_showAudienceOverlayAction->isChecked());
+    }
     m_deckOverview->setPageCount(pageCount);
+    m_deckOverview->setOverlaysGloballyVisible(m_showAudienceOverlayAction->isChecked());
+    for (auto it = m_pageOverlayImages.constBegin(); it != m_pageOverlayImages.constEnd(); ++it) {
+        m_deckOverview->setPageOverlayImage(it.key(), it.value());
+    }
+    for (int pageIndex : std::as_const(m_hiddenOverlayPages)) {
+        m_deckOverview->setPageOverlayVisible(pageIndex, false);
+    }
     m_deckOverview->setCurrentPage(m_controller->currentPage());
+    updateCurrentPreviewOverlayVisibility();
 }
 
 void PresenterWindow::updatePageLabel(int pageIndex, int pageCount) {
@@ -617,6 +932,7 @@ void PresenterWindow::updatePageLabel(int pageIndex, int pageCount) {
         if (m_deckOverview) {
             m_deckOverview->setCurrentPage(-1);
         }
+        updateCurrentPreviewOverlayVisibility();
         return;
     }
 
@@ -625,6 +941,7 @@ void PresenterWindow::updatePageLabel(int pageIndex, int pageCount) {
         m_deckOverview->setCurrentPage(pageIndex);
         m_controller->requestDeckOverviewRenders(m_deckOverview->thumbnailBoundingPixelSize(), pageIndex);
     }
+    updateCurrentPreviewOverlayVisibility();
 }
 
 void PresenterWindow::updateScreenList() {
@@ -665,6 +982,14 @@ void PresenterWindow::createActions() {
 
     m_openAction = new QAction(QStringLiteral("&Open Presentation"), this);
     m_openAction->setShortcut(QKeySequence::Open);
+
+    m_saveAction = new QAction(QStringLiteral("&Save"), this);
+    m_saveAction->setShortcut(QKeySequence::Save);
+
+    m_saveAsAction = new QAction(QStringLiteral("Save &As"), this);
+    m_saveAsAction->setShortcut(QKeySequence::SaveAs);
+
+    m_exportPdfAction = new QAction(QStringLiteral("Export as PDF"), this);
 
     m_nextAction = new QAction(QStringLiteral("Next"), this);
     m_nextAction->setShortcuts({
@@ -718,6 +1043,9 @@ void PresenterWindow::createActions() {
 
     QMenu* fileMenu = m_menuBar->addMenu(QStringLiteral("&File"));
     fileMenu->addAction(m_openAction);
+    fileMenu->addAction(m_saveAction);
+    fileMenu->addAction(m_saveAsAction);
+    fileMenu->addAction(m_exportPdfAction);
     m_openRecentMenu = fileMenu->addMenu(QStringLiteral("Open &Recent"));
     rebuildOpenRecentMenu();
     fileMenu->addSeparator();
@@ -745,6 +1073,9 @@ void PresenterWindow::createActions() {
     helpMenu->addAction(m_aboutAction);
 
     addAction(m_openAction);
+    addAction(m_saveAction);
+    addAction(m_saveAsAction);
+    addAction(m_exportPdfAction);
     addAction(m_nextAction);
     addAction(m_previousAction);
     addAction(m_firstAction);
@@ -773,7 +1104,7 @@ QWidget* PresenterWindow::createTitleBar() {
     iconLabel->setObjectName(QStringLiteral("titleIcon"));
     iconLabel->setFixedSize(36, 32);
     iconLabel->setAlignment(Qt::AlignCenter);
-    iconLabel->setPixmap(QIcon(QStringLiteral(":/icons/uil-white.svg")).pixmap(QSize(16, 16)));
+    iconLabel->setPixmap(QIcon(QStringLiteral(":/icons/uil.svg")).pixmap(QSize(16, 16)));
 
     titleLayout->addWidget(iconLabel);
     titleLayout->addWidget(m_menuBar, 0, Qt::AlignTop);
@@ -853,31 +1184,37 @@ void PresenterWindow::createLayout() {
     navigationLayout->setContentsMargins(10, 0, 10, 10);
     navigationLayout->setSpacing(8);
 
-    auto* previousButton = new QToolButton(currentSlidePanel);
-    previousButton->setObjectName(QStringLiteral("slideNavButton"));
-    previousButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    previousButton->setText(QStringLiteral("Previous"));
-    previousButton->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
+    auto* firstButton = new SlideNavButton(QStringLiteral("First"), QStringLiteral("angles-left"), false, currentSlidePanel);
+    firstButton->setToolTip(QStringLiteral("First slide"));
+    auto* previousButton = new SlideNavButton(QStringLiteral("Previous"), QStringLiteral("chevron-left"), false, currentSlidePanel);
     previousButton->setToolTip(QStringLiteral("Previous slide"));
-    auto* nextButton = new QToolButton(currentSlidePanel);
-    nextButton->setObjectName(QStringLiteral("slideNavButton"));
-    nextButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    nextButton->setText(QStringLiteral("Next"));
-    nextButton->setIcon(style()->standardIcon(QStyle::SP_ArrowForward));
+    auto* nextButton = new SlideNavButton(QStringLiteral("Next"), QStringLiteral("chevron-right"), true, currentSlidePanel);
     nextButton->setToolTip(QStringLiteral("Next slide"));
+    auto* lastButton = new SlideNavButton(QStringLiteral("Last"), QStringLiteral("angles-right"), true, currentSlidePanel);
+    lastButton->setToolTip(QStringLiteral("Last slide"));
 
+    connect(firstButton, &QToolButton::clicked, m_firstAction, &QAction::trigger);
     connect(previousButton, &QToolButton::clicked, m_previousAction, &QAction::trigger);
     connect(nextButton, &QToolButton::clicked, m_nextAction, &QAction::trigger);
+    connect(lastButton, &QToolButton::clicked, m_lastAction, &QAction::trigger);
 
     navigationLayout->addStretch(1);
+    navigationLayout->addWidget(firstButton);
     navigationLayout->addWidget(previousButton);
     navigationLayout->addWidget(nextButton);
+    navigationLayout->addWidget(lastButton);
     navigationLayout->addStretch(1);
     currentSlideLayout->addLayout(navigationLayout);
 
     m_deckOverview = new SlideDeckOverview(central);
     m_deckOverview->pageActivated = [this](int pageIndex) {
         m_controller->goToPage(pageIndex);
+    };
+    m_deckOverview->pageOverlayVisibilityChanged = [this](int pageIndex, bool visible) {
+        setPageOverlayVisible(pageIndex, visible);
+    };
+    m_deckOverview->pageOverlayClearRequested = [this](int pageIndex) {
+        confirmClearPageOverlay(pageIndex);
     };
     m_deckOverview->renderBatchRequested = [this](const QSize& boundingSize, int focusedPageIndex) {
         m_controller->requestDeckOverviewRenders(boundingSize, focusedPageIndex);
@@ -898,7 +1235,28 @@ void PresenterWindow::createLayout() {
         label->setObjectName(QStringLiteral("statusPill"));
     }
     screenLabel->setObjectName(QStringLiteral("fieldLabel"));
+    m_clearAllOverlaysButton = new QToolButton(central);
+    m_clearAllOverlaysButton->setObjectName(QStringLiteral("statusIconButton"));
+    m_clearAllOverlaysButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    m_clearAllOverlaysButton->setAutoRaise(true);
+    m_clearAllOverlaysButton->setFocusPolicy(Qt::NoFocus);
+    m_clearAllOverlaysButton->setFixedSize(31, 30);
+    m_clearAllOverlaysButton->setIcon(FontAwesome::icon(FontAwesome::Style::Solid, QStringLiteral("eraser"), QColor(0xff, 0xff, 0xff), QSize(16, 16)));
+    m_clearAllOverlaysButton->setIconSize(QSize(16, 16));
+    m_clearAllOverlaysButton->setToolTip(QStringLiteral("Clear all drawing overlays"));
+
+    m_overlayVisibilityButton = new QToolButton(central);
+    m_overlayVisibilityButton->setObjectName(QStringLiteral("statusIconButton"));
+    m_overlayVisibilityButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    m_overlayVisibilityButton->setAutoRaise(true);
+    m_overlayVisibilityButton->setFocusPolicy(Qt::NoFocus);
+    m_overlayVisibilityButton->setFixedSize(31, 30);
+    m_overlayVisibilityButton->setDefaultAction(m_showAudienceOverlayAction);
+    updateOverlayVisibilityButton(m_showAudienceOverlayAction->isChecked());
+
+    statusLayout->addWidget(m_clearAllOverlaysButton);
     statusLayout->addWidget(m_pageLabel);
+    statusLayout->addWidget(m_overlayVisibilityButton);
     statusLayout->addWidget(m_mediaLabel);
     statusLayout->addStretch(1);
     statusLayout->addWidget(screenLabel);
@@ -1058,8 +1416,167 @@ void PresenterWindow::updateMaximizeButton() {
     }
 }
 
+void PresenterWindow::updateOverlayVisibilityButton(bool visible) {
+    if (!m_showAudienceOverlayAction) {
+        return;
+    }
+
+    const QString iconName = visible ? QStringLiteral("eye") : QStringLiteral("eye-slash");
+    m_showAudienceOverlayAction->setIcon(FontAwesome::icon(FontAwesome::Style::Regular, iconName, QColor(0xff, 0xff, 0xff), QSize(16, 16)));
+    m_showAudienceOverlayAction->setToolTip(visible ? QStringLiteral("Hide drawing overlay") : QStringLiteral("Show drawing overlay"));
+    if (m_overlayVisibilityButton) {
+        m_overlayVisibilityButton->setChecked(visible);
+    }
+}
+
+void PresenterWindow::updateCurrentPreviewOverlayVisibility() {
+    if (!m_currentPreview || !m_showAudienceOverlayAction) {
+        return;
+    }
+
+    const int pageIndex = m_controller ? m_controller->currentPage() : -1;
+    m_currentPreview->setOverlayVisible(m_showAudienceOverlayAction->isChecked() && isPageOverlayVisible(pageIndex));
+}
+
+void PresenterWindow::setCurrentPageOverlayImage(const QImage& image) {
+    const int pageIndex = m_controller ? m_controller->currentPage() : -1;
+    if (pageIndex >= 0) {
+        if (image.isNull()) {
+            m_pageOverlayImages.remove(pageIndex);
+        } else {
+            m_pageOverlayImages.insert(pageIndex, image);
+        }
+        if (m_deckOverview) {
+            m_deckOverview->setPageOverlayImage(pageIndex, image);
+        }
+    }
+
+    if (m_currentPreview) {
+        m_currentPreview->setOverlayImage(image);
+    }
+}
+
+void PresenterWindow::updateDeckOverlayVisibility() {
+    if (!m_deckOverview || !m_showAudienceOverlayAction) {
+        return;
+    }
+
+    m_deckOverview->setOverlaysGloballyVisible(m_showAudienceOverlayAction->isChecked());
+}
+
+bool PresenterWindow::isPageOverlayVisible(int pageIndex) const {
+    return pageIndex < 0 || !m_hiddenOverlayPages.contains(pageIndex);
+}
+
+void PresenterWindow::setPageOverlayVisible(int pageIndex, bool visible) {
+    if (pageIndex < 0) {
+        return;
+    }
+
+    if (visible) {
+        m_hiddenOverlayPages.remove(pageIndex);
+    } else {
+        m_hiddenOverlayPages.insert(pageIndex);
+    }
+
+    if (m_deckOverview) {
+        m_deckOverview->setPageOverlayVisible(pageIndex, visible);
+    }
+    if (m_controller && m_controller->currentPage() == pageIndex) {
+        updateCurrentPreviewOverlayVisibility();
+    }
+}
+
+void PresenterWindow::confirmClearPageOverlay(int pageIndex) {
+    if (pageIndex < 0) {
+        return;
+    }
+
+    QMessageBox confirm(this);
+    confirm.setIcon(QMessageBox::Question);
+    confirm.setWindowTitle(QStringLiteral("Clear Slide Overlay"));
+    confirm.setText(QStringLiteral("Clear the drawing overlay for slide %1?").arg(pageIndex + 1));
+    confirm.setInformativeText(QStringLiteral("This removes only the overlay for this single slide."));
+    QPushButton* clearButton = confirm.addButton(QStringLiteral("Clear Slide Overlay"), QMessageBox::DestructiveRole);
+    confirm.addButton(QMessageBox::Cancel);
+    confirm.setDefaultButton(QMessageBox::Cancel);
+    confirm.exec();
+    if (confirm.clickedButton() != clearButton) {
+        return;
+    }
+
+    m_pageOverlayImages.remove(pageIndex);
+    if (m_deckOverview) {
+        m_deckOverview->setPageOverlayImage(pageIndex, QImage());
+    }
+    m_controller->clearAnnotationOverlayForPage(pageIndex);
+    if (m_controller->currentPage() == pageIndex && m_currentPreview) {
+        m_currentPreview->setOverlayImage(QImage());
+    }
+    statusBar()->showMessage(QStringLiteral("Cleared overlay for slide %1").arg(pageIndex + 1));
+}
+
+void PresenterWindow::confirmClearAllOverlays() {
+    if (m_pageOverlayImages.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("Clear All Overlays"), QStringLiteral("There are no drawing overlays to clear."));
+        return;
+    }
+
+    QMessageBox confirm(this);
+    confirm.setIcon(QMessageBox::Warning);
+    confirm.setWindowTitle(QStringLiteral("Clear All Overlays"));
+    confirm.setText(QStringLiteral("This will permanently clear every drawing overlay in the entire slide deck."));
+    confirm.setInformativeText(QStringLiteral("This cannot be undone. All overlays will be lost."));
+    QPushButton* clearButton = confirm.addButton(QStringLiteral("Clear All Overlays"), QMessageBox::DestructiveRole);
+    confirm.addButton(QMessageBox::Cancel);
+    confirm.setDefaultButton(QMessageBox::Cancel);
+    confirm.exec();
+    if (confirm.clickedButton() != clearButton) {
+        return;
+    }
+
+    const QSet<int> previouslyHiddenPages = m_hiddenOverlayPages;
+    for (int pageIndex : m_pageOverlayImages.keys()) {
+        if (m_deckOverview) {
+            m_deckOverview->setPageOverlayImage(pageIndex, QImage());
+        }
+    }
+    for (int pageIndex : previouslyHiddenPages) {
+        if (m_deckOverview) {
+            m_deckOverview->setPageOverlayVisible(pageIndex, true);
+        }
+    }
+    m_pageOverlayImages.clear();
+    m_hiddenOverlayPages.clear();
+    m_controller->clearAllAnnotationOverlays();
+    if (m_currentPreview) {
+        m_currentPreview->setOverlayImage(QImage());
+    }
+    statusBar()->showMessage(QStringLiteral("Cleared all drawing overlays"));
+}
+
+void PresenterWindow::applyRoundedWindowMask() {
+    if (isMaximized() || isFullScreen() || width() <= 0 || height() <= 0) {
+        clearMask();
+        return;
+    }
+
+    QBitmap mask(size());
+    mask.fill(Qt::color0);
+
+    QPainter painter(&mask);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setBrush(Qt::color1);
+    painter.setPen(Qt::NoPen);
+    painter.drawRoundedRect(rect(), windowCornerRadius, windowCornerRadius);
+    setMask(mask);
+}
+
 void PresenterWindow::createConnections() {
     connect(m_openAction, &QAction::triggered, this, &PresenterWindow::openPdf);
+    connect(m_saveAction, &QAction::triggered, this, &PresenterWindow::savePackage);
+    connect(m_saveAsAction, &QAction::triggered, this, &PresenterWindow::savePackageAs);
+    connect(m_exportPdfAction, &QAction::triggered, this, &PresenterWindow::exportAsPdf);
     connect(m_nextAction, &QAction::triggered, m_controller, &AppController::nextPage);
     connect(m_previousAction, &QAction::triggered, m_controller, &AppController::previousPage);
     connect(m_firstAction, &QAction::triggered, this, [this] {
@@ -1077,14 +1594,17 @@ void PresenterWindow::createConnections() {
     connect(m_blackScreenAction, &QAction::triggered, m_controller, &AppController::toggleBlackScreen);
     connect(m_whiteScreenAction, &QAction::triggered, m_controller, &AppController::toggleWhiteScreen);
     connect(m_fullscreenAction, &QAction::triggered, m_controller, &AppController::toggleAudienceFullscreen);
-    connect(m_showAudienceOverlayAction, &QAction::toggled, m_currentPreview, &SlidePreview::setOverlayVisible);
+    connect(m_showAudienceOverlayAction, &QAction::toggled, this, &PresenterWindow::updateOverlayVisibilityButton);
+    connect(m_showAudienceOverlayAction, &QAction::toggled, this, &PresenterWindow::updateCurrentPreviewOverlayVisibility);
+    connect(m_showAudienceOverlayAction, &QAction::toggled, this, &PresenterWindow::updateDeckOverlayVisibility);
+    connect(m_clearAllOverlaysButton, &QToolButton::clicked, this, &PresenterWindow::confirmClearAllOverlays);
     connect(m_screenCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &PresenterWindow::selectScreenFromCombo);
 
     connect(m_controller, &AppController::pageChanged, this, &PresenterWindow::updatePageLabel);
     connect(m_controller, &AppController::documentChanged, this, &PresenterWindow::updateDocumentOverview);
     connect(m_controller, &AppController::mediaScanChanged, this, &PresenterWindow::updateMediaLabel);
     connect(m_controller, &AppController::currentSlideImageChanged, m_currentPreview, &SlidePreview::setPreviewImage);
-    connect(m_controller, &AppController::currentAnnotationOverlayChanged, m_currentPreview, &SlidePreview::setOverlayImage);
+    connect(m_controller, &AppController::currentAnnotationOverlayChanged, this, &PresenterWindow::setCurrentPageOverlayImage);
     connect(m_controller, &AppController::deckSlideImageChanged, this,
         [this](int pageIndex, const QSize& boundingPixelSize, const QImage& image) {
             if (m_deckOverview) {
@@ -1118,6 +1638,38 @@ bool PresenterWindow::openPdfPath(const QString& path) {
 
     removeRecentPdfPath(absolutePath);
     return false;
+}
+
+bool PresenterWindow::savePackageToPath(const QString& path) {
+    const QString absolutePath = QFileInfo(path).absoluteFilePath();
+    QString errorMessage;
+    if (!m_controller->saveUilPackage(
+            absolutePath,
+            packageOverlayImagesForSave(),
+            m_hiddenOverlayPages,
+            m_showAudienceOverlayAction ? m_showAudienceOverlayAction->isChecked() : true,
+            &errorMessage)) {
+        QMessageBox::warning(this, QStringLiteral("Save UIL Package"), errorMessage);
+        return false;
+    }
+
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(lastOpenDirectoryKey), QFileInfo(absolutePath).absolutePath());
+    m_pageOverlayImages = m_controller->loadedOverlayImages();
+    addRecentPdfPath(absolutePath);
+    statusBar()->showMessage(QStringLiteral("Saved UIL package: %1").arg(absolutePath));
+    return true;
+}
+
+QHash<int, QImage> PresenterWindow::packageOverlayImagesForSave() const {
+    QHash<int, QImage> overlays;
+    for (auto it = m_pageOverlayImages.constBegin(); it != m_pageOverlayImages.constEnd(); ++it) {
+        if (!it.value().isNull()) {
+            overlays.insert(it.key(), it.value());
+        }
+    }
+
+    return overlays;
 }
 
 QStringList PresenterWindow::recentPdfPaths() const {
@@ -1177,7 +1729,7 @@ void PresenterWindow::loadSettings() {
     if (!geometry.isEmpty()) {
         restoreGeometry(geometry);
     } else {
-        resize(1100, 650);
+        resize(defaultWindowWidth, defaultWindowHeight);
     }
 
     const QByteArray state = settings.value(QString::fromLatin1(windowStateKey)).toByteArray();

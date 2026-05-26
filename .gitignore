@@ -25,3 +25,5 @@ Thumbs.db
 # Project-private notes and generated instructions
 dev/
 SPEC.md
+.codex
+.agents

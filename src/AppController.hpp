@@ -8,11 +8,14 @@
 #include "util/PdfMediaDetector.hpp"
 
 #include <QObject>
+#include <QHash>
 #include <QImage>
 #include <QPointer>
 #include <QRectF>
 #include <QScreen>
+#include <QSet>
 #include <QString>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTimer>
 
@@ -46,6 +49,14 @@ public:
     void toggleWhiteScreen();
     void toggleMediaPlayback();
     void closeAudienceWindow();
+    bool saveUilPackage(const QString& path, const QHash<int, QImage>& overlayImages, const QSet<int>& hiddenOverlayPages, bool overlaysGloballyVisible, QString* errorMessage = nullptr);
+    bool exportAnnotatedPdf(const QString& path, const QHash<int, QImage>& overlayImages, QString* errorMessage = nullptr);
+    void clearAnnotationOverlayForPage(int pageIndex);
+    void clearAllAnnotationOverlays();
+    QString currentPackagePath() const;
+    QHash<int, QImage> loadedOverlayImages() const;
+    QSet<int> loadedHiddenOverlayPages() const;
+    bool loadedOverlaysGloballyVisible() const;
 
 signals:
     void documentChanged(int pageCount);
@@ -93,6 +104,10 @@ private:
     QPointer<AudienceWindow> m_audienceWindow;
     QPointer<QScreen> m_audienceScreen;
     QString m_currentPath;
+    QString m_currentPackagePath;
+    QString m_packageRootPath;
+    QString m_entryPdfRelativePath;
+    QStringList m_packageMovieAssetPaths;
     QString m_documentHash;
     PdfMediaScanResult m_mediaScanResult;
     QRectF m_activeVideoRect;
@@ -100,6 +115,9 @@ private:
     qint64 m_lastVideoPtsMs = -1;
     bool m_waitingForVideoFrame = false;
     bool m_videoPlaying = false;
+    bool m_loadedOverlaysGloballyVisible = true;
     int m_currentPageIndex = 0;
     int m_renderGeneration = 0;
+    QHash<int, QImage> m_loadedOverlayImages;
+    QSet<int> m_loadedHiddenOverlayPages;
 };

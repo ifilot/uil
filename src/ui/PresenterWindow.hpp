@@ -1,10 +1,12 @@
 #pragma once
 
 #include <QImage>
+#include <QHash>
 #include <QLabel>
 #include <QMainWindow>
 #include <QPointer>
 #include <QScreen>
+#include <QSet>
 #include <QStringList>
 
 #include "util/PdfMediaDetector.hpp"
@@ -15,6 +17,7 @@ class QComboBox;
 class QEvent;
 class QMenu;
 class QMenuBar;
+class QResizeEvent;
 class QToolButton;
 class QWidget;
 class SlideDeckOverview;
@@ -48,9 +51,13 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void changeEvent(QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 private slots:
     void openPdf();
+    void savePackage();
+    void savePackageAs();
+    void exportAsPdf();
     void jumpToPage();
     void showSlideOverview();
     void showAbout();
@@ -78,8 +85,19 @@ private:
     void finishManualMove();
     void toggleMaximized();
     void updateMaximizeButton();
+    void updateOverlayVisibilityButton(bool visible);
+    void updateCurrentPreviewOverlayVisibility();
+    void setCurrentPageOverlayImage(const QImage& image);
+    void updateDeckOverlayVisibility();
+    bool isPageOverlayVisible(int pageIndex) const;
+    void setPageOverlayVisible(int pageIndex, bool visible);
+    void confirmClearPageOverlay(int pageIndex);
+    void confirmClearAllOverlays();
+    void applyRoundedWindowMask();
     void selectScreenFromCombo(int index);
     bool openPdfPath(const QString& path);
+    bool savePackageToPath(const QString& path);
+    QHash<int, QImage> packageOverlayImagesForSave() const;
     QStringList recentPdfPaths() const;
     void saveRecentPdfPaths(const QStringList& paths);
     void addRecentPdfPath(const QString& path);
@@ -99,7 +117,12 @@ private:
     QToolButton* m_minimizeButton = nullptr;
     QToolButton* m_maximizeButton = nullptr;
     QToolButton* m_closeButton = nullptr;
+    QToolButton* m_clearAllOverlaysButton = nullptr;
+    QToolButton* m_overlayVisibilityButton = nullptr;
     QAction* m_openAction = nullptr;
+    QAction* m_saveAction = nullptr;
+    QAction* m_saveAsAction = nullptr;
+    QAction* m_exportPdfAction = nullptr;
     QMenu* m_openRecentMenu = nullptr;
     QAction* m_nextAction = nullptr;
     QAction* m_previousAction = nullptr;
@@ -119,6 +142,8 @@ private:
     QRect m_resizeStartGeometry;
     QPoint m_resizeStartGlobalPosition;
     QPoint m_moveOffset;
+    QHash<int, QImage> m_pageOverlayImages;
+    QSet<int> m_hiddenOverlayPages;
     bool m_manualResizeActive = false;
     bool m_manualMoveActive = false;
     bool m_resizeCursorActive = false;

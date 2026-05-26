@@ -26,9 +26,11 @@
 #include <QSizePolicy>
 #include <QSlider>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <QWindow>
 #include <QtMath>
 #include <QtGlobal>
@@ -41,11 +43,26 @@ Q_LOGGING_CATEGORY(logUi, "ui")
 
 namespace {
 constexpr int maxAudienceSlides = 4;
+constexpr int deckOverviewColumns = 6;
+constexpr int deckOverviewFooterHeight = 28;
 constexpr qreal pointerLogicalSize = 46.0;
 const QColor menuIconColor(0xcc, 0xcc, 0xcc);
 
 QRectF imageSourceRect(const QImage& image) {
     return QRectF(QPointF(0.0, 0.0), QSizeF(image.size()));
+}
+
+QRect centeredRectForImage(const QSize& imageSize, const QRect& bounds) {
+    if (!imageSize.isValid() || !bounds.isValid()) {
+        return {};
+    }
+
+    const QSize scaledSize = imageSize.scaled(bounds.size(), Qt::KeepAspectRatio);
+    return QRect(
+        bounds.x() + (bounds.width() - scaledSize.width()) / 2,
+        bounds.y() + (bounds.height() - scaledSize.height()) / 2,
+        scaledSize.width(),
+        scaledSize.height());
 }
 
 QIcon menuIcon(const QString& name, QColor color = menuIconColor, QSize size = QSize(18, 18)) {
@@ -114,6 +131,7 @@ protected:
 private:
     int m_diameter = 24;
 };
+
 }
 
 class AudienceWindow::FeatureMenuPanel final : public QWidget {
@@ -175,8 +193,12 @@ private:
 
         QToolButton* clearButton = createBottomButton(QStringLiteral("Clear"), QStringLiteral("trash-can"), QStringLiteral("featureDangerButton"), 92);
         QToolButton* closeButton = createBottomButton(QStringLiteral("Close slideshow"), QStringLiteral("door-open"), QStringLiteral("featureCloseButton"), 148);
-        QToolButton* previousButton = createBottomButton(QStringLiteral("Back"), QStringLiteral("arrow-left"), QStringLiteral("featureNavButton"), 96);
-        QToolButton* nextButton = createBottomButton(QStringLiteral("Forward"), QStringLiteral("arrow-right"), QStringLiteral("featureNavButton"), 112);
+        QToolButton* firstButton = createIconBottomButton(QStringLiteral("First slide"), QStringLiteral("angles-left"), QStringLiteral("featureNavButton"));
+        QToolButton* previousButton = createIconBottomButton(QStringLiteral("Previous slide"), QStringLiteral("chevron-left"), QStringLiteral("featureNavButton"));
+        m_gridButton = createIconBottomButton(QStringLiteral("Show slide grid"), QStringLiteral("table-cells-large"), QStringLiteral("featureNavButton"));
+        m_gridButton->installEventFilter(this);
+        QToolButton* nextButton = createIconBottomButton(QStringLiteral("Next slide"), QStringLiteral("chevron-right"), QStringLiteral("featureNavButton"));
+        QToolButton* lastButton = createIconBottomButton(QStringLiteral("Last slide"), QStringLiteral("angles-right"), QStringLiteral("featureNavButton"));
 
         connect(clearButton, &QToolButton::clicked, this, [this] {
             confirmClearAnnotations();
@@ -186,24 +208,56 @@ private:
             closeMenu();
             audience->exitFullscreen();
         });
+        connect(firstButton, &QToolButton::clicked, this, [this] {
+            emit m_audience->firstRequested();
+        });
         connect(previousButton, &QToolButton::clicked, this, [this] {
             emit m_audience->previousRequested();
-            closeMenu();
         });
         connect(nextButton, &QToolButton::clicked, this, [this] {
             emit m_audience->nextRequested();
-            closeMenu();
+        });
+        connect(lastButton, &QToolButton::clicked, this, [this] {
+            emit m_audience->lastRequested();
         });
 
         bottomRow->addWidget(clearButton);
         bottomRow->addWidget(closeButton);
         bottomRow->addStretch(1);
+        bottomRow->addWidget(firstButton);
         bottomRow->addWidget(previousButton);
+        bottomRow->addWidget(m_gridButton);
         bottomRow->addWidget(nextButton);
+        bottomRow->addWidget(lastButton);
         rootLayout->addLayout(bottomRow);
 
         refreshToolButtons();
         rebuildSettings();
+    }
+
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (watched == m_gridButton) {
+            if (event->type() == QEvent::MouseButtonPress) {
+                auto* mouseEvent = static_cast<QMouseEvent*>(event);
+                if (mouseEvent->button() == Qt::LeftButton) {
+                    openDeckOverview();
+                    event->accept();
+                    return true;
+                }
+            }
+            if (event->type() == QEvent::KeyPress) {
+                auto* keyEvent = static_cast<QKeyEvent*>(event);
+                if (keyEvent->key() == Qt::Key_Return
+                    || keyEvent->key() == Qt::Key_Enter
+                    || keyEvent->key() == Qt::Key_Space) {
+                    openDeckOverview();
+                    event->accept();
+                    return true;
+                }
+            }
+        }
+
+        return QWidget::eventFilter(watched, event);
     }
 
     QToolButton* createToolButton(const QString& text, const QString& iconName, InteractionTool tool) {
@@ -230,6 +284,18 @@ private:
         button->setIconSize(QSize(18, 18));
         button->setText(text);
         button->setMinimumSize(minimumWidth, 38);
+        button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        return button;
+    }
+
+    QToolButton* createIconBottomButton(const QString& toolTip, const QString& iconName, const QString& objectName) {
+        auto* button = new QToolButton(this);
+        button->setObjectName(objectName);
+        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        button->setIcon(menuIcon(iconName, QColor(0xff, 0xff, 0xff), QSize(20, 20)));
+        button->setIconSize(QSize(20, 20));
+        button->setToolTip(toolTip);
+        button->setFixedSize(42, 38);
         button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         return button;
     }
@@ -468,6 +534,17 @@ private:
         close();
     }
 
+    void openDeckOverview() {
+        QPointer<AudienceWindow> audience = m_audience;
+        hide();
+        closeMenu();
+        QTimer::singleShot(0, audience, [audience] {
+            if (audience) {
+                audience->enterDeckOverview();
+            }
+        });
+    }
+
     void resizeToContents() {
         if (QLayout* rootLayout = layout()) {
             rootLayout->activate();
@@ -530,6 +607,7 @@ private:
     QToolButton* m_pointerButton = nullptr;
     QToolButton* m_penButton = nullptr;
     QToolButton* m_eraserButton = nullptr;
+    QToolButton* m_gridButton = nullptr;
     QFrame* m_settingsFrame = nullptr;
     QVBoxLayout* m_settingsLayout = nullptr;
 };
@@ -601,6 +679,47 @@ void AudienceWindow::cacheSlideImage(const QString& textureKey, const QImage& im
     m_slideCache.insert(m_slideCache.begin(), CachedSlide{textureKey, image});
     evictOldSlides();
     update();
+}
+
+void AudienceWindow::setDocumentOverview(int pageCount, int currentPage) {
+    const bool pageCountChanged = m_pageCount != std::max(0, pageCount);
+    m_pageCount = std::max(0, pageCount);
+    m_currentPageIndex = currentPage >= 0 && currentPage < m_pageCount ? currentPage : -1;
+    if (m_pageCount == 0) {
+        m_deckOverviewImages.clear();
+        m_deckOverviewImageSize = {};
+        m_deckOverviewVisible = false;
+        m_deckOverviewScrollY = 0;
+    }
+
+    if (m_deckOverviewVisible) {
+        m_deckOverviewScrollY = std::clamp(m_deckOverviewScrollY, 0, deckOverviewMaxScrollY());
+        if (pageCountChanged) {
+            emit deckOverviewRendersRequested(deckOverviewThumbnailBoundingPixelSize(), m_currentPageIndex);
+        }
+        update();
+    }
+}
+
+void AudienceWindow::setDeckOverviewSlideImage(int pageIndex, const QSize& boundingPixelSize, const QImage& image) {
+    if (pageIndex < 0 || pageIndex >= m_pageCount || !boundingPixelSize.isValid()) {
+        return;
+    }
+
+    if (m_deckOverviewImageSize.isValid() && m_deckOverviewImageSize != boundingPixelSize) {
+        m_deckOverviewImages.clear();
+    }
+    m_deckOverviewImageSize = boundingPixelSize;
+
+    if (image.isNull()) {
+        m_deckOverviewImages.remove(pageIndex);
+    } else {
+        m_deckOverviewImages.insert(pageIndex, image);
+    }
+
+    if (m_deckOverviewVisible) {
+        update();
+    }
 }
 
 void AudienceWindow::setVideoFrame(const QImage& image, QRectF slideRect) {
@@ -677,6 +796,7 @@ void AudienceWindow::exitFullscreen() {
     m_isFullscreen = false;
     m_isAnnotating = false;
     m_pointerVisible = false;
+    m_deckOverviewVisible = false;
     showNormal();
     hide();
     clearBlankScreen();
@@ -768,6 +888,75 @@ void AudienceWindow::clearAnnotations() {
     }
 }
 
+void AudienceWindow::clearAnnotationOverlayForPage(int pageIndex) {
+    if (pageIndex < 0) {
+        return;
+    }
+
+    QStringList keysToRemove;
+    for (auto it = m_annotationImages.constBegin(); it != m_annotationImages.constEnd(); ++it) {
+        const QStringList parts = it.key().split(QLatin1Char(':'));
+        if (parts.size() < 2) {
+            continue;
+        }
+
+        bool ok = false;
+        const int keyPageIndex = parts.at(1).toInt(&ok);
+        if (ok && keyPageIndex == pageIndex) {
+            keysToRemove.push_back(it.key());
+        }
+    }
+
+    if (keysToRemove.isEmpty()) {
+        return;
+    }
+
+    for (const QString& key : keysToRemove) {
+        m_annotationImages.remove(key);
+    }
+
+    emit annotationOverlayChanged(currentAnnotationOverlayImage());
+    update();
+}
+
+void AudienceWindow::clearAllAnnotationOverlays() {
+    if (m_annotationImages.isEmpty()) {
+        return;
+    }
+
+    m_annotationImages.clear();
+    emit annotationOverlayChanged(currentAnnotationOverlayImage());
+    update();
+}
+
+void AudienceWindow::setAnnotationOverlaysByTextureKey(const QHash<QString, QImage>& overlays) {
+    m_annotationImages = overlays;
+    emit annotationOverlayChanged(currentAnnotationOverlayImage());
+    update();
+}
+
+QHash<int, QImage> AudienceWindow::annotationOverlaysByPage() const {
+    QHash<int, QImage> overlays;
+    for (auto it = m_annotationImages.constBegin(); it != m_annotationImages.constEnd(); ++it) {
+        if (it.value().isNull()) {
+            continue;
+        }
+
+        const QStringList parts = it.key().split(QLatin1Char(':'));
+        if (parts.size() < 2) {
+            continue;
+        }
+
+        bool ok = false;
+        const int pageIndex = parts.at(1).toInt(&ok);
+        if (ok && pageIndex >= 0) {
+            overlays.insert(pageIndex, it.value());
+        }
+    }
+
+    return overlays;
+}
+
 QImage AudienceWindow::currentAnnotatedSlideImage() const {
     if (m_currentSlideImage.isNull()) {
         return {};
@@ -809,6 +998,7 @@ void AudienceWindow::closeEvent(QCloseEvent* event) {
     m_isFullscreen = false;
     m_isAnnotating = false;
     m_pointerVisible = false;
+    m_deckOverviewVisible = false;
     clearBlankScreen();
     unsetCursor();
     emit presentationClosed();
@@ -827,7 +1017,16 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.fillRect(rect(), m_blankMode == BlankMode::White ? Qt::white : Qt::black);
 
-    if (m_blankMode != BlankMode::None || m_currentSlideImage.isNull()) {
+    if (m_blankMode != BlankMode::None) {
+        return;
+    }
+
+    if (m_deckOverviewVisible) {
+        drawDeckOverview(painter);
+        return;
+    }
+
+    if (m_currentSlideImage.isNull()) {
         return;
     }
 
@@ -857,7 +1056,45 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
 }
 
 void AudienceWindow::keyPressEvent(QKeyEvent* event) {
+    if (m_deckOverviewVisible) {
+        switch (event->key()) {
+        case Qt::Key_Escape:
+            exitDeckOverview();
+            event->accept();
+            return;
+        case Qt::Key_Up:
+            scrollDeckOverviewBy(-80);
+            event->accept();
+            return;
+        case Qt::Key_Down:
+            scrollDeckOverviewBy(80);
+            event->accept();
+            return;
+        case Qt::Key_PageUp:
+            scrollDeckOverviewBy(-deckOverviewViewportRect().height());
+            event->accept();
+            return;
+        case Qt::Key_PageDown:
+            scrollDeckOverviewBy(deckOverviewViewportRect().height());
+            event->accept();
+            return;
+        case Qt::Key_Home:
+            m_deckOverviewScrollY = 0;
+            update();
+            event->accept();
+            return;
+        case Qt::Key_End:
+            m_deckOverviewScrollY = deckOverviewMaxScrollY();
+            update();
+            event->accept();
+            return;
+        default:
+            break;
+        }
+    }
+
     showCursorTemporarily();
+
     switch (event->key()) {
     case Qt::Key_Right:
     case Qt::Key_PageDown:
@@ -924,6 +1161,13 @@ void AudienceWindow::leaveEvent(QEvent* event) {
 }
 
 void AudienceWindow::mouseMoveEvent(QMouseEvent* event) {
+    if (m_deckOverviewVisible) {
+        m_cursorHideTimer.stop();
+        setCursor(QCursor(Qt::ArrowCursor));
+        QWidget::mouseMoveEvent(event);
+        return;
+    }
+
     if (m_interactionTool == InteractionTool::Pointer) {
         m_pointerPosition = event->position();
         m_pointerVisible = true;
@@ -957,6 +1201,16 @@ void AudienceWindow::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void AudienceWindow::mousePressEvent(QMouseEvent* event) {
+    if (m_deckOverviewVisible && event->button() == Qt::LeftButton) {
+        const int pageIndex = deckOverviewPageAt(event->position().toPoint());
+        if (pageIndex >= 0) {
+            exitDeckOverview();
+            emit pageRequested(pageIndex);
+        }
+        event->accept();
+        return;
+    }
+
     if (event->button() == Qt::RightButton) {
         event->accept();
         return;
@@ -1002,6 +1256,22 @@ void AudienceWindow::mouseReleaseEvent(QMouseEvent* event) {
     }
 
     QWidget::mouseReleaseEvent(event);
+}
+
+void AudienceWindow::wheelEvent(QWheelEvent* event) {
+    if (m_deckOverviewVisible) {
+        const QPoint angleDelta = event->angleDelta();
+        const QPoint pixelDelta = event->pixelDelta();
+        int deltaY = pixelDelta.y();
+        if (deltaY == 0) {
+            deltaY = angleDelta.y() / 2;
+        }
+        scrollDeckOverviewBy(-deltaY);
+        event->accept();
+        return;
+    }
+
+    QWidget::wheelEvent(event);
 }
 
 void AudienceWindow::evictOldSlides() {
@@ -1253,6 +1523,179 @@ qreal AudienceWindow::eraserLogicalDiameter() const {
     return std::max<qreal>(1.0, qreal(m_eraserThickness) * slidePixelScale);
 }
 
+void AudienceWindow::enterDeckOverview() {
+    if (m_pageCount <= 0) {
+        return;
+    }
+
+    m_deckOverviewVisible = true;
+    m_blankMode = BlankMode::None;
+    m_isAnnotating = false;
+    m_pointerVisible = false;
+    m_eraserCursorVisible = false;
+    m_cursorHideTimer.stop();
+    setCursor(QCursor(Qt::ArrowCursor));
+
+    const QRect viewport = deckOverviewViewportRect();
+    const QSize slideBounds = deckOverviewThumbnailBoundingPixelSize();
+    const int tileHeight = slideBounds.height() + deckOverviewFooterHeight;
+    const int verticalSpacing = std::max(16, viewport.height() / 36);
+    const int row = std::max(0, m_currentPageIndex) / deckOverviewColumns;
+    const int focusedCenterY = row * (tileHeight + verticalSpacing) + tileHeight / 2;
+    m_deckOverviewScrollY = std::clamp(focusedCenterY - viewport.height() / 2, 0, deckOverviewMaxScrollY());
+
+    emit deckOverviewRendersRequested(slideBounds, m_currentPageIndex);
+    update();
+}
+
+void AudienceWindow::exitDeckOverview() {
+    if (!m_deckOverviewVisible) {
+        return;
+    }
+
+    m_deckOverviewVisible = false;
+    m_deckOverviewScrollY = 0;
+    updateCursorAppearance();
+    update();
+}
+
+void AudienceWindow::drawDeckOverview(QPainter& painter) {
+    const QRect viewport = deckOverviewViewportRect();
+    const QSize slideBounds = deckOverviewThumbnailBoundingPixelSize();
+    const int horizontalSpacing = std::max(14, viewport.width() / 70);
+    const int verticalSpacing = std::max(16, viewport.height() / 36);
+    const int tileWidth = slideBounds.width();
+    const int tileHeight = slideBounds.height() + deckOverviewFooterHeight;
+    const int gridWidth = deckOverviewColumns * tileWidth + (deckOverviewColumns - 1) * horizontalSpacing;
+    const int left = viewport.left() + std::max(0, (viewport.width() - gridWidth) / 2);
+    m_deckOverviewScrollY = std::clamp(m_deckOverviewScrollY, 0, deckOverviewMaxScrollY());
+    const int top = viewport.top() - m_deckOverviewScrollY;
+
+    painter.save();
+    painter.fillRect(rect(), QColor(0x12, 0x12, 0x12));
+    painter.setClipRect(viewport);
+
+    for (int page = 0; page < m_pageCount; ++page) {
+        const int row = page / deckOverviewColumns;
+        const int column = page % deckOverviewColumns;
+        const QRect tileRect(
+            left + column * (tileWidth + horizontalSpacing),
+            top + row * (tileHeight + verticalSpacing),
+            tileWidth,
+            tileHeight);
+        if (!tileRect.intersects(viewport)) {
+            continue;
+        }
+
+        const QRect slideFrame(tileRect.left(), tileRect.top(), tileRect.width(), slideBounds.height());
+        painter.fillRect(slideFrame, QColor(0x08, 0x08, 0x08));
+
+        const QImage image = m_deckOverviewImages.value(page);
+        if (!image.isNull()) {
+            const QRect imageRect = centeredRectForImage(image.size(), slideFrame.adjusted(1, 1, -1, -1));
+            painter.drawImage(imageRect, image);
+        } else {
+            painter.setPen(QColor(0x8a, 0x8a, 0x8a));
+            painter.drawText(slideFrame, Qt::AlignCenter, QStringLiteral("..."));
+        }
+
+        const bool isSelected = page == m_currentPageIndex;
+        painter.setPen(QPen(isSelected ? QColor(0x00, 0xb3, 0xb3) : QColor(0x3a, 0x3a, 0x3a), isSelected ? 4 : 1));
+        painter.drawRect(slideFrame.adjusted(0, 0, -1, -1));
+
+        QRect numberRect(tileRect.left(), slideFrame.bottom() + 5, tileRect.width() - 2, deckOverviewFooterHeight - 5);
+        painter.setPen(isSelected ? QColor(0xff, 0xff, 0xff) : QColor(0xb0, 0xb0, 0xb0));
+        painter.drawText(numberRect, Qt::AlignRight | Qt::AlignVCenter, QString::number(page + 1));
+    }
+
+    if (deckOverviewMaxScrollY() > 0) {
+        const int scrollTrackWidth = 5;
+        const QRect track(viewport.right() - scrollTrackWidth, viewport.top(), scrollTrackWidth, viewport.height());
+        const qreal visibleFraction = qreal(viewport.height()) / qreal(deckOverviewContentHeight());
+        const int handleHeight = std::max(36, int(track.height() * visibleFraction));
+        const int handleY = track.top() + int(qreal(track.height() - handleHeight) * qreal(m_deckOverviewScrollY) / qreal(deckOverviewMaxScrollY()));
+        painter.fillRect(track, QColor(0x2c, 0x2c, 0x2c));
+        painter.fillRect(QRect(track.left(), handleY, scrollTrackWidth, handleHeight), QColor(0x00, 0xb3, 0xb3));
+    }
+
+    painter.restore();
+}
+
+QSize AudienceWindow::deckOverviewThumbnailBoundingPixelSize() const {
+    const QRect viewport = deckOverviewViewportRect();
+    const int horizontalSpacing = std::max(14, viewport.width() / 70);
+    const int availableWidth = std::max(0, viewport.width() - (deckOverviewColumns - 1) * horizontalSpacing);
+    const int slideWidth = std::max(96, availableWidth / deckOverviewColumns);
+    const int slideHeight = std::max(54, int(qreal(slideWidth) * 9.0 / 16.0));
+    return QSize(slideWidth, slideHeight);
+}
+
+QRect AudienceWindow::deckOverviewViewportRect() const {
+    const int horizontalMargin = std::clamp(width() / 28, 28, 72);
+    const int verticalMargin = std::clamp(height() / 24, 24, 64);
+    return rect().adjusted(horizontalMargin, verticalMargin, -horizontalMargin, -verticalMargin);
+}
+
+int AudienceWindow::deckOverviewContentHeight() const {
+    if (m_pageCount <= 0) {
+        return 0;
+    }
+
+    const QRect viewport = deckOverviewViewportRect();
+    const QSize slideBounds = deckOverviewThumbnailBoundingPixelSize();
+    const int verticalSpacing = std::max(16, viewport.height() / 36);
+    const int rows = (m_pageCount + deckOverviewColumns - 1) / deckOverviewColumns;
+    return rows * (slideBounds.height() + deckOverviewFooterHeight) + std::max(0, rows - 1) * verticalSpacing;
+}
+
+int AudienceWindow::deckOverviewMaxScrollY() const {
+    return std::max(0, deckOverviewContentHeight() - deckOverviewViewportRect().height());
+}
+
+int AudienceWindow::deckOverviewPageAt(const QPoint& position) const {
+    const QRect viewport = deckOverviewViewportRect();
+    if (!viewport.contains(position)) {
+        return -1;
+    }
+
+    const QSize slideBounds = deckOverviewThumbnailBoundingPixelSize();
+    const int horizontalSpacing = std::max(14, viewport.width() / 70);
+    const int verticalSpacing = std::max(16, viewport.height() / 36);
+    const int tileWidth = slideBounds.width();
+    const int tileHeight = slideBounds.height() + deckOverviewFooterHeight;
+    const int gridWidth = deckOverviewColumns * tileWidth + (deckOverviewColumns - 1) * horizontalSpacing;
+    const int left = viewport.left() + std::max(0, (viewport.width() - gridWidth) / 2);
+    const int contentX = position.x() - left;
+    const int contentY = position.y() - viewport.top() + m_deckOverviewScrollY;
+    if (contentX < 0 || contentY < 0) {
+        return -1;
+    }
+
+    const int columnStride = tileWidth + horizontalSpacing;
+    const int rowStride = tileHeight + verticalSpacing;
+    const int column = contentX / columnStride;
+    const int row = contentY / rowStride;
+    if (column < 0 || column >= deckOverviewColumns) {
+        return -1;
+    }
+    if (contentX % columnStride >= tileWidth || contentY % rowStride >= tileHeight) {
+        return -1;
+    }
+
+    const int pageIndex = row * deckOverviewColumns + column;
+    return pageIndex >= 0 && pageIndex < m_pageCount ? pageIndex : -1;
+}
+
+void AudienceWindow::scrollDeckOverviewBy(int deltaY) {
+    const int nextScrollY = std::clamp(m_deckOverviewScrollY + deltaY, 0, deckOverviewMaxScrollY());
+    if (nextScrollY == m_deckOverviewScrollY) {
+        return;
+    }
+
+    m_deckOverviewScrollY = nextScrollY;
+    update();
+}
+
 void AudienceWindow::showFeatureMenu(const QPoint& globalPosition) {
     if (m_featureMenu && m_featureMenu->isVisible()) {
         return;
@@ -1280,7 +1723,12 @@ void AudienceWindow::showFeatureMenu(const QPoint& globalPosition) {
         if (QWindow* handle = windowHandle()) {
             handle->requestActivate();
         }
-        updateCursorAppearance();
+        if (m_deckOverviewVisible) {
+            m_cursorHideTimer.stop();
+            setCursor(QCursor(Qt::ArrowCursor));
+        } else {
+            updateCursorAppearance();
+        }
         update();
     });
 

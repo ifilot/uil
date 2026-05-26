@@ -94,7 +94,6 @@ qt_add_resources(uil "uil_resources"
     BASE "resources"
     FILES
         resources/icons/uil.svg
-        resources/icons/uil-white.svg
         resources/icons/uil.ico
         resources/fontawesome/LICENSE.txt
         resources/fontawesome/package.json

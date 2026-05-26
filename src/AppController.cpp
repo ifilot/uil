@@ -9,7 +9,10 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QLoggingCategory>
+#include <QPageLayout>
+#include <QPageSize>
 #include <QPainter>
+#include <QPdfWriter>
 #include <QScreen>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -53,6 +56,10 @@ bool AppController::openPdf(const QString& path) {
     QString documentHashPath = path;
     QString packageRootPath;
     QStringList packageMovieAssetPaths;
+    QString entryPdfRelativePath = QStringLiteral("build/presentation.pdf");
+    QHash<int, QImage> packageOverlayImages;
+    QSet<int> packageHiddenOverlayPages;
+    bool packageOverlaysGloballyVisible = true;
     std::unique_ptr<QTemporaryDir> packageTempDir;
 
     if (isUilPackage) {
@@ -73,6 +80,15 @@ bool AppController::openPdf(const QString& path) {
         pdfPath = packageResult.entryPdfPath;
         packageRootPath = packageResult.packageRootPath;
         packageMovieAssetPaths = packageResult.movieAssetPaths;
+        entryPdfRelativePath = packageResult.entryPdfRelativePath;
+        packageHiddenOverlayPages = packageResult.hiddenOverlayPages;
+        packageOverlaysGloballyVisible = packageResult.overlaysGloballyVisible;
+        for (auto it = packageResult.overlayImagePaths.constBegin(); it != packageResult.overlayImagePaths.constEnd(); ++it) {
+            QImage overlay(packageTempDir->filePath(it.value()));
+            if (!overlay.isNull()) {
+                packageOverlayImages.insert(it.key(), overlay);
+            }
+        }
     }
 
     auto backend = std::make_unique<QtPdfBackend>();
@@ -87,6 +103,13 @@ bool AppController::openPdf(const QString& path) {
     m_backend = std::move(backend);
     m_packageTempDir = std::move(packageTempDir);
     m_currentPath = pdfPath;
+    m_currentPackagePath = isUilPackage ? QFileInfo(path).absoluteFilePath() : QString();
+    m_packageRootPath = packageRootPath;
+    m_entryPdfRelativePath = entryPdfRelativePath;
+    m_packageMovieAssetPaths = packageMovieAssetPaths;
+    m_loadedOverlayImages = packageOverlayImages;
+    m_loadedHiddenOverlayPages = packageHiddenOverlayPages;
+    m_loadedOverlaysGloballyVisible = packageOverlaysGloballyVisible;
     m_documentHash = documentHashForFile(documentHashPath);
     m_mediaScanResult = scanPdfMediaAnnotations(pdfPath, packageRootPath, packageMovieAssetPaths);
     m_currentPageIndex = 0;
@@ -97,6 +120,13 @@ bool AppController::openPdf(const QString& path) {
     if (m_audienceWindow) {
         m_audienceWindow->clearSlideImage();
         m_audienceWindow->clearVideoOverlay();
+        QHash<QString, QImage> overlaysByTextureKey;
+        for (auto it = m_loadedOverlayImages.constBegin(); it != m_loadedOverlayImages.constEnd(); ++it) {
+            if (it.key() >= 0 && it.key() < pageCount() && !it.value().isNull()) {
+                overlaysByTextureKey.insert(textureKeyForCacheKey(cacheKeyForPage(it.key())), it.value());
+            }
+        }
+        m_audienceWindow->setAnnotationOverlaysByTextureKey(overlaysByTextureKey);
     }
 
     emit documentChanged(pageCount());
@@ -186,6 +216,152 @@ void AppController::requestDeckOverviewRenders(const QSize& boundingPixelSize, i
 
 QString AppController::currentPath() const {
     return m_currentPath;
+}
+
+bool AppController::exportAnnotatedPdf(const QString& path, const QHash<int, QImage>& overlayImages, QString* errorMessage) {
+    if (!hasDocument()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("No presentation is open");
+        }
+        return false;
+    }
+    if (path.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Missing export path");
+        }
+        return false;
+    }
+
+    QPdfWriter writer(path);
+    writer.setResolution(144);
+    writer.setCreator(QStringLiteral("uil"));
+
+    QPainter painter;
+    for (int pageIndex = 0; pageIndex < pageCount(); ++pageIndex) {
+        const QSizeF pageSizePoints = m_backend->pageSizePoints(pageIndex);
+        if (!pageSizePoints.isValid()) {
+            if (errorMessage) {
+                *errorMessage = QStringLiteral("Could not determine page size for slide %1").arg(pageIndex + 1);
+            }
+            return false;
+        }
+
+        const QPageSize pageSize(pageSizePoints, QPageSize::Point);
+        writer.setPageSize(pageSize);
+        writer.setPageMargins(QMarginsF(0, 0, 0, 0), QPageLayout::Point);
+        if (pageIndex > 0 && !writer.newPage()) {
+            if (errorMessage) {
+                *errorMessage = QStringLiteral("Could not create PDF page %1").arg(pageIndex + 1);
+            }
+            return false;
+        }
+
+        if (!painter.isActive() && !painter.begin(&writer)) {
+            if (errorMessage) {
+                *errorMessage = QStringLiteral("Could not start PDF export");
+            }
+            return false;
+        }
+
+        const QSize targetPixelSize(
+            qMax(1, int(qRound(pageSizePoints.width() * 2.0))),
+            qMax(1, int(qRound(pageSizePoints.height() * 2.0))));
+        QImage pageImage = imageWithMediaFrames(pageIndex, m_backend->renderPage(pageIndex, targetPixelSize));
+        if (pageImage.isNull()) {
+            if (errorMessage) {
+                *errorMessage = QStringLiteral("Could not render slide %1").arg(pageIndex + 1);
+            }
+            return false;
+        }
+
+        const QImage overlay = overlayImages.value(pageIndex);
+        if (!overlay.isNull()) {
+            QPainter imagePainter(&pageImage);
+            imagePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+            imagePainter.drawImage(pageImage.rect(), overlay);
+        }
+
+        painter.drawImage(QRectF(QPointF(0, 0), pageSizePoints), pageImage);
+    }
+
+    painter.end();
+    return true;
+}
+
+bool AppController::saveUilPackage(
+    const QString& path,
+    const QHash<int, QImage>& overlayImages,
+    const QSet<int>& hiddenOverlayPages,
+    bool overlaysGloballyVisible,
+    QString* errorMessage) {
+    if (!hasDocument()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("No presentation is open");
+        }
+        return false;
+    }
+
+    const QString entryPdf = m_entryPdfRelativePath.isEmpty()
+        ? QStringLiteral("build/presentation.pdf")
+        : m_entryPdfRelativePath;
+    QHash<int, QImage> packageOverlayImages = overlayImages;
+    if (m_audienceWindow) {
+        const QHash<int, QImage> audienceOverlays = m_audienceWindow->annotationOverlaysByPage();
+        for (auto it = audienceOverlays.constBegin(); it != audienceOverlays.constEnd(); ++it) {
+            if (!it.value().isNull()) {
+                packageOverlayImages.insert(it.key(), it.value());
+            }
+        }
+    }
+
+    if (!writeUilPackage(
+            path,
+            m_currentPath,
+            entryPdf,
+            m_packageRootPath,
+            m_packageMovieAssetPaths,
+            packageOverlayImages,
+            hiddenOverlayPages,
+            overlaysGloballyVisible,
+            errorMessage)) {
+        return false;
+    }
+
+    m_currentPackagePath = QFileInfo(path).absoluteFilePath();
+    m_loadedOverlayImages = packageOverlayImages;
+    m_loadedHiddenOverlayPages = hiddenOverlayPages;
+    m_loadedOverlaysGloballyVisible = overlaysGloballyVisible;
+    return true;
+}
+
+void AppController::clearAnnotationOverlayForPage(int pageIndex) {
+    if (m_audienceWindow) {
+        m_audienceWindow->clearAnnotationOverlayForPage(pageIndex);
+    }
+    m_loadedOverlayImages.remove(pageIndex);
+}
+
+void AppController::clearAllAnnotationOverlays() {
+    if (m_audienceWindow) {
+        m_audienceWindow->clearAllAnnotationOverlays();
+    }
+    m_loadedOverlayImages.clear();
+}
+
+QString AppController::currentPackagePath() const {
+    return m_currentPackagePath;
+}
+
+QHash<int, QImage> AppController::loadedOverlayImages() const {
+    return m_loadedOverlayImages;
+}
+
+QSet<int> AppController::loadedHiddenOverlayPages() const {
+    return m_loadedHiddenOverlayPages;
+}
+
+bool AppController::loadedOverlaysGloballyVisible() const {
+    return m_loadedOverlaysGloballyVisible;
 }
 
 QScreen* AppController::selectedAudienceScreen() const {
@@ -603,6 +779,17 @@ void AppController::handleVideoDecodeFailed(const QString& errorMessage) {
 void AppController::handleAudienceRenderTargetChanged() {
     if (!hasDocument()) {
         return;
+    }
+
+    if (m_audienceWindow) {
+        const QHash<int, QImage> overlaysByPage = m_audienceWindow->annotationOverlaysByPage();
+        QHash<QString, QImage> overlaysByTextureKey;
+        for (auto it = overlaysByPage.constBegin(); it != overlaysByPage.constEnd(); ++it) {
+            if (it.key() >= 0 && it.key() < pageCount() && !it.value().isNull()) {
+                overlaysByTextureKey.insert(textureKeyForCacheKey(cacheKeyForPage(it.key())), it.value());
+            }
+        }
+        m_audienceWindow->setAnnotationOverlaysByTextureKey(overlaysByTextureKey);
     }
 
     updateVisibleSlides();

@@ -18,6 +18,7 @@ class QEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QPaintEvent;
+class QWheelEvent;
 
 class AudienceWindow : public QWidget {
     Q_OBJECT
@@ -29,6 +30,8 @@ public:
     void setSlideImage(const QString& textureKey, const QImage& image);
     void clearSlideImage();
     void cacheSlideImage(const QString& textureKey, const QImage& image);
+    void setDocumentOverview(int pageCount, int currentPage);
+    void setDeckOverviewSlideImage(int pageIndex, const QSize& boundingPixelSize, const QImage& image);
     void setVideoFrame(const QImage& image, QRectF slideRect);
     void clearVideoOverlay();
     void setAudienceScreen(QScreen* screen);
@@ -47,6 +50,10 @@ public:
     void setAnnotationThickness(int thickness);
     void setEraserThickness(int thickness);
     void clearAnnotations();
+    void clearAnnotationOverlayForPage(int pageIndex);
+    void clearAllAnnotationOverlays();
+    void setAnnotationOverlaysByTextureKey(const QHash<QString, QImage>& overlays);
+    QHash<int, QImage> annotationOverlaysByPage() const;
     QImage currentAnnotatedSlideImage() const;
     QImage currentAnnotationOverlayImage() const;
     QSize renderLogicalSize() const;
@@ -57,6 +64,8 @@ signals:
     void previousRequested();
     void firstRequested();
     void lastRequested();
+    void pageRequested(int pageIndex);
+    void deckOverviewRendersRequested(const QSize& boundingPixelSize, int focusedPageIndex);
     void playPauseRequested();
     void renderTargetChanged();
     void annotationOverlayChanged(const QImage& image);
@@ -71,6 +80,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
 
 private:
     class FeatureMenuPanel;
@@ -107,6 +117,15 @@ private:
     void drawEraserCursor(QPainter& painter) const;
     qreal eraserLogicalDiameter() const;
     void showFeatureMenu(const QPoint& globalPosition);
+    void enterDeckOverview();
+    void exitDeckOverview();
+    void drawDeckOverview(QPainter& painter);
+    QSize deckOverviewThumbnailBoundingPixelSize() const;
+    QRect deckOverviewViewportRect() const;
+    int deckOverviewContentHeight() const;
+    int deckOverviewMaxScrollY() const;
+    int deckOverviewPageAt(const QPoint& position) const;
+    void scrollDeckOverviewBy(int deltaY);
     void saveAnnotatedSlideImage();
 
     QString m_currentTextureKey;
@@ -114,6 +133,8 @@ private:
     std::vector<CachedSlide> m_slideCache;
     QImage m_videoFrame;
     QRectF m_videoRect;
+    QHash<int, QImage> m_deckOverviewImages;
+    QSize m_deckOverviewImageSize;
     QHash<QString, QImage> m_annotationImages;
     QColor m_pointerColor = QColor(255, 36, 36);
     QColor m_annotationColor = QColor(0xe3, 0x1a, 0x1c);
@@ -125,11 +146,15 @@ private:
     bool m_pointerVisible = false;
     bool m_eraserCursorVisible = false;
     bool m_hasVideoOverlay = false;
+    bool m_deckOverviewVisible = false;
     QPointer<QScreen> m_screen;
     QTimer m_cursorHideTimer;
     BlankMode m_blankMode = BlankMode::None;
     bool m_isFullscreen = false;
     int m_annotationThickness = 6;
     int m_eraserThickness = 24;
+    int m_pageCount = 0;
+    int m_currentPageIndex = -1;
+    int m_deckOverviewScrollY = 0;
     QPointer<QWidget> m_featureMenu;
 };

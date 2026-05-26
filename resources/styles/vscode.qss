@@ -248,6 +248,23 @@ QLabel#statusPill {
     padding: 5px 9px;
 }
 
+QToolButton#statusIconButton {
+    background-color: #252526;
+    border: 1px solid #3c3c3c;
+    color: #ffffff;
+    padding: 0;
+}
+
+QToolButton#statusIconButton:hover {
+    background-color: #2a2d2e;
+    border-color: #5a5a5a;
+}
+
+QToolButton#statusIconButton:checked {
+    background-color: #006f6f;
+    border-color: #00b3b3;
+}
+
 QLabel#fieldLabel {
     color: #8a8a8a;
     background-color: transparent;
