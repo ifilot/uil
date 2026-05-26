@@ -2,6 +2,7 @@
 
 #include "ui/FontAwesome.hpp"
 
+#include <QApplication>
 #include <QCloseEvent>
 #include <QContextMenuEvent>
 #include <QCursor>
@@ -45,6 +46,8 @@ namespace {
 constexpr int maxAudienceSlides = 4;
 constexpr int deckOverviewColumns = 6;
 constexpr int deckOverviewFooterHeight = 28;
+constexpr int deckOverviewScrollTrackWidth = 5;
+constexpr int deckOverviewScrollbarGutter = 22;
 constexpr qreal pointerLogicalSize = 46.0;
 const QColor menuIconColor(0xcc, 0xcc, 0xcc);
 
@@ -141,7 +144,12 @@ public:
           m_audience(audience) {
         setWindowFlag(Qt::WindowStaysOnTopHint, true);
         setAttribute(Qt::WA_DeleteOnClose, true);
+        qApp->installEventFilter(this);
         buildUi();
+    }
+
+    ~FeatureMenuPanel() override {
+        qApp->removeEventFilter(this);
     }
 
     void popupAt(const QPoint& globalPosition) {
@@ -236,24 +244,24 @@ private:
     }
 
     bool eventFilter(QObject* watched, QEvent* event) override {
-        if (watched == m_gridButton) {
-            if (event->type() == QEvent::MouseButtonPress) {
-                auto* mouseEvent = static_cast<QMouseEvent*>(event);
-                if (mouseEvent->button() == Qt::LeftButton) {
-                    openDeckOverview();
-                    event->accept();
-                    return true;
-                }
+        if (event->type() == QEvent::MouseButtonPress && m_gridButton) {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton
+                && gridButtonGlobalRect().contains(mouseEvent->globalPosition().toPoint())) {
+                openDeckOverview();
+                event->accept();
+                return true;
             }
-            if (event->type() == QEvent::KeyPress) {
-                auto* keyEvent = static_cast<QKeyEvent*>(event);
-                if (keyEvent->key() == Qt::Key_Return
-                    || keyEvent->key() == Qt::Key_Enter
-                    || keyEvent->key() == Qt::Key_Space) {
-                    openDeckOverview();
-                    event->accept();
-                    return true;
-                }
+        }
+
+        if (watched == m_gridButton && event->type() == QEvent::KeyPress) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent->key() == Qt::Key_Return
+                || keyEvent->key() == Qt::Key_Enter
+                || keyEvent->key() == Qt::Key_Space) {
+                openDeckOverview();
+                event->accept();
+                return true;
             }
         }
 
@@ -535,14 +543,30 @@ private:
     }
 
     void openDeckOverview() {
+        if (m_openingDeckOverview) {
+            return;
+        }
+
+        m_openingDeckOverview = true;
         QPointer<AudienceWindow> audience = m_audience;
+        qApp->removeEventFilter(this);
         hide();
-        closeMenu();
+        QTimer::singleShot(0, this, [this] {
+            closeMenu();
+        });
         QTimer::singleShot(0, audience, [audience] {
             if (audience) {
                 audience->enterDeckOverview();
             }
         });
+    }
+
+    QRect gridButtonGlobalRect() const {
+        if (!m_gridButton) {
+            return {};
+        }
+
+        return QRect(m_gridButton->mapToGlobal(QPoint(0, 0)), m_gridButton->size());
     }
 
     void resizeToContents() {
@@ -610,6 +634,7 @@ private:
     QToolButton* m_gridButton = nullptr;
     QFrame* m_settingsFrame = nullptr;
     QVBoxLayout* m_settingsLayout = nullptr;
+    bool m_openingDeckOverview = false;
 };
 
 AudienceWindow::AudienceWindow()
@@ -1271,6 +1296,35 @@ void AudienceWindow::wheelEvent(QWheelEvent* event) {
         return;
     }
 
+    const int angleDeltaY = event->angleDelta().y();
+    const int pixelDeltaY = event->pixelDelta().y();
+    const int deltaY = angleDeltaY != 0 ? angleDeltaY : pixelDeltaY;
+    const int threshold = angleDeltaY != 0 ? 120 : 80;
+    if (deltaY != 0 && m_pageCount > 0 && m_blankMode == BlankMode::None) {
+        if ((deltaY > 0 && m_slideWheelRemainderY < 0)
+            || (deltaY < 0 && m_slideWheelRemainderY > 0)) {
+            m_slideWheelRemainderY = 0;
+        }
+
+        m_slideWheelRemainderY += deltaY;
+        if (std::abs(m_slideWheelRemainderY) >= threshold) {
+            if (m_slideWheelRemainderY > 0) {
+                if (m_currentPageIndex > 0) {
+                    emit previousRequested();
+                }
+            } else {
+                if (m_currentPageIndex < m_pageCount - 1) {
+                    emit nextRequested();
+                }
+            }
+            m_slideWheelRemainderY = 0;
+        }
+
+        showCursorTemporarily();
+        event->accept();
+        return;
+    }
+
     QWidget::wheelEvent(event);
 }
 
@@ -1561,13 +1615,14 @@ void AudienceWindow::exitDeckOverview() {
 
 void AudienceWindow::drawDeckOverview(QPainter& painter) {
     const QRect viewport = deckOverviewViewportRect();
+    const QRect gridViewport = viewport.adjusted(0, 0, -deckOverviewScrollbarGutter, 0);
     const QSize slideBounds = deckOverviewThumbnailBoundingPixelSize();
-    const int horizontalSpacing = std::max(14, viewport.width() / 70);
+    const int horizontalSpacing = std::max(14, gridViewport.width() / 70);
     const int verticalSpacing = std::max(16, viewport.height() / 36);
     const int tileWidth = slideBounds.width();
     const int tileHeight = slideBounds.height() + deckOverviewFooterHeight;
     const int gridWidth = deckOverviewColumns * tileWidth + (deckOverviewColumns - 1) * horizontalSpacing;
-    const int left = viewport.left() + std::max(0, (viewport.width() - gridWidth) / 2);
+    const int left = gridViewport.left() + std::max(0, (gridViewport.width() - gridWidth) / 2);
     m_deckOverviewScrollY = std::clamp(m_deckOverviewScrollY, 0, deckOverviewMaxScrollY());
     const int top = viewport.top() - m_deckOverviewScrollY;
 
@@ -1609,20 +1664,19 @@ void AudienceWindow::drawDeckOverview(QPainter& painter) {
     }
 
     if (deckOverviewMaxScrollY() > 0) {
-        const int scrollTrackWidth = 5;
-        const QRect track(viewport.right() - scrollTrackWidth, viewport.top(), scrollTrackWidth, viewport.height());
+        const QRect track(viewport.right() - deckOverviewScrollTrackWidth, viewport.top(), deckOverviewScrollTrackWidth, viewport.height());
         const qreal visibleFraction = qreal(viewport.height()) / qreal(deckOverviewContentHeight());
         const int handleHeight = std::max(36, int(track.height() * visibleFraction));
         const int handleY = track.top() + int(qreal(track.height() - handleHeight) * qreal(m_deckOverviewScrollY) / qreal(deckOverviewMaxScrollY()));
         painter.fillRect(track, QColor(0x2c, 0x2c, 0x2c));
-        painter.fillRect(QRect(track.left(), handleY, scrollTrackWidth, handleHeight), QColor(0x00, 0xb3, 0xb3));
+        painter.fillRect(QRect(track.left(), handleY, deckOverviewScrollTrackWidth, handleHeight), QColor(0x00, 0xb3, 0xb3));
     }
 
     painter.restore();
 }
 
 QSize AudienceWindow::deckOverviewThumbnailBoundingPixelSize() const {
-    const QRect viewport = deckOverviewViewportRect();
+    const QRect viewport = deckOverviewViewportRect().adjusted(0, 0, -deckOverviewScrollbarGutter, 0);
     const int horizontalSpacing = std::max(14, viewport.width() / 70);
     const int availableWidth = std::max(0, viewport.width() - (deckOverviewColumns - 1) * horizontalSpacing);
     const int slideWidth = std::max(96, availableWidth / deckOverviewColumns);
@@ -1658,13 +1712,18 @@ int AudienceWindow::deckOverviewPageAt(const QPoint& position) const {
         return -1;
     }
 
+    const QRect gridViewport = viewport.adjusted(0, 0, -deckOverviewScrollbarGutter, 0);
+    if (!gridViewport.contains(position)) {
+        return -1;
+    }
+
     const QSize slideBounds = deckOverviewThumbnailBoundingPixelSize();
-    const int horizontalSpacing = std::max(14, viewport.width() / 70);
+    const int horizontalSpacing = std::max(14, gridViewport.width() / 70);
     const int verticalSpacing = std::max(16, viewport.height() / 36);
     const int tileWidth = slideBounds.width();
     const int tileHeight = slideBounds.height() + deckOverviewFooterHeight;
     const int gridWidth = deckOverviewColumns * tileWidth + (deckOverviewColumns - 1) * horizontalSpacing;
-    const int left = viewport.left() + std::max(0, (viewport.width() - gridWidth) / 2);
+    const int left = gridViewport.left() + std::max(0, (gridViewport.width() - gridWidth) / 2);
     const int contentX = position.x() - left;
     const int contentY = position.y() - viewport.top() + m_deckOverviewScrollY;
     if (contentX < 0 || contentY < 0) {

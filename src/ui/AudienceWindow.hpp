@@ -156,5 +156,6 @@ private:
     int m_pageCount = 0;
     int m_currentPageIndex = -1;
     int m_deckOverviewScrollY = 0;
+    int m_slideWheelRemainderY = 0;
     QPointer<QWidget> m_featureMenu;
 };

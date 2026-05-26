@@ -63,7 +63,10 @@ int main(int argc, char* argv[]) {
         controller.goToPage(controller.pageCount() - 1);
     });
     QObject::connect(&audienceWindow, &AudienceWindow::playPauseRequested, &controller, &AppController::toggleMediaPlayback);
-    QObject::connect(&controller, &AppController::pageChanged, &audienceWindow, &AudienceWindow::setDocumentOverview);
+    QObject::connect(&controller, &AppController::pageChanged, &audienceWindow,
+        [&audienceWindow](int pageIndex, int pageCount) {
+            audienceWindow.setDocumentOverview(pageCount, pageIndex);
+        });
     QObject::connect(&controller, &AppController::deckSlideImageChanged, &audienceWindow, &AudienceWindow::setDeckOverviewSlideImage);
 
     audienceWindow.setAudienceScreen(controller.selectedAudienceScreen());
