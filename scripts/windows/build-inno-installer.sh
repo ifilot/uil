@@ -12,7 +12,7 @@ Options:
   --display-name NAME   Display name shown by the installer (default: uil)
   --stage-dir DIR       Deployment staging directory (default: dist/uil-windows-x64)
   --output-dir DIR      Installer output directory (default: dist)
-  --output-base NAME    Output filename without .exe
+  --output-base NAME    Output filename without .exe (default: uil-windows-x64-setup)
   --version VERSION     App version. Defaults to the CMake project version.
   --script PATH         Inno Setup script path (default: packaging/windows/uil.iss)
   --license-file PATH   Installer license text (default: LICENSE)
@@ -149,7 +149,7 @@ VERSION="${VERSION#v}"
 [[ -n "$VERSION" ]] || die "could not determine app version"
 
 if [[ -z "$OUTPUT_BASE" ]]; then
-    OUTPUT_BASE="$APP_NAME-$VERSION-windows-x64-setup"
+    OUTPUT_BASE="$APP_NAME-windows-x64-setup"
 fi
 
 command -v cygpath >/dev/null 2>&1 || die "cygpath is required"

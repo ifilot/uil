@@ -6,7 +6,7 @@ on:
       - main
       - master
     tags:
-      - '*'
+      - 'v*.*.*'
   pull_request:
   workflow_dispatch:
 
@@ -19,11 +19,6 @@ jobs:
     runs-on: windows-latest
     outputs:
       output_base: ${{ steps.version.outputs.output_base }}
-
-    env:
-      WINDOWS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
-      WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
-      WINDOWS_SIGNING_TIMESTAMP_URL: ${{ vars.WINDOWS_SIGNING_TIMESTAMP_URL }}
 
     defaults:
       run:
@@ -70,7 +65,7 @@ jobs:
             fi
           fi
 
-          output_base="uil-${version}-windows-x64-setup"
+          output_base="uil-windows-x64-setup"
           {
             echo "UIL_VERSION=$version"
             echo "UIL_OUTPUT_BASE=$output_base"
@@ -89,22 +84,6 @@ jobs:
       - name: Run unit tests
         run: ctest --test-dir build-windows --output-on-failure --parallel 4
 
-      - name: Require signing credentials for releases
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: powershell
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_BASE64) -or
-              [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD)) {
-            throw "Release tags require the Windows signing certificate secrets"
-          }
-
-      - name: Sign application binaries
-        if: env.WINDOWS_SIGNING_CERTIFICATE_BASE64 != ''
-        shell: powershell
-        run: >-
-          ./scripts/windows/sign_artifacts.ps1
-          -Paths build-windows/uil.exe,build-windows/uil-viewer.exe
-
       - name: Stage runtime dependencies
         run: >
           bash scripts/windows/deploy-msys2.sh
@@ -119,14 +98,7 @@ jobs:
           --version "$UIL_VERSION"
           --output-base "$UIL_OUTPUT_BASE"
 
-      - name: Sign installer
-        if: env.WINDOWS_SIGNING_CERTIFICATE_BASE64 != ''
-        shell: powershell
-        run: >-
-          ./scripts/windows/sign_artifacts.ps1
-          -Paths "dist/$($env:UIL_OUTPUT_BASE).exe"
-
-      - name: Refresh signed installer checksum
+      - name: Refresh installer checksum
         run: sha256sum "dist/$UIL_OUTPUT_BASE.exe" > "dist/$UIL_OUTPUT_BASE.exe.sha256"
 
       - name: Write release notes
@@ -153,7 +125,7 @@ jobs:
             dist/uil-windows-x64/deployment-ldd.txt
 
   release:
-    name: Publish signed release
+    name: Publish release
     if: startsWith(github.ref, 'refs/tags/')
     needs: build-installer
     runs-on: ubuntu-latest
@@ -161,7 +133,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Download verified installer artifact
+      - name: Download installer artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: uil-windows-x64-installer
