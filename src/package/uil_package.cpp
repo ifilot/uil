@@ -49,7 +49,9 @@ struct ZipEntry {
 
 /** @brief Normalizes separators and removes redundant path components. */
 QString normalized_package_path(const QString& path) {
-    return QDir::cleanPath(QDir::fromNativeSeparators(path));
+    QString portable_path = path;
+    portable_path.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    return QDir::cleanPath(portable_path);
 }
 
 struct ZipWriteEntry {
