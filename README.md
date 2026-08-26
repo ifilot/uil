@@ -4,7 +4,7 @@ Pronunciation: `/ œyl /`
 
 [![Windows Installer](https://github.com/ifilot/uil/actions/workflows/windows-installer.yml/badge.svg)](https://github.com/ifilot/uil/actions/workflows/windows-installer.yml)
 [![License: LGPL v3](https://img.shields.io/badge/license-LGPL--3.0--only-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](CMakeLists.txt)
+[![Version](https://img.shields.io/badge/version-v0.2.0-blue.svg)](CMakeLists.txt)
 
 ## Purpose
 

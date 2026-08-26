@@ -475,6 +475,13 @@ protected:
         schedule_render_request();
     }
 
+    /** @brief Requests visible thumbnails after Qt has shown and laid out the viewport. */
+    void showEvent(QShowEvent* event) override {
+        QScrollArea::showEvent(event);
+        relayout();
+        schedule_render_request();
+    }
+
 private:
     /** @brief Arranges overview thumbnails into the available columns. */
     void relayout() {
@@ -500,6 +507,16 @@ private:
         }
     }
 
+    /** @brief Returns whether scroll geometry is ready for a reliable visibility query. */
+    bool is_visibility_layout_ready() const {
+        if (!isVisible()) {
+            return false;
+        }
+
+        const bool content_needs_scrolling = grid_->sizeHint().height() > viewport()->height();
+        return !content_needs_scrolling || verticalScrollBar()->maximum() > 0;
+    }
+
     /** @brief Returns the first and last thumbnail intersecting the viewport. */
     QPair<int, int> visible_page_range() const {
         return deck_overview::visible_page_range(
@@ -510,14 +527,21 @@ private:
 
     /** @brief Requests renders for visible thumbnails and a controller prefetch margin. */
     void request_renders() {
-        if (renderBatchRequested && !thumbnails_.isEmpty()) {
-            const auto [first_visible, last_visible] = visible_page_range();
-            renderBatchRequested(
-                thumbnail_bounding_pixel_size(),
-                current_page_,
-                first_visible,
-                last_visible);
+        if (!renderBatchRequested || thumbnails_.isEmpty()) {
+            return;
         }
+
+        if (!is_visibility_layout_ready()) {
+            schedule_render_request();
+            return;
+        }
+
+        const auto [first_visible, last_visible] = visible_page_range();
+        renderBatchRequested(
+            thumbnail_bounding_pixel_size(),
+            current_page_,
+            first_visible,
+            last_visible);
     }
 
     QWidget* content_ = nullptr;
