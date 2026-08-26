@@ -1,12 +1,15 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(uil VERSION 0.1.0 LANGUAGES CXX)
+project(uil VERSION 0.1.0 LANGUAGES C CXX)
 
 include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
 
 set(UIL_APP_AUTHOR "Ivo Filot")
 set(UIL_APP_EMAIL "ivo@ivofilot.nl")
@@ -54,7 +57,8 @@ set(FONT_AWESOME_SVG_FILES
     resources/fontawesome/svgs/solid/xmark.svg
 )
 
-set(UIL_WINDOWS_RESOURCES)
+set(UIL_LAUNCHER_WINDOWS_RESOURCES)
+set(UIL_VIEWER_WINDOWS_RESOURCES)
 if(WIN32)
     set(UIL_WINDOWS_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/uil.ico")
     set(UIL_WINDOWS_VERSION_TWEAK "${PROJECT_VERSION_TWEAK}")
@@ -64,17 +68,38 @@ if(WIN32)
     set(UIL_WINDOWS_FILE_VERSION
         "${PROJECT_VERSION_MAJOR},${PROJECT_VERSION_MINOR},${PROJECT_VERSION_PATCH},${UIL_WINDOWS_VERSION_TWEAK}"
     )
+    set(UIL_WINDOWS_FILE_DESCRIPTION "uil native startup launcher")
+    set(UIL_WINDOWS_INTERNAL_NAME "uil")
+    set(UIL_WINDOWS_ORIGINAL_FILENAME "uil.exe")
     configure_file(
         resources/windows/uil.rc.in
         "${CMAKE_CURRENT_BINARY_DIR}/uil.rc"
         @ONLY
     )
-    list(APPEND UIL_WINDOWS_RESOURCES
+    list(APPEND UIL_LAUNCHER_WINDOWS_RESOURCES
         "${CMAKE_CURRENT_BINARY_DIR}/uil.rc"
+    )
+
+    set(UIL_WINDOWS_FILE_DESCRIPTION "uil Qt PDF presentation viewer")
+    set(UIL_WINDOWS_INTERNAL_NAME "uil-viewer")
+    set(UIL_WINDOWS_ORIGINAL_FILENAME "uil-viewer.exe")
+    configure_file(
+        resources/windows/uil.rc.in
+        "${CMAKE_CURRENT_BINARY_DIR}/uil-viewer.rc"
+        @ONLY
+    )
+    list(APPEND UIL_VIEWER_WINDOWS_RESOURCES
+        "${CMAKE_CURRENT_BINARY_DIR}/uil-viewer.rc"
     )
 endif()
 
-qt_add_executable(uil
+if(WIN32)
+    set(UIL_VIEWER_TARGET uil_viewer)
+else()
+    set(UIL_VIEWER_TARGET uil)
+endif()
+
+qt_add_executable(${UIL_VIEWER_TARGET}
     src/main.cpp
     src/app_controller.hpp
     src/app_controller.cpp
@@ -90,6 +115,7 @@ qt_add_executable(uil
     src/ui/audience_window.cpp
     src/ui/font_awesome.hpp
     src/ui/font_awesome.cpp
+    src/ui/deck_overview_visibility.hpp
     src/ui/presenter_window.hpp
     src/ui/presenter_window.cpp
     src/util/document_hash.hpp
@@ -98,6 +124,8 @@ qt_add_executable(uil
     src/util/image_util.cpp
     src/util/performance_log.hpp
     src/util/performance_log.cpp
+    src/util/launcher_readiness.hpp
+    src/util/launcher_readiness.cpp
     src/util/pdf_media_detector.hpp
     src/util/pdf_media_detector.cpp
     src/media/video_frame_extractor.hpp
@@ -106,10 +134,10 @@ qt_add_executable(uil
     src/media/video_frame_buffer.cpp
     src/package/uil_package.hpp
     src/package/uil_package.cpp
-    ${UIL_WINDOWS_RESOURCES}
+    ${UIL_VIEWER_WINDOWS_RESOURCES}
 )
 
-qt_add_resources(uil "uil_resources"
+qt_add_resources(${UIL_VIEWER_TARGET} "uil_resources"
     PREFIX "/"
     BASE "resources"
     FILES
@@ -121,11 +149,11 @@ qt_add_resources(uil "uil_resources"
         resources/styles/vscode.qss
 )
 
-target_include_directories(uil PRIVATE
+target_include_directories(${UIL_VIEWER_TARGET} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(uil PRIVATE
+target_link_libraries(${UIL_VIEWER_TARGET} PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
@@ -134,7 +162,7 @@ target_link_libraries(uil PRIVATE
     ZLIB::ZLIB
 )
 
-target_compile_definitions(uil PRIVATE
+target_compile_definitions(${UIL_VIEWER_TARGET} PRIVATE
     UIL_VERSION="${PROJECT_VERSION}"
     UIL_VERSION_DISPLAY="v${PROJECT_VERSION}"
     UIL_APP_AUTHOR="${UIL_APP_AUTHOR}"
@@ -148,14 +176,41 @@ target_compile_definitions(uil PRIVATE
     UIL_BUILD_CONFIG="$<CONFIG>"
 )
 
-set_target_properties(uil PROPERTIES
+set_target_properties(${UIL_VIEWER_TARGET} PROPERTIES
     WIN32_EXECUTABLE TRUE
 )
 
+if(WIN32)
+    set_target_properties(${UIL_VIEWER_TARGET} PROPERTIES
+        OUTPUT_NAME "uil-viewer"
+    )
+    add_executable(uil WIN32
+        src/launcher/windows_launcher.c
+        ${UIL_LAUNCHER_WINDOWS_RESOURCES}
+    )
+    set_target_properties(uil PROPERTIES
+        AUTOMOC OFF
+        AUTOUIC OFF
+        AUTORCC OFF
+        LINKER_LANGUAGE C
+    )
+    target_compile_definitions(uil PRIVATE
+        UNICODE
+        _UNICODE
+        WINVER=0x0A00
+        _WIN32_WINNT=0x0A00
+    )
+    target_link_libraries(uil PRIVATE
+        user32
+        gdi32
+        shell32
+    )
+endif()
+
 if(FFMPEG_FOUND)
-    target_compile_definitions(uil PRIVATE UIL_HAVE_FFMPEG=1)
-    target_include_directories(uil PRIVATE ${FFMPEG_INCLUDE_DIRS})
-    target_compile_options(uil PRIVATE ${FFMPEG_CFLAGS_OTHER})
+    target_compile_definitions(${UIL_VIEWER_TARGET} PRIVATE UIL_HAVE_FFMPEG=1)
+    target_include_directories(${UIL_VIEWER_TARGET} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_compile_options(${UIL_VIEWER_TARGET} PRIVATE ${FFMPEG_CFLAGS_OTHER})
 endif()
 
 if(BUILD_TESTING)

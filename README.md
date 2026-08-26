@@ -71,6 +71,17 @@ cmake --build build-windows
 ./build-windows/uil.exe
 ```
 
+On Windows, `uil.exe` is a small native launcher that displays the loading
+window before any Qt DLL is loaded. It starts the internal `uil-viewer.exe`,
+forwards command-line arguments, and closes the loading window after the
+presenter reports its first paint. Users and shortcuts should always start
+`uil.exe`; `uil-viewer.exe` remains an implementation detail.
+
+The loading window combines a continuous native animation with real viewer
+milestones sent over a lightweight Windows message protocol. Its labels and
+progress targets reflect completed initialization stages; only the smooth
+visual interpolation between those targets is cosmetic.
+
 Run the unit tests from the configured build directory:
 
 ```bash
@@ -111,8 +122,10 @@ severity, Qt category, thread identifier, and message. Performance messages use
 a compact JSON payload so they remain both readable and easy to process. The
 current instrumentation measures:
 
-- Windows process creation, entry into `main()`, presenter-window startup, and
-  the first show, paint, and event-loop milestones;
+- native-launcher creation, loading-window visibility, Qt viewer creation and
+  entry into `main()`, presenter-window startup, and the first show, paint, and
+  event-loop milestones;
+- confirmed launcher progress stages reported by the Qt viewer;
 - PDF/UIL opening and notification stages;
 - PDF media parsing and MP4 first-frame extraction;
 - visible deck-thumbnail construction and debounced render scheduling;

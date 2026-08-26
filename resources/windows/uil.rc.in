@@ -1,5 +1,6 @@
 #include <winver.h>
 
+#define IDI_ICON1 101
 IDI_ICON1 ICON "@UIL_WINDOWS_ICON_FILE@"
 
 VS_VERSION_INFO VERSIONINFO
@@ -20,11 +21,11 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "CompanyName", "@UIL_APP_AUTHOR@\0"
-            VALUE "FileDescription", "uil PDF presentation app\0"
+            VALUE "FileDescription", "@UIL_WINDOWS_FILE_DESCRIPTION@\0"
             VALUE "FileVersion", "@PROJECT_VERSION@\0"
-            VALUE "InternalName", "uil\0"
+            VALUE "InternalName", "@UIL_WINDOWS_INTERNAL_NAME@\0"
             VALUE "LegalCopyright", "@UIL_APP_COPYRIGHT@\0"
-            VALUE "OriginalFilename", "uil.exe\0"
+            VALUE "OriginalFilename", "@UIL_WINDOWS_ORIGINAL_FILENAME@\0"
             VALUE "ProductName", "uil\0"
             VALUE "ProductVersion", "@PROJECT_VERSION@\0"
             VALUE "Comments", "@UIL_APP_LICENSE@ - @UIL_REPOSITORY_URL@\0"

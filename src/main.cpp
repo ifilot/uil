@@ -1,25 +1,84 @@
 #include "app_controller.hpp"
+#include "launcher/launcher_protocol.h"
 #include "ui/audience_window.hpp"
 #include "ui/presenter_window.hpp"
+#include "util/launcher_readiness.hpp"
 #include "util/performance_log.hpp"
 
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QGuiApplication>
 #include <QIcon>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QPalette>
+#include <QPixmap>
+#include <QSplashScreen>
 #include <QStyleFactory>
 #include <QSysInfo>
 #include <QThread>
 #include <QThreadPool>
 #include <QTimer>
 
+#include <memory>
+
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
 
 namespace {
+/** @brief Displays a non-dismissible loading surface during presenter initialization. */
+class LoadingSplash final : public QSplashScreen {
+public:
+    /** @brief Constructs the loading surface from a lightweight raster pixmap. */
+    explicit LoadingSplash(const QPixmap& pixmap)
+        : QSplashScreen(
+              pixmap,
+              Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint) {
+    }
+
+protected:
+    /** @brief Keeps the loading surface visible when it is clicked. */
+    void mousePressEvent(QMouseEvent* event) override {
+        event->ignore();
+    }
+};
+
+/** @brief Creates the raster-only startup image without loading icon plugins. */
+QPixmap create_loading_splash_pixmap() {
+    constexpr int kSplashWidth = 420;
+    constexpr int kSplashHeight = 150;
+    QPixmap pixmap(kSplashWidth, kSplashHeight);
+    pixmap.fill(QColor(0x18, 0x18, 0x18));
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.fillRect(QRect(0, 0, 6, kSplashHeight), QColor(0x00, 0x8c, 0x8c));
+    painter.setPen(QColor(0xee, 0xee, 0xee));
+
+    QFont title_font = QApplication::font();
+    title_font.setPointSize(24);
+    title_font.setBold(true);
+    painter.setFont(title_font);
+    painter.drawText(QRect(32, 24, kSplashWidth - 64, 48),
+                     Qt::AlignLeft | Qt::AlignVCenter,
+                     QStringLiteral("uil"));
+
+    QFont message_font = QApplication::font();
+    message_font.setPointSize(10);
+    painter.setFont(message_font);
+    painter.setPen(QColor(0xb8, 0xb8, 0xb8));
+    painter.drawText(QRect(34, 80, kSplashWidth - 68, 36),
+                     Qt::AlignLeft | Qt::AlignVCenter,
+                     QStringLiteral("Loading presenter…"));
+
+    painter.setPen(QColor(0x38, 0x38, 0x38));
+    painter.drawRect(pixmap.rect().adjusted(0, 0, -1, -1));
+    return pixmap;
+}
+
 #ifdef Q_OS_WIN
 /** @brief Returns elapsed time since Windows created the current process. */
 qint64 windows_process_age_ms() {
@@ -87,13 +146,13 @@ int main(int argc, char* argv[]) {
     QElapsedTimer process_start_timer;
     process_start_timer.start();
     const qint64 process_to_main_ms = windows_process_age_ms();
+    launcher_readiness::initialize(argc, argv);
     QApplication app(argc, argv);
     const qint64 application_construction_ms = process_start_timer.elapsed();
     QApplication::setApplicationName(QStringLiteral("uil"));
     QApplication::setOrganizationName(QStringLiteral(UIL_APP_AUTHOR));
     QApplication::setOrganizationDomain(QStringLiteral("ivofilot.nl"));
     QApplication::setApplicationVersion(QStringLiteral(UIL_VERSION));
-    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
     performance_log::initialize();
     performance_log::set_process_start_offset_ms(
         process_to_main_ms + process_start_timer.elapsed());
@@ -103,6 +162,22 @@ int main(int argc, char* argv[]) {
     performance_log::record_duration(
         QStringLiteral("startup.qt_application"),
         application_construction_ms);
+    launcher_readiness::record_startup_metrics();
+    launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_QT_RUNTIME_READY);
+
+    QElapsedTimer loading_window_visible_timer;
+    std::unique_ptr<LoadingSplash> loading_splash;
+    if (!launcher_readiness::is_active()) {
+        loading_splash = std::make_unique<LoadingSplash>(create_loading_splash_pixmap());
+        loading_splash->show();
+        app.processEvents(QEventLoop::ExcludeUserInputEvents);
+        loading_window_visible_timer.start();
+        performance_log::record_duration(
+            QStringLiteral("startup.process_to_loading_window_visible"),
+            performance_log::process_elapsed_ms());
+    }
+
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
     performance_log::record_event(QStringLiteral("session.environment"), {
         {QStringLiteral("build_configuration"), QStringLiteral(UIL_BUILD_CONFIG)},
         {QStringLiteral("compiler"), QStringLiteral(UIL_COMPILER_ID " " UIL_COMPILER_VERSION)},
@@ -129,13 +204,17 @@ int main(int argc, char* argv[]) {
 
     apply_application_theme(app);
     record_startup_checkpoint(QStringLiteral("apply_theme"));
+    launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_THEME_READY);
 
     AppController controller;
     record_startup_checkpoint(QStringLiteral("construct_controller"));
+    launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_CONTROLLER_READY);
     AudienceWindow audience_window;
     record_startup_checkpoint(QStringLiteral("construct_audience_window"));
+    launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_AUDIENCE_READY);
     PresenterWindow presenterWindow(&controller);
     record_startup_checkpoint(QStringLiteral("construct_presenter_window"));
+    launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_PRESENTER_READY);
 
     controller.set_audience_window(&audience_window);
     QObject::connect(&app, &QGuiApplication::screenAdded, &controller, &AppController::refresh_screens);
@@ -157,9 +236,18 @@ int main(int argc, char* argv[]) {
         });
     QObject::connect(&controller, &AppController::deck_slide_image_changed, &audience_window, &AudienceWindow::set_deck_overview_slide_image);
     record_startup_checkpoint(QStringLiteral("connect_windows"));
+    launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_CONNECTIONS_READY);
 
     audience_window.set_audience_screen(controller.selected_audience_screen());
+    launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_SHOWING_PRESENTER);
     presenterWindow.show();
+    if (loading_splash) {
+        loading_splash->finish(&presenterWindow);
+        performance_log::record_duration(
+            QStringLiteral("startup.loading_window_visible"),
+            loading_window_visible_timer.elapsed());
+        loading_splash.reset();
+    }
     record_startup_checkpoint(QStringLiteral("show_presenter"));
     performance_log::record_duration(
         QStringLiteral("startup.initialize"),

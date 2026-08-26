@@ -11,12 +11,18 @@ synthetic fixtures, so they do not depend on developer-specific files or network
   change, and deterministic handling of missing paths.
 - `slide_cache_test`: hit/miss statistics, replacement accounting, LRU refresh and eviction,
   oversized entries, null images, and reset behavior.
+- `deck_overview_visibility_test`: complete visible-row detection, scrolled content coordinates,
+  and selected-page fallback while layout geometry is unavailable.
 - `uil_package_test`: PDF/media/overlay round trips, hidden-overlay filtering, path traversal,
   duplicate entries, missing inputs, malformed archives, and API preconditions.
 - `pdf_media_detector_test`: annotation helpers, empty results, page-tree ordering, linked and
   orphan annotations, rectangles, summaries, and package-relative path resolution.
 - `performance_log_test`: session-log creation, process-start offsets, structured events, timed
-  spans and checkpoints, field serialization, and capture of ordinary Qt diagnostic messages.
+  spans and checkpoints, field serialization, ordinary Qt diagnostic messages, and the native
+  launcher's named readiness-event handshake.
+- `native_launcher_test` (Windows): end-to-end launcher process creation, quoted argument
+  forwarding, viewer discovery, progress-message delivery, and readiness-driven launcher shutdown
+  using a system-only probe.
 
 ## Next priorities
 

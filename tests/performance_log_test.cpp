@@ -1,8 +1,13 @@
+#include "util/launcher_readiness.hpp"
 #include "util/performance_log.hpp"
 
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 class PerformanceLogTest final : public QObject {
     Q_OBJECT
@@ -10,6 +15,11 @@ class PerformanceLogTest final : public QObject {
 private slots:
     /** @brief Verifies that events, spans, and ordinary Qt messages are persisted. */
     void writes_structured_session_log();
+
+#ifdef Q_OS_WIN
+    /** @brief Verifies the named-event handshake used by the native launcher. */
+    void signals_native_launcher_readiness_event();
+#endif
 };
 
 void PerformanceLogTest::writes_structured_session_log() {
@@ -43,6 +53,30 @@ void PerformanceLogTest::writes_structured_session_log() {
     QVERIFY(contents.contains("\"outcome\":\"verified\""));
     QVERIFY(contents.contains("ordinary Qt message"));
 }
+
+#ifdef Q_OS_WIN
+void PerformanceLogTest::signals_native_launcher_readiness_event() {
+    const QString event_name = QStringLiteral("Local\\uil-readiness-test-%1")
+                                   .arg(QCoreApplication::applicationPid());
+    HANDLE event_handle = CreateEventW(
+        nullptr,
+        TRUE,
+        FALSE,
+        reinterpret_cast<LPCWSTR>(event_name.utf16()));
+    QVERIFY(event_handle != nullptr);
+
+    QByteArray ready_argument =
+        (QStringLiteral("--uil-ready-event=") + event_name).toLocal8Bit();
+    char executable_name[] = "uil-viewer.exe";
+    char* arguments[] = {executable_name, ready_argument.data()};
+    launcher_readiness::initialize(2, arguments);
+
+    QVERIFY(launcher_readiness::is_active());
+    launcher_readiness::signal_ready();
+    QCOMPARE(WaitForSingleObject(event_handle, 0), DWORD(WAIT_OBJECT_0));
+    CloseHandle(event_handle);
+}
+#endif
 
 QTEST_GUILESS_MAIN(PerformanceLogTest)
 

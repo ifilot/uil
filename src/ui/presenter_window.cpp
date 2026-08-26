@@ -1,8 +1,11 @@
 #include "presenter_window.hpp"
 
+#include "ui/deck_overview_visibility.hpp"
 #include "app_controller.hpp"
+#include "launcher/launcher_protocol.h"
 #include "ui/font_awesome.hpp"
 #include "util/image_util.hpp"
+#include "util/launcher_readiness.hpp"
 #include "util/performance_log.hpp"
 
 #include <QAction>
@@ -499,30 +502,10 @@ private:
 
     /** @brief Returns the first and last thumbnail intersecting the viewport. */
     QPair<int, int> visible_page_range() const {
-        if (thumbnails_.isEmpty()) {
-            return {-1, -1};
-        }
-
-        const QRect visible_rect(
-            viewport()->mapTo(content_, QPoint(0, 0)),
-            viewport()->size());
-        int first_visible = -1;
-        int last_visible = -1;
-        for (SlideThumbnail* thumbnail : thumbnails_) {
-            if (!thumbnail->geometry().intersects(visible_rect)) {
-                continue;
-            }
-            if (first_visible < 0) {
-                first_visible = thumbnail->page_index();
-            }
-            last_visible = thumbnail->page_index();
-        }
-
-        if (first_visible < 0) {
-            const int fallback = std::clamp(current_page_, 0, int(thumbnails_.size()) - 1);
-            return {fallback, fallback};
-        }
-        return {first_visible, last_visible};
+        return deck_overview::visible_page_range(
+            thumbnails_,
+            viewport(),
+            current_page_);
     }
 
     /** @brief Requests renders for visible thumbnails and a controller prefetch margin. */
@@ -801,6 +784,10 @@ void PresenterWindow::paintEvent(QPaintEvent* event) {
         performance_log::record_duration(
             QStringLiteral("startup.process_to_first_presenter_paint"),
             performance_log::process_elapsed_ms());
+        launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_FIRST_PAINT_READY);
+        QTimer::singleShot(0, this, [] {
+            launcher_readiness::signal_ready();
+        });
     }
 }
 

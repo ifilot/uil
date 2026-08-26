@@ -320,7 +320,7 @@ void AppController::request_deck_overview_renders(
     const int prefetch_count = std::clamp(visible_last - visible_first + 1, 4, 8);
     const int first_page = std::max(0, visible_first - prefetch_count);
     const int last_page = std::min(page_count() - 1, visible_last + prefetch_count);
-    const int render_center = std::clamp(focusedPage, first_page, last_page);
+    const int visible_center = std::clamp(focusedPage, visible_first, visible_last);
     deck_overview_first_page_ = first_page;
     deck_overview_last_page_ = last_page;
 
@@ -334,21 +334,40 @@ void AppController::request_deck_overview_renders(
     }
     span.checkpoint(QStringLiteral("check_cache"), {{QStringLiteral("cache_hits"), cache_hits}});
 
-    request_page_render_at_size(render_center, bounding_pixel_size, 95);
-    const int maximum_distance = std::max(render_center - first_page, last_page - render_center);
-    for (int distance = 1; distance <= maximum_distance; ++distance) {
-        const int afterPage = render_center + distance;
-        const int beforePage = render_center - distance;
-        const int priority = std::max(1, 80 - distance);
-        if (afterPage <= last_page) {
-            request_page_render_at_size(afterPage, bounding_pixel_size, priority);
+    request_page_render_at_size(visible_center, bounding_pixel_size, 95);
+    const int maximum_visible_distance = std::max(
+        visible_center - visible_first,
+        visible_last - visible_center);
+    for (int distance = 1; distance <= maximum_visible_distance; ++distance) {
+        const int after_page = visible_center + distance;
+        const int before_page = visible_center - distance;
+        const int priority = std::max(60, 90 - distance);
+        if (after_page <= visible_last) {
+            request_page_render_at_size(after_page, bounding_pixel_size, priority);
         }
-        if (beforePage >= first_page) {
-            request_page_render_at_size(beforePage, bounding_pixel_size, priority);
+        if (before_page >= visible_first) {
+            request_page_render_at_size(before_page, bounding_pixel_size, priority);
+        }
+    }
+
+    const int maximum_prefetch_distance = std::max(
+        visible_first - first_page,
+        last_page - visible_last);
+    for (int distance = 1; distance <= maximum_prefetch_distance; ++distance) {
+        const int after_page = visible_last + distance;
+        const int before_page = visible_first - distance;
+        const int priority = std::max(1, 40 - distance);
+        if (after_page <= last_page) {
+            request_page_render_at_size(after_page, bounding_pixel_size, priority);
+        }
+        if (before_page >= first_page) {
+            request_page_render_at_size(before_page, bounding_pixel_size, priority);
         }
     }
     span.add_field(QStringLiteral("cache_hits"), cache_hits);
     span.add_field(QStringLiteral("focused_page"), focusedPage + 1);
+    span.add_field(QStringLiteral("first_visible_page"), visible_first + 1);
+    span.add_field(QStringLiteral("last_visible_page"), visible_last + 1);
     span.add_field(QStringLiteral("first_page"), first_page + 1);
     span.add_field(QStringLiteral("last_page"), last_page + 1);
     span.add_field(QStringLiteral("render_attempt_count"), last_page - first_page + 1);

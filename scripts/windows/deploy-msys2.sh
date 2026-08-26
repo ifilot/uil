@@ -9,6 +9,7 @@ Builds a Windows deployment staging directory from an MSYS2 UCRT64 Qt build.
 
 Options:
   --app-name NAME     Executable target name without .exe (default: uil)
+  --viewer-name NAME  Qt viewer name without .exe (default: uil-viewer)
   --build-dir DIR     CMake build directory (default: build-windows)
   --stage-dir DIR     Deployment staging directory (default: dist/uil-windows-x64)
   --finalize-existing Reuse an already verified stage and only write final metadata
@@ -214,7 +215,7 @@ copy_runtime_dependency_closure() {
         while IFS= read -r dep; do
             dep="$(canonical_file_path "$dep")"
             if should_copy_dependency "$dep"; then
-                dep_base="$(basename "$dep")"
+                dep_base="${dep##*/}"
                 dest="$STAGE_DIR/$dep_base"
                 if [[ ! -f "$dest" ]]; then
                     log "Bundling $dep_base"
@@ -261,7 +262,7 @@ verify_dependency_closure() {
         fi
 
         while IFS= read -r dep; do
-            dep_base="$(basename "$dep")"
+            dep_base="${dep##*/}"
 
             if is_stage_path "$dep" || is_windows_system_path "$dep"; then
                 continue
@@ -290,11 +291,20 @@ verify_dependency_closure() {
 
     if command -v objdump >/dev/null 2>&1; then
         {
-            printf '### %s.exe\n' "$APP_NAME"
-            objdump -p "$STAGE_DIR/$APP_NAME.exe" 2>/dev/null \
-                | sed -n 's/^[[:space:]]*DLL Name: /  /p' || true
-            printf '\n'
+            for binary in "$STAGE_DIR/$APP_NAME.exe" "$STAGE_DIR/$VIEWER_NAME.exe"; do
+                printf '### %s\n' "$(basename "$binary")"
+                objdump -p "$binary" 2>/dev/null \
+                    | sed -n 's/^[[:space:]]*DLL Name: /  /p' || true
+                printf '\n'
+            done
         } >> "$imports_log"
+    fi
+
+    if objdump -p "$STAGE_DIR/$APP_NAME.exe" 2>/dev/null \
+        | sed -n 's/^[[:space:]]*DLL Name: //p' \
+        | grep -Eqi '^(Qt6|libgcc|libstdc\+\+|libwinpthread|zlib)'; then
+        printf 'native launcher unexpectedly imports Qt or an MSYS2 runtime library\n' >&2
+        problems=$((problems + 1))
     fi
 
     if [[ ! -f "$STAGE_DIR/platforms/qwindows.dll" ]]; then
@@ -433,7 +443,7 @@ write_third_party_notices() {
     for staged_file in "${STAGED_NOTICE_FILES[@]}"; do
         rel="${staged_file#"$STAGE_DIR"/}"
 
-        if [[ "$rel" == "$APP_NAME.exe" || "$rel" == "LICENSE.txt" ]]; then
+        if [[ "$rel" == "$APP_NAME.exe" || "$rel" == "$VIEWER_NAME.exe" || "$rel" == "LICENSE.txt" ]]; then
             continue
         fi
 
@@ -583,7 +593,8 @@ write_manifest() {
         printf 'MSYSTEM: %s\n' "${MSYSTEM:-}"
         printf 'MINGW_PREFIX: %s\n' "$MINGW_PREFIX"
         printf 'windeployqt: %s\n' "$WINDEPLOYQT"
-        printf 'Executable: %s\n' "$APP_NAME.exe"
+        printf 'Launcher: %s\n' "$APP_NAME.exe"
+        printf 'Viewer: %s\n' "$VIEWER_NAME.exe"
         printf 'File count: %s\n' "$file_count"
         printf 'DLL count: %s\n' "$dll_count"
         printf '\nFiles:\n'
@@ -592,7 +603,8 @@ write_manifest() {
 
     {
         printf '# Windows Deployment Summary\n\n'
-        printf -- '- App: `%s.exe`\n' "$APP_NAME"
+        printf -- '- Launcher: `%s.exe`\n' "$APP_NAME"
+        printf -- '- Qt viewer: `%s.exe`\n' "$VIEWER_NAME"
         printf -- '- MSYS2 environment: `%s`\n' "${MSYSTEM:-}"
         printf -- '- Toolchain prefix: `%s`\n' "$MINGW_PREFIX"
         printf -- '- Qt deploy tool: `%s`\n' "$WINDEPLOYQT"
@@ -603,6 +615,7 @@ write_manifest() {
 }
 
 APP_NAME="uil"
+VIEWER_NAME="uil-viewer"
 BUILD_DIR="build-windows"
 STAGE_DIR="dist/uil-windows-x64"
 GENERATE_THIRD_PARTY_NOTICES=0
@@ -614,6 +627,10 @@ while (($#)); do
     case "$1" in
         --app-name)
             APP_NAME="${2:-}"
+            shift 2
+            ;;
+        --viewer-name)
+            VIEWER_NAME="${2:-}"
             shift 2
             ;;
         --build-dir)
@@ -643,6 +660,7 @@ while (($#)); do
 done
 
 [[ -n "$APP_NAME" ]] || die "--app-name must not be empty"
+[[ -n "$VIEWER_NAME" ]] || die "--viewer-name must not be empty"
 [[ -n "$BUILD_DIR" ]] || die "--build-dir must not be empty"
 [[ -n "$STAGE_DIR" ]] || die "--stage-dir must not be empty"
 
@@ -661,18 +679,26 @@ MINGW_PREFIX="$(absolute_path "$MINGW_PREFIX")"
 STAGE_DIR_L="${STAGE_DIR,,}"
 MINGW_PREFIX_L="${MINGW_PREFIX,,}"
 
-mapfile -t EXE_CANDIDATES < <(find "$BUILD_DIR" -maxdepth 4 -type f -iname "$APP_NAME.exe" | sort)
-if ((${#EXE_CANDIDATES[@]} == 0)); then
-    die "could not find $APP_NAME.exe under $BUILD_DIR"
-fi
+find_built_executable() {
+    local executable_name="$1"
+    local candidate
+    local -a candidates=()
 
-EXE_PATH="${EXE_CANDIDATES[0]}"
-for candidate in "${EXE_CANDIDATES[@]}"; do
-    if [[ "$candidate" == "$BUILD_DIR/$APP_NAME.exe" ]]; then
-        EXE_PATH="$candidate"
-        break
-    fi
-done
+    mapfile -t candidates < <(find "$BUILD_DIR" -maxdepth 4 -type f -iname "$executable_name.exe" | sort)
+    ((${#candidates[@]} > 0)) || return 1
+    for candidate in "${candidates[@]}"; do
+        if [[ "$candidate" == "$BUILD_DIR/$executable_name.exe" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    printf '%s\n' "${candidates[0]}"
+}
+
+EXE_PATH="$(find_built_executable "$APP_NAME")" \
+    || die "could not find $APP_NAME.exe under $BUILD_DIR"
+VIEWER_EXE_PATH="$(find_built_executable "$VIEWER_NAME")" \
+    || die "could not find $VIEWER_NAME.exe under $BUILD_DIR"
 
 WINDEPLOYQT="$(find_tool windeployqt6 windeployqt-qt6 windeployqt)" || die "could not find windeployqt for Qt 6"
 
@@ -685,6 +711,8 @@ esac
 if (( FINALIZE_EXISTING )); then
     [[ -f "$STAGE_DIR/$APP_NAME.exe" ]] \
         || die "cannot finalize stage without $STAGE_DIR/$APP_NAME.exe"
+    [[ -f "$STAGE_DIR/$VIEWER_NAME.exe" ]] \
+        || die "cannot finalize stage without $STAGE_DIR/$VIEWER_NAME.exe"
     validate_existing_dependency_audit
     log "Reusing existing verified staging directory $STAGE_DIR"
 else
@@ -692,7 +720,9 @@ else
     rm -rf -- "$STAGE_DIR"
     mkdir -p "$STAGE_DIR"
     cp -f "$EXE_PATH" "$STAGE_DIR/$APP_NAME.exe"
+    cp -f "$VIEWER_EXE_PATH" "$STAGE_DIR/$VIEWER_NAME.exe"
     chmod u+w "$STAGE_DIR/$APP_NAME.exe"
+    chmod u+w "$STAGE_DIR/$VIEWER_NAME.exe"
 
     log "Running Qt deployment tool"
     "$WINDEPLOYQT" \
@@ -700,7 +730,7 @@ else
         --compiler-runtime \
         --force \
         --verbose 1 \
-        "$STAGE_DIR/$APP_NAME.exe"
+        "$STAGE_DIR/$VIEWER_NAME.exe"
 
     log "Completing non-Qt runtime DLL dependency closure"
     seed_lazy_ffmpeg_libraries
