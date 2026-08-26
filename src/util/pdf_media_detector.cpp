@@ -1,0 +1,547 @@
+#include "pdf_media_detector.hpp"
+
+#include "media/video_frame_extractor.hpp"
+#include "util/performance_log.hpp"
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QHash>
+#include <QLoggingCategory>
+#include <QRegularExpression>
+#include <QStringList>
+
+#include <algorithm>
+#include <array>
+#include <optional>
+#include <unordered_set>
+#include <utility>
+
+#include <zlib.h>
+
+Q_LOGGING_CATEGORY(logMedia, "pdf.media")
+
+namespace {
+using ObjectMap = QHash<int, QByteArray>;
+
+/** @brief Inflates PDF stream data encoded with the Flate filter. */
+QByteArray inflate_flate_data(const QByteArray& input) {
+    z_stream stream{};
+    stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.constData()));
+    stream.avail_in = uInt(input.size());
+
+    if (inflateInit(&stream) != Z_OK) {
+        return {};
+    }
+
+    QByteArray output;
+    std::array<char, 32768> buffer{};
+    int result = Z_OK;
+    while (result == Z_OK) {
+        stream.next_out = reinterpret_cast<Bytef*>(buffer.data());
+        stream.avail_out = uInt(buffer.size());
+        result = inflate(&stream, Z_NO_FLUSH);
+        output.append(buffer.data(), int(buffer.size() - stream.avail_out));
+    }
+
+    inflateEnd(&stream);
+    return result == Z_STREAM_END ? output : QByteArray{};
+}
+
+/** @brief Returns the first payload byte following a PDF stream keyword. */
+int stream_data_start(const QByteArray& object_body, int stream_keyword_index) {
+    int start = stream_keyword_index + int(QByteArray("stream").size());
+    if (object_body.mid(start, 2) == "\r\n") {
+        return start + 2;
+    }
+    if (start < object_body.size() && (object_body.at(start) == '\n' || object_body.at(start) == '\r')) {
+        return start + 1;
+    }
+    return start;
+}
+
+/** @brief Returns the dictionary portion of a PDF indirect object. */
+QByteArray dictionary_part(const QByteArray& object_body) {
+    const int streamIndex = object_body.indexOf("stream");
+    return streamIndex >= 0 ? object_body.left(streamIndex) : object_body;
+}
+
+/** @brief Reads an integer associated with a PDF dictionary key. */
+std::optional<int> integer_value(const QByteArray& bytes, const QString& key) {
+    const QRegularExpression expression(QStringLiteral(R"(/%1\s+(\d+))").arg(key));
+    const QRegularExpressionMatch match = expression.match(QString::fromLatin1(bytes));
+    if (!match.hasMatch()) {
+        return std::nullopt;
+    }
+    return match.captured(1).toInt();
+}
+
+/** @brief Returns whether PDF bytes contain a particular name object. */
+bool has_name(const QByteArray& bytes, const QString& name) {
+    const QRegularExpression expression(QStringLiteral(R"(/%1\b)").arg(name));
+    return expression.match(QString::fromLatin1(bytes)).hasMatch();
+}
+
+/** @brief Returns whether a PDF dictionary declares a particular type. */
+bool has_type(const QByteArray& bytes, const QString& type_name) {
+    const QRegularExpression expression(QStringLiteral(R"(/Type\s*/%1\b)").arg(type_name));
+    return expression.match(QString::fromLatin1(bytes)).hasMatch();
+}
+
+/** @brief Reads one indirect-object reference associated with a dictionary key. */
+std::optional<int> referenced_object(const QByteArray& bytes, const QString& key) {
+    const QRegularExpression expression(QStringLiteral(R"(/%1\s+(\d+)\s+\d+\s+R)").arg(key));
+    const QRegularExpressionMatch match = expression.match(QString::fromLatin1(bytes));
+    if (!match.hasMatch()) {
+        return std::nullopt;
+    }
+    return match.captured(1).toInt();
+}
+
+/** @brief Extracts all indirect-object references from PDF source text. */
+QVector<int> referenced_objects(QString text) {
+    QVector<int> refs;
+    const QRegularExpression expression(QStringLiteral(R"((\d+)\s+\d+\s+R)"));
+    QRegularExpressionMatchIterator it = expression.globalMatch(text);
+    while (it.hasNext()) {
+        refs.push_back(it.next().captured(1).toInt());
+    }
+    return refs;
+}
+
+/** @brief Reads a bracketed PDF string associated with a dictionary key. */
+QString bracketed_value(const QByteArray& bytes, const QString& key) {
+    const QString text = QString::fromLatin1(bytes);
+    const int keyIndex = text.indexOf(QStringLiteral("/") + key);
+    if (keyIndex < 0) {
+        return {};
+    }
+
+    const int begin = text.indexOf(QLatin1Char('['), keyIndex);
+    const int end = text.indexOf(QLatin1Char(']'), begin + 1);
+    if (begin < 0 || end < 0) {
+        return {};
+    }
+    return text.mid(begin + 1, end - begin - 1);
+}
+
+/** @brief Reads and decodes a PDF string associated with a dictionary key. */
+QString pdf_string_value(const QByteArray& bytes, const QString& key) {
+    const QString text = QString::fromLatin1(bytes);
+    const int keyIndex = text.indexOf(QStringLiteral("/") + key);
+    if (keyIndex < 0) {
+        return {};
+    }
+
+    const int begin = text.indexOf(QLatin1Char('('), keyIndex);
+    if (begin < 0) {
+        return {};
+    }
+
+    QString result;
+    int depth = 1;
+    bool escaped = false;
+    for (int i = begin + 1; i < text.size(); ++i) {
+        const QChar ch = text.at(i);
+        if (escaped) {
+            result.append(ch);
+            escaped = false;
+            continue;
+        }
+        if (ch == QLatin1Char('\\')) {
+            escaped = true;
+            continue;
+        }
+        if (ch == QLatin1Char('(')) {
+            ++depth;
+        } else if (ch == QLatin1Char(')')) {
+            --depth;
+            if (depth == 0) {
+                break;
+            }
+        }
+        result.append(ch);
+    }
+    return result;
+}
+
+/** @brief Returns the subtype declared by a PDF annotation dictionary. */
+QString subtype_for_annotation(const QByteArray& bytes) {
+    const QRegularExpression expression(QStringLiteral(R"(/Subtype\s*/([A-Za-z0-9]+)\b)"));
+    const QRegularExpressionMatch match = expression.match(QString::fromLatin1(bytes));
+    return match.hasMatch() ? match.captured(1) : QStringLiteral("Media");
+}
+
+/** @brief Reads an annotation rectangle from a PDF dictionary. */
+QRectF rect_for_annotation(const QByteArray& bytes) {
+    const QString rectText = bracketed_value(bytes, QStringLiteral("Rect"));
+    if (rectText.isEmpty()) {
+        return {};
+    }
+
+    const QStringList parts = rectText.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if (parts.size() < 4) {
+        return {};
+    }
+
+    const double x1 = parts.at(0).toDouble();
+    const double y1 = parts.at(1).toDouble();
+    const double x2 = parts.at(2).toDouble();
+    const double y2 = parts.at(3).toDouble();
+    return QRectF(QPointF(std::min(x1, x2), std::min(y1, y2)),
+                  QPointF(std::max(x1, x2), std::max(y1, y2)));
+}
+
+/** @brief Extracts a referenced media filename from annotation data. */
+QString media_file_name(const QByteArray& bytes) {
+    for (const QString& key : {QStringLiteral("UF"), QStringLiteral("F"), QStringLiteral("DOS"), QStringLiteral("Mac"), QStringLiteral("Unix")}) {
+        const QString value = pdf_string_value(bytes, key);
+        if (!value.isEmpty()) {
+            return value;
+        }
+    }
+    return {};
+}
+
+/** @brief Returns whether a PDF annotation can contain playable media. */
+bool is_media_annotation(const QByteArray& bytes) {
+    return has_name(bytes, QStringLiteral("Movie"))
+        || has_name(bytes, QStringLiteral("RichMedia"))
+        || has_name(bytes, QStringLiteral("Rendition"))
+        || has_name(bytes, QStringLiteral("EmbeddedFile"))
+        || has_name(bytes, QStringLiteral("Sound"))
+        || QString::fromLatin1(bytes).contains(QStringLiteral("/Subtype/Movie"))
+        || QString::fromLatin1(bytes).contains(QStringLiteral("/Subtype /Movie"))
+        || QString::fromLatin1(bytes).contains(QStringLiteral("/Subtype/RichMedia"))
+        || QString::fromLatin1(bytes).contains(QStringLiteral("/Subtype /RichMedia"));
+}
+
+/** @brief Extracts directly represented indirect objects from PDF bytes. */
+ObjectMap extract_indirect_objects(const QByteArray& pdf_bytes) {
+    ObjectMap objects;
+    const QString text = QString::fromLatin1(pdf_bytes);
+    const QRegularExpression expression(QStringLiteral(R"((\d+)\s+\d+\s+obj\b)"));
+    QRegularExpressionMatchIterator it = expression.globalMatch(text);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch match = it.next();
+        const int object_number = match.captured(1).toInt();
+        const qsizetype bodyStart = match.capturedEnd(0);
+        const qsizetype end = pdf_bytes.indexOf("endobj", bodyStart);
+        if (end < 0) {
+            continue;
+        }
+        objects.insert(object_number, pdf_bytes.mid(bodyStart, end - bodyStart).trimmed());
+    }
+    return objects;
+}
+
+/** @brief Expands compressed PDF object streams into the object map. */
+void extract_object_streams(ObjectMap& objects) {
+    QVector<std::pair<int, QByteArray>> objectStreams;
+    for (auto it = objects.cbegin(); it != objects.cend(); ++it) {
+        if (has_type(dictionary_part(it.value()), QStringLiteral("ObjStm"))) {
+            objectStreams.push_back({it.key(), it.value()});
+        }
+    }
+
+    for (const auto& [objectStreamNumber, object_body] : objectStreams) {
+        const QByteArray dictionary = dictionary_part(object_body);
+        if (!has_name(dictionary, QStringLiteral("FlateDecode"))) {
+            continue;
+        }
+
+        const std::optional<int> count = integer_value(dictionary, QStringLiteral("N"));
+        const std::optional<int> first = integer_value(dictionary, QStringLiteral("First"));
+        if (!count || !first) {
+            continue;
+        }
+
+        const int streamIndex = object_body.indexOf("stream");
+        const int endStreamIndex = object_body.lastIndexOf("endstream");
+        if (streamIndex < 0 || endStreamIndex <= streamIndex) {
+            continue;
+        }
+
+        const int dataStart = stream_data_start(object_body, streamIndex);
+        const QByteArray decoded = inflate_flate_data(object_body.mid(dataStart, endStreamIndex - dataStart));
+        if (decoded.isEmpty() || decoded.size() <= *first) {
+            qCWarning(logMedia) << "Could not decode object stream" << objectStreamNumber;
+            continue;
+        }
+
+        const QString header = QString::fromLatin1(decoded.left(*first));
+        const QRegularExpression pairExpression(QStringLiteral(R"((\d+)\s+(\d+))"));
+        QRegularExpressionMatchIterator pairIt = pairExpression.globalMatch(header);
+        QVector<std::pair<int, int>> pairs;
+        while (pairIt.hasNext() && pairs.size() < *count) {
+            const QRegularExpressionMatch match = pairIt.next();
+            pairs.push_back({match.captured(1).toInt(), match.captured(2).toInt()});
+        }
+
+        std::sort(pairs.begin(), pairs.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.second < rhs.second;
+        });
+
+        for (int i = 0; i < pairs.size(); ++i) {
+            const int object_number = pairs.at(i).first;
+            const int objectStart = *first + pairs.at(i).second;
+            const int objectEnd = (i + 1 < pairs.size()) ? *first + pairs.at(i + 1).second : decoded.size();
+            if (objectStart >= *first && objectEnd > objectStart && objectEnd <= decoded.size()) {
+                objects.insert(object_number, decoded.mid(objectStart, objectEnd - objectStart).trimmed());
+            }
+        }
+    }
+}
+
+/** @brief Traverses a PDF page tree and returns page objects in display order. */
+QVector<int> page_order_from_node(const ObjectMap& objects, int object_number, std::unordered_set<int>& visited) {
+    if (visited.contains(object_number)) {
+        return {};
+    }
+    visited.insert(object_number);
+
+    const QByteArray body = objects.value(object_number);
+    if (body.isEmpty()) {
+        return {};
+    }
+
+    if (has_type(body, QStringLiteral("Page"))) {
+        return {object_number};
+    }
+
+    QVector<int> pages;
+    if (has_type(body, QStringLiteral("Pages"))) {
+        const QString kids = bracketed_value(body, QStringLiteral("Kids"));
+        for (int child : referenced_objects(kids)) {
+            pages += page_order_from_node(objects, child, visited);
+        }
+    }
+    return pages;
+}
+
+/** @brief Returns page object numbers in presentation order. */
+QVector<int> ordered_page_objects(const ObjectMap& objects) {
+    for (auto it = objects.cbegin(); it != objects.cend(); ++it) {
+        if (!has_type(it.value(), QStringLiteral("Catalog"))) {
+            continue;
+        }
+
+        const std::optional<int> pagesRoot = referenced_object(it.value(), QStringLiteral("Pages"));
+        if (!pagesRoot) {
+            continue;
+        }
+
+        std::unordered_set<int> visited;
+        QVector<int> pages = page_order_from_node(objects, *pagesRoot, visited);
+        if (!pages.isEmpty()) {
+            return pages;
+        }
+    }
+
+    QVector<int> fallback;
+    for (auto it = objects.cbegin(); it != objects.cend(); ++it) {
+        if (has_type(it.value(), QStringLiteral("Page"))) {
+            fallback.push_back(it.key());
+        }
+    }
+    std::sort(fallback.begin(), fallback.end());
+    return fallback;
+}
+
+/** @brief Returns annotation object numbers referenced by a page. */
+QVector<int> annotation_objects_for_page(const ObjectMap& objects, const QByteArray& page_body) {
+    if (const std::optional<int> annotsRef = referenced_object(page_body, QStringLiteral("Annots"))) {
+        return referenced_objects(QString::fromLatin1(objects.value(*annotsRef)));
+    }
+
+    const QString directAnnots = bracketed_value(page_body, QStringLiteral("Annots"));
+    return referenced_objects(directAnnots);
+}
+
+/** @brief Builds a media annotation from a parsed PDF object. */
+PdfMediaAnnotation annotation_from_object(int page_index, int object_number, const QByteArray& body) {
+    return PdfMediaAnnotation{
+        page_index,
+        object_number,
+        subtype_for_annotation(body),
+        media_file_name(body),
+        QString(),
+        rect_for_annotation(body),
+        QImage()
+    };
+}
+
+/** @brief Normalizes a package-relative asset path. */
+QString normalized_package_path(QString path) {
+    path.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    return QDir::cleanPath(path);
+}
+
+/** @brief Resolves an annotation's media filename against a PDF or UIL package root. */
+QString resolve_media_path(
+    const QString& pdfPath,
+    const QString& fileName,
+    const QString& package_root_path,
+    const QStringList& package_movie_asset_paths) {
+    if (fileName.isEmpty()) {
+        return {};
+    }
+
+    QFileInfo mediaInfo(fileName);
+    if (mediaInfo.isAbsolute()) {
+        return mediaInfo.absoluteFilePath();
+    }
+
+    const QString normalizedTarget = normalized_package_path(fileName);
+    if (!package_root_path.isEmpty()) {
+        for (const QString& assetPath : package_movie_asset_paths) {
+            if (normalizedTarget == normalized_package_path(assetPath)) {
+                return QFileInfo(QDir(package_root_path), normalizedTarget).absoluteFilePath();
+            }
+        }
+    }
+
+    const QFileInfo pdfInfo(pdfPath);
+    return QFileInfo(pdfInfo.absoluteDir(), fileName).absoluteFilePath();
+}
+
+/** @brief Resolves media paths and extracts preview frames when supported. */
+void resolve_and_extract_media_frames(
+    PdfMediaScanResult& result,
+    const QString& pdfPath,
+    const QString& package_root_path,
+    const QStringList& package_movie_asset_paths) {
+    for (PdfMediaAnnotation& annotation : result.annotations) {
+        annotation.resolved_file_path = resolve_media_path(pdfPath, annotation.fileName, package_root_path, package_movie_asset_paths);
+        if (annotation.is_mp4()) {
+            performance_log::ScopedSpan frame_span(QStringLiteral("pdf.media_first_frame"), {
+                {QStringLiteral("file_name"), QFileInfo(annotation.resolved_file_path).fileName()},
+                {QStringLiteral("page"), annotation.page_index + 1}
+            });
+            QString error_message;
+            annotation.first_frame = extract_first_video_frame(annotation.resolved_file_path, &error_message);
+            frame_span.add_field(QStringLiteral("frame_ready"), annotation.has_first_frame());
+            if (!error_message.isEmpty()) {
+                frame_span.add_field(QStringLiteral("error"), error_message);
+                frame_span.set_outcome(QStringLiteral("failed"));
+                qCInfo(logMedia) << "Could not extract first MP4 frame from" << annotation.resolved_file_path << error_message;
+            } else {
+                frame_span.set_outcome(QStringLiteral("decoded"));
+            }
+        }
+    }
+}
+}
+
+bool PdfMediaAnnotation::has_first_frame() const {
+    return !first_frame.isNull();
+}
+
+bool PdfMediaAnnotation::is_mp4() const {
+    return resolved_file_path.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive)
+        || fileName.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive);
+}
+
+bool PdfMediaScanResult::has_media() const {
+    return !annotations.isEmpty();
+}
+
+QString PdfMediaScanResult::summary() const {
+    if (annotations.isEmpty()) {
+        return QStringLiteral("No PDF media annotations detected");
+    }
+
+    QStringList parts;
+    for (const PdfMediaAnnotation& annotation : annotations) {
+        QString part = annotation.page_index >= 0
+            ? QStringLiteral("page %1").arg(annotation.page_index + 1)
+            : QStringLiteral("unknown page");
+        part += QStringLiteral(" %1").arg(annotation.subtype);
+        if (!annotation.fileName.isEmpty()) {
+            part += QStringLiteral(" (%1)").arg(annotation.fileName);
+        }
+        if (annotation.has_first_frame()) {
+            part += QStringLiteral(" [first frame ready]");
+        }
+        parts.push_back(part);
+    }
+    return QStringLiteral("%1 media annotation(s): %2").arg(annotations.size()).arg(parts.join(QStringLiteral("; ")));
+}
+
+PdfMediaScanResult scan_pdf_media_annotations(
+    const QString& path,
+    const QString& package_root_path,
+    const QStringList& package_movie_asset_paths) {
+    PdfMediaScanResult result;
+    const QFileInfo file_info(path);
+    performance_log::ScopedSpan scan_span(QStringLiteral("pdf.media_scan"), {
+        {QStringLiteral("file_name"), file_info.fileName()},
+        {QStringLiteral("file_size_bytes"), file_info.size()}
+    });
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        scan_span.add_field(QStringLiteral("error_stage"), QStringLiteral("open_file"));
+        scan_span.set_outcome(QStringLiteral("failed"));
+        qCWarning(logMedia) << "Could not scan PDF media annotations; failed to open" << path;
+        return result;
+    }
+    scan_span.checkpoint(QStringLiteral("open_file"));
+
+    const QByteArray file_bytes = file.readAll();
+    scan_span.checkpoint(
+        QStringLiteral("read_file"),
+        {{QStringLiteral("bytes_read"), file_bytes.size()}});
+    ObjectMap objects = extract_indirect_objects(file_bytes);
+    scan_span.checkpoint(
+        QStringLiteral("extract_indirect_objects"),
+        {{QStringLiteral("object_count"), objects.size()}});
+    extract_object_streams(objects);
+    scan_span.checkpoint(
+        QStringLiteral("extract_object_streams"),
+        {{QStringLiteral("object_count"), objects.size()}});
+
+    std::unordered_set<int> seenMediaObjects;
+    const QVector<int> pages = ordered_page_objects(objects);
+    for (int page_index = 0; page_index < pages.size(); ++page_index) {
+        const QByteArray page_body = objects.value(pages.at(page_index));
+        for (int annotationObject : annotation_objects_for_page(objects, page_body)) {
+            const QByteArray annotationBody = objects.value(annotationObject);
+            if (!annotationBody.isEmpty() && is_media_annotation(annotationBody)) {
+                result.annotations.push_back(annotation_from_object(page_index, annotationObject, annotationBody));
+                seenMediaObjects.insert(annotationObject);
+            }
+        }
+    }
+    scan_span.checkpoint(QStringLiteral("scan_page_annotations"), {
+        {QStringLiteral("annotation_count"), result.annotations.size()},
+        {QStringLiteral("page_count"), pages.size()}
+    });
+
+    for (auto it = objects.cbegin(); it != objects.cend(); ++it) {
+        if (seenMediaObjects.contains(it.key()) || !is_media_annotation(it.value())) {
+            continue;
+        }
+        result.annotations.push_back(annotation_from_object(-1, it.key(), it.value()));
+    }
+    scan_span.checkpoint(
+        QStringLiteral("scan_unattached_annotations"),
+        {{QStringLiteral("annotation_count"), result.annotations.size()}});
+
+    resolve_and_extract_media_frames(result, path, package_root_path, package_movie_asset_paths);
+    int frames_ready = 0;
+    for (const PdfMediaAnnotation& annotation : std::as_const(result.annotations)) {
+        if (annotation.has_first_frame()) {
+            ++frames_ready;
+        }
+    }
+    scan_span.checkpoint(QStringLiteral("resolve_media_and_extract_frames"), {
+        {QStringLiteral("annotation_count"), result.annotations.size()},
+        {QStringLiteral("frames_ready"), frames_ready}
+    });
+    scan_span.add_field(QStringLiteral("annotation_count"), result.annotations.size());
+    scan_span.add_field(QStringLiteral("page_count"), pages.size());
+    scan_span.set_outcome(QStringLiteral("scanned"));
+    qCInfo(logMedia) << result.summary();
+    return result;
+}

@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.24)
 
 project(uil VERSION 0.1.0 LANGUAGES CXX)
 
+include(CTest)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -32,8 +34,24 @@ endif()
 
 qt_standard_project_setup()
 
-file(GLOB_RECURSE FONT_AWESOME_SVG_FILES CONFIGURE_DEPENDS
-    resources/fontawesome/svgs/*.svg
+set(FONT_AWESOME_SVG_FILES
+    resources/fontawesome/svgs/regular/eye.svg
+    resources/fontawesome/svgs/regular/eye-slash.svg
+    resources/fontawesome/svgs/solid/angles-left.svg
+    resources/fontawesome/svgs/solid/angles-right.svg
+    resources/fontawesome/svgs/solid/arrow-pointer.svg
+    resources/fontawesome/svgs/solid/chevron-left.svg
+    resources/fontawesome/svgs/solid/chevron-right.svg
+    resources/fontawesome/svgs/solid/door-open.svg
+    resources/fontawesome/svgs/solid/eraser.svg
+    resources/fontawesome/svgs/solid/location-crosshairs.svg
+    resources/fontawesome/svgs/solid/pencil.svg
+    resources/fontawesome/svgs/solid/table-cells-large.svg
+    resources/fontawesome/svgs/solid/trash-can.svg
+    resources/fontawesome/svgs/solid/window-maximize.svg
+    resources/fontawesome/svgs/solid/window-minimize.svg
+    resources/fontawesome/svgs/solid/window-restore.svg
+    resources/fontawesome/svgs/solid/xmark.svg
 )
 
 set(UIL_WINDOWS_RESOURCES)
@@ -58,34 +76,36 @@ endif()
 
 qt_add_executable(uil
     src/main.cpp
-    src/AppController.hpp
-    src/AppController.cpp
-    src/pdf/PdfBackend.hpp
-    src/pdf/QtPdfBackend.hpp
-    src/pdf/QtPdfBackend.cpp
-    src/cache/SlideCacheKey.hpp
-    src/cache/SlideCache.hpp
-    src/cache/SlideCache.cpp
-    src/render/RenderScheduler.hpp
-    src/render/RenderScheduler.cpp
-    src/ui/AudienceWindow.hpp
-    src/ui/AudienceWindow.cpp
-    src/ui/FontAwesome.hpp
-    src/ui/FontAwesome.cpp
-    src/ui/PresenterWindow.hpp
-    src/ui/PresenterWindow.cpp
-    src/util/DocumentHash.hpp
-    src/util/DocumentHash.cpp
-    src/util/ImageUtil.hpp
-    src/util/ImageUtil.cpp
-    src/util/PdfMediaDetector.hpp
-    src/util/PdfMediaDetector.cpp
-    src/media/VideoFrameExtractor.hpp
-    src/media/VideoFrameExtractor.cpp
-    src/media/VideoFrameBuffer.hpp
-    src/media/VideoFrameBuffer.cpp
-    src/package/UilPackage.hpp
-    src/package/UilPackage.cpp
+    src/app_controller.hpp
+    src/app_controller.cpp
+    src/pdf/pdf_backend.hpp
+    src/pdf/qt_pdf_backend.hpp
+    src/pdf/qt_pdf_backend.cpp
+    src/cache/slide_cache_key.hpp
+    src/cache/slide_cache.hpp
+    src/cache/slide_cache.cpp
+    src/render/render_scheduler.hpp
+    src/render/render_scheduler.cpp
+    src/ui/audience_window.hpp
+    src/ui/audience_window.cpp
+    src/ui/font_awesome.hpp
+    src/ui/font_awesome.cpp
+    src/ui/presenter_window.hpp
+    src/ui/presenter_window.cpp
+    src/util/document_hash.hpp
+    src/util/document_hash.cpp
+    src/util/image_util.hpp
+    src/util/image_util.cpp
+    src/util/performance_log.hpp
+    src/util/performance_log.cpp
+    src/util/pdf_media_detector.hpp
+    src/util/pdf_media_detector.cpp
+    src/media/video_frame_extractor.hpp
+    src/media/video_frame_extractor.cpp
+    src/media/video_frame_buffer.hpp
+    src/media/video_frame_buffer.cpp
+    src/package/uil_package.hpp
+    src/package/uil_package.cpp
     ${UIL_WINDOWS_RESOURCES}
 )
 
@@ -134,5 +154,11 @@ set_target_properties(uil PROPERTIES
 
 if(FFMPEG_FOUND)
     target_compile_definitions(uil PRIVATE UIL_HAVE_FFMPEG=1)
-    target_link_libraries(uil PRIVATE PkgConfig::FFMPEG)
+    target_include_directories(uil PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_compile_options(uil PRIVATE ${FFMPEG_CFLAGS_OTHER})
+endif()
+
+if(BUILD_TESTING)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    add_subdirectory(tests)
 endif()

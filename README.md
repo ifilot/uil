@@ -71,18 +71,26 @@ cmake --build build-windows
 ./build-windows/uil.exe
 ```
 
+Run the unit tests from the configured build directory:
+
+```bash
+ctest --test-dir build-windows --output-on-failure
+```
+
+Set `-DBUILD_TESTING=OFF` during configuration when a build should omit the test targets.
+See [`tests/README.md`](tests/README.md) for the current coverage and testing roadmap.
+
 To create a deployable Windows staging directory after building:
 
 ```bash
 scripts/windows/deploy-msys2.sh
 ```
 
-The deployment script writes a complete staged dependency audit to
-`dist/uil-windows-x64/THIRD_PARTY_NOTICES.txt` and
-`dist/uil-windows-x64/third-party/`. Those files include the staged file
-inventory, owning MSYS2 packages, package versions, package license metadata,
-copied installed license/notice files, and a generated review file for
-GPL/LGPL-family attention items.
+Normal deployment copies the application's license files but skips the slow,
+exhaustive MSYS2 package-license crawl. Add `--third-party-notices` when a
+release audit is explicitly required. That opt-in writes
+`THIRD_PARTY_NOTICES.txt` and `third-party/` with package ownership, versions,
+license metadata, installed notice files, and GPL/LGPL-family review items.
 
 To build the installer, install Inno Setup 6 for Windows, make sure `ISCC.exe`
 is available on `PATH` or set `ISCC=/path/to/ISCC.exe`, then run:
@@ -90,6 +98,40 @@ is available on `PATH` or set `ISCC=/path/to/ISCC.exe`, then run:
 ```bash
 scripts/windows/build-inno-installer.sh
 ```
+
+## Performance logs
+
+The application creates a timestamped performance log for every run. The exact
+path is shown under **Help > About uil**. On Windows, logs are stored below the
+Qt application-data directory, normally under `%LOCALAPPDATA%`, in the `logs`
+subdirectory.
+
+Each line contains a wall-clock timestamp, time since application startup,
+severity, Qt category, thread identifier, and message. Performance messages use
+a compact JSON payload so they remain both readable and easy to process. The
+current instrumentation measures:
+
+- Windows process creation, entry into `main()`, presenter-window startup, and
+  the first show, paint, and event-loop milestones;
+- PDF/UIL opening and notification stages;
+- PDF media parsing and MP4 first-frame extraction;
+- visible deck-thumbnail construction and debounced render scheduling;
+- render queue wait, per-worker PDF backend reuse, and page rasterization; and
+- end-to-end time until the first slide is displayed.
+
+Media discovery runs on a dedicated background worker. Slide rendering uses a
+bounded four-thread pool, retains one PDF backend per worker, prioritizes the
+current slide, and renders only visible overview pages plus a small prefetch
+margin. Cache debug messages are disabled by default so profiling does not
+materially interfere with UI scheduling. FFmpeg is resolved on first media use
+instead of being imported by the executable, keeping its large codec DLL tree
+out of ordinary PDF startup while retaining video support in packaged builds.
+
+For a useful trace, start the application, wait for the presenter window to
+settle, open one representative PDF, wait until its first slide and overview
+thumbnails appear, then close the application and retain that session's log.
+Logs can contain local document paths emitted by Qt diagnostics, so review them
+before sharing publicly.
 
 ## License
 

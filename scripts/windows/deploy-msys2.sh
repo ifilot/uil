@@ -11,6 +11,9 @@ Options:
   --app-name NAME     Executable target name without .exe (default: uil)
   --build-dir DIR     CMake build directory (default: build-windows)
   --stage-dir DIR     Deployment staging directory (default: dist/uil-windows-x64)
+  --finalize-existing Reuse an already verified stage and only write final metadata
+  --third-party-notices
+                      Generate the exhaustive MSYS2 license inventory (slow)
   --help              Show this help text
 EOF
 }
@@ -117,11 +120,6 @@ parse_ldd_output_paths() {
     done
 }
 
-parse_ldd_paths() {
-    local binary="$1"
-    { ldd "$binary" 2>&1 || true; } | parse_ldd_output_paths
-}
-
 is_windows_system_path() {
     local path_l="${1,,}"
     [[ "$path_l" == /c/windows/* || "$path_l" =~ ^/[a-z]/windows/ ]]
@@ -154,6 +152,33 @@ find_stage_binaries() {
     find "$STAGE_DIR" -type f \( -iname '*.exe' -o -iname '*.dll' \) -print | sort
 }
 
+seed_lazy_ffmpeg_libraries() {
+    local pattern
+    local library
+    local copied=0
+    local -a patterns=(
+        'avformat-*.dll'
+        'avcodec-*.dll'
+        'avutil-*.dll'
+        'swscale-*.dll'
+    )
+
+    for pattern in "${patterns[@]}"; do
+        while IFS= read -r library; do
+            [[ -f "$library" ]] || continue
+            cp -f "$library" "$STAGE_DIR/$(basename "$library")"
+            chmod u+w "$STAGE_DIR/$(basename "$library")"
+            copied=$((copied + 1))
+        done < <(find "$MINGW_PREFIX/bin" -maxdepth 1 -type f -iname "$pattern" -print | sort)
+    done
+
+    if (( copied > 0 )); then
+        log "Seeded $copied lazy-loaded FFmpeg DLL(s)"
+    else
+        log "No FFmpeg runtime DLLs found; video decoding will remain unavailable"
+    fi
+}
+
 copy_runtime_dependency_closure() {
     local -a pending
     local index=0
@@ -162,6 +187,7 @@ copy_runtime_dependency_closure() {
     local dep_base
     local dest
     local key
+    local ldd_output
     local copied=0
     local scanned=0
     declare -A processed=()
@@ -181,6 +207,10 @@ copy_runtime_dependency_closure() {
         processed[$key]=1
         scanned=$((scanned + 1))
 
+        ldd_output="$(ldd "$binary" 2>&1 || true)"
+        AUDIT_BINARIES+=("$binary")
+        AUDIT_LDD_OUTPUTS+=("$ldd_output")
+
         while IFS= read -r dep; do
             dep="$(canonical_file_path "$dep")"
             if should_copy_dependency "$dep"; then
@@ -194,7 +224,7 @@ copy_runtime_dependency_closure() {
                     copied=$((copied + 1))
                 fi
             fi
-        done < <(parse_ldd_paths "$binary")
+        done < <(parse_ldd_output_paths <<<"$ldd_output")
     done
 
     log "Bundled $copied dependency DLL(s) after scanning $scanned binary file(s)"
@@ -209,13 +239,15 @@ verify_dependency_closure() {
     local rel
     local imports_log="$STAGE_DIR/deployment-imports.txt"
     local ldd_log="$STAGE_DIR/deployment-ldd.txt"
+    local index
 
     : > "$ldd_log"
     : > "$imports_log"
 
-    while IFS= read -r binary; do
+    for ((index = 0; index < ${#AUDIT_BINARIES[@]}; index++)); do
+        binary="${AUDIT_BINARIES[$index]}"
         rel="${binary#"$STAGE_DIR"/}"
-        ldd_output="$(ldd "$binary" 2>&1 || true)"
+        ldd_output="${AUDIT_LDD_OUTPUTS[$index]}"
 
         {
             printf '### %s\n' "$rel"
@@ -229,7 +261,6 @@ verify_dependency_closure() {
         fi
 
         while IFS= read -r dep; do
-            dep="$(canonical_file_path "$dep")"
             dep_base="$(basename "$dep")"
 
             if is_stage_path "$dep" || is_windows_system_path "$dep"; then
@@ -255,14 +286,16 @@ verify_dependency_closure() {
             problems=$((problems + 1))
         done < <(parse_ldd_output_paths <<<"$ldd_output")
 
-        if command -v objdump >/dev/null 2>&1; then
-            {
-                printf '### %s\n' "$rel"
-                objdump -p "$binary" 2>/dev/null | sed -n 's/^[[:space:]]*DLL Name: /  /p' || true
-                printf '\n'
-            } >> "$imports_log"
-        fi
-    done < <(find_stage_binaries)
+    done
+
+    if command -v objdump >/dev/null 2>&1; then
+        {
+            printf '### %s.exe\n' "$APP_NAME"
+            objdump -p "$STAGE_DIR/$APP_NAME.exe" 2>/dev/null \
+                | sed -n 's/^[[:space:]]*DLL Name: /  /p' || true
+            printf '\n'
+        } >> "$imports_log"
+    fi
 
     if [[ ! -f "$STAGE_DIR/platforms/qwindows.dll" ]]; then
         printf 'Qt platform plugin is missing: platforms/qwindows.dll\n' >&2
@@ -277,6 +310,21 @@ verify_dependency_closure() {
     if (( problems > 0 )); then
         die "deployment verification failed with $problems problem(s)"
     fi
+}
+
+validate_existing_dependency_audit() {
+    local audit_count
+    local binary_count
+    local audit_log="$STAGE_DIR/deployment-ldd.txt"
+
+    [[ -s "$audit_log" ]] || die "cannot finalize stage without a completed dependency audit"
+    grep -qi 'not found' "$audit_log" \
+        && die "cannot finalize stage because its dependency audit contains unresolved entries"
+
+    audit_count="$(grep -c '^### ' "$audit_log" || true)"
+    binary_count="$(find_stage_binaries | wc -l | tr -d '[:space:]')"
+    [[ "$audit_count" == "$binary_count" ]] \
+        || die "cannot finalize stage: audit covers $audit_count of $binary_count binaries"
 }
 
 resolve_staged_source_path() {
@@ -431,14 +479,6 @@ write_third_party_notices() {
         copy_package_license_files "$package" "$licenses_dir/$package_slug"
     done
 
-    if [[ -f LICENSE ]]; then
-        cp -f LICENSE "$STAGE_DIR/LICENSE.txt"
-    fi
-    if [[ -d LICENSES ]] && compgen -G "LICENSES/*" >/dev/null; then
-        mkdir -p "$STAGE_DIR/LICENSES"
-        cp -f LICENSES/* "$STAGE_DIR/LICENSES/"
-    fi
-
     {
         printf 'Third-party notices for uil\n'
         printf 'Generated UTC: %s\n\n' "$generated_utc"
@@ -518,6 +558,16 @@ write_third_party_notices() {
     log "Wrote third-party notices for ${#packages[@]} package(s)"
 }
 
+copy_app_license_files() {
+    if [[ -f LICENSE ]]; then
+        cp -f LICENSE "$STAGE_DIR/LICENSE.txt"
+    fi
+    if [[ -d LICENSES ]] && compgen -G "LICENSES/*" >/dev/null; then
+        mkdir -p "$STAGE_DIR/LICENSES"
+        cp -f LICENSES/* "$STAGE_DIR/LICENSES/"
+    fi
+}
+
 write_manifest() {
     local manifest="$STAGE_DIR/deployment-manifest.txt"
     local summary="$STAGE_DIR/deployment-summary.md"
@@ -555,6 +605,10 @@ write_manifest() {
 APP_NAME="uil"
 BUILD_DIR="build-windows"
 STAGE_DIR="dist/uil-windows-x64"
+GENERATE_THIRD_PARTY_NOTICES=0
+FINALIZE_EXISTING=0
+declare -a AUDIT_BINARIES=()
+declare -a AUDIT_LDD_OUTPUTS=()
 
 while (($#)); do
     case "$1" in
@@ -569,6 +623,14 @@ while (($#)); do
         --stage-dir)
             STAGE_DIR="${2:-}"
             shift 2
+            ;;
+        --third-party-notices)
+            GENERATE_THIRD_PARTY_NOTICES=1
+            shift
+            ;;
+        --finalize-existing)
+            FINALIZE_EXISTING=1
+            shift
             ;;
         --help)
             usage
@@ -620,28 +682,43 @@ case "$STAGE_DIR" in
         ;;
 esac
 
-log "Preparing staging directory $STAGE_DIR"
-rm -rf -- "$STAGE_DIR"
-mkdir -p "$STAGE_DIR"
-cp -f "$EXE_PATH" "$STAGE_DIR/$APP_NAME.exe"
-chmod u+w "$STAGE_DIR/$APP_NAME.exe"
+if (( FINALIZE_EXISTING )); then
+    [[ -f "$STAGE_DIR/$APP_NAME.exe" ]] \
+        || die "cannot finalize stage without $STAGE_DIR/$APP_NAME.exe"
+    validate_existing_dependency_audit
+    log "Reusing existing verified staging directory $STAGE_DIR"
+else
+    log "Preparing staging directory $STAGE_DIR"
+    rm -rf -- "$STAGE_DIR"
+    mkdir -p "$STAGE_DIR"
+    cp -f "$EXE_PATH" "$STAGE_DIR/$APP_NAME.exe"
+    chmod u+w "$STAGE_DIR/$APP_NAME.exe"
 
-log "Running Qt deployment tool"
-"$WINDEPLOYQT" \
-    --release \
-    --compiler-runtime \
-    --force \
-    --verbose 1 \
-    "$STAGE_DIR/$APP_NAME.exe"
+    log "Running Qt deployment tool"
+    "$WINDEPLOYQT" \
+        --release \
+        --compiler-runtime \
+        --force \
+        --verbose 1 \
+        "$STAGE_DIR/$APP_NAME.exe"
 
-log "Completing non-Qt runtime DLL dependency closure"
-copy_runtime_dependency_closure
+    log "Completing non-Qt runtime DLL dependency closure"
+    seed_lazy_ffmpeg_libraries
+    copy_runtime_dependency_closure
 
-log "Verifying staged runtime dependency closure"
-verify_dependency_closure
+    log "Verifying staged runtime dependency closure"
+    verify_dependency_closure
+fi
 
-log "Writing third-party notices"
-write_third_party_notices
+log "Copying application license files"
+copy_app_license_files
+
+if (( GENERATE_THIRD_PARTY_NOTICES )); then
+    log "Writing exhaustive third-party notices"
+    write_third_party_notices
+else
+    log "Skipping exhaustive third-party notice inventory (use --third-party-notices to enable)"
+fi
 
 log "Writing deployment manifest"
 write_manifest
