@@ -1,0 +1,49 @@
+name: Sanitizers
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  address-undefined:
+    name: Address and undefined behavior
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Qt and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            ninja-build \
+            qt6-base-dev \
+            qt6-pdf-dev \
+            qt6-svg-dev \
+            zlib1g-dev
+
+      - name: Configure instrumented build
+        run: >-
+          cmake -S . -B build-sanitized -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DUIL_ENABLE_SANITIZERS=ON
+
+      - name: Build
+        run: cmake --build build-sanitized --parallel 4
+
+      - name: Run unit tests under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          QT_QPA_PLATFORM: offscreen
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build-sanitized --output-on-failure --parallel 2

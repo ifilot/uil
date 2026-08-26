@@ -20,6 +20,7 @@
 #include <QTemporaryDir>
 #include <QThreadPool>
 #include <QTimer>
+#include <QVector>
 
 #include <memory>
 
@@ -170,6 +171,8 @@ private:
         std::shared_ptr<QTemporaryDir> package_lifetime);
     /** @brief Returns whether a PDF document is currently open. */
     bool has_document() const;
+    /** @brief Returns cached page geometry without re-entering the PDF backend. */
+    QSizeF page_size_points(int page_index) const;
 
     std::unique_ptr<PdfBackend> backend_;
     SlideCache slide_cache_;
@@ -186,6 +189,7 @@ private:
     QString entry_pdf_relative_path_;
     QStringList package_movie_asset_paths_;
     QString document_hash_;
+    QVector<QSizeF> page_sizes_points_;
     PdfMediaScanResult media_scan_result_;
     QRectF active_video_rect_;
     QSize deck_overview_render_size_;

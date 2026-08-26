@@ -79,7 +79,7 @@ short_sha="${short_sha:0:7}"
     printf '\n## Packaging\n\n'
     printf -- '- Built on GitHub Actions with MSYS2 UCRT64 and Qt 6.\n'
     printf -- '- Qt runtime libraries and plugins are deployed with `windeployqt`.\n'
-    printf -- '- Non-Qt runtime DLLs are collected recursively with `ldd` and verified before installer creation.\n'
+    printf -- '- Non-Qt runtime DLLs are collected recursively from static PE imports and the primary executables are runtime-checked with `ldd` before installer creation.\n'
     if [[ -n "$MANIFEST" && -f "$MANIFEST" ]]; then
         printf -- '- The deployment manifest is attached as a release asset for auditing.\n'
     fi

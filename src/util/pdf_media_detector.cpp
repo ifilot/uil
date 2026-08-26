@@ -23,6 +23,9 @@ Q_LOGGING_CATEGORY(logMedia, "pdf.media")
 
 namespace {
 using ObjectMap = QHash<int, QByteArray>;
+constexpr qint64 kMaximumPdfScanBytes = 512LL * 1024LL * 1024LL;
+constexpr qsizetype kMaximumInflatedObjectStreamBytes = 64 * 1024 * 1024;
+constexpr qsizetype kMaximumTotalInflatedObjectStreamBytes = 256 * 1024 * 1024;
 
 /** @brief Inflates PDF stream data encoded with the Flate filter. */
 QByteArray inflate_flate_data(const QByteArray& input) {
@@ -42,6 +45,10 @@ QByteArray inflate_flate_data(const QByteArray& input) {
         stream.avail_out = uInt(buffer.size());
         result = inflate(&stream, Z_NO_FLUSH);
         output.append(buffer.data(), int(buffer.size() - stream.avail_out));
+        if (output.size() > kMaximumInflatedObjectStreamBytes) {
+            inflateEnd(&stream);
+            return {};
+        }
     }
 
     inflateEnd(&stream);
@@ -216,6 +223,15 @@ bool is_media_annotation(const QByteArray& bytes) {
         || QString::fromLatin1(bytes).contains(QStringLiteral("/Subtype /RichMedia"));
 }
 
+/** @brief Cheaply detects whether object bytes could contain a supported media annotation. */
+bool contains_media_marker(const QByteArray& bytes) {
+    return bytes.contains("/Movie")
+        || bytes.contains("/RichMedia")
+        || bytes.contains("/Rendition")
+        || bytes.contains("/EmbeddedFile")
+        || bytes.contains("/Sound");
+}
+
 /** @brief Extracts directly represented indirect objects from PDF bytes. */
 ObjectMap extract_indirect_objects(const QByteArray& pdf_bytes) {
     ObjectMap objects;
@@ -238,6 +254,7 @@ ObjectMap extract_indirect_objects(const QByteArray& pdf_bytes) {
 /** @brief Expands compressed PDF object streams into the object map. */
 void extract_object_streams(ObjectMap& objects) {
     QVector<std::pair<int, QByteArray>> objectStreams;
+    qsizetype total_inflated_bytes = 0;
     for (auto it = objects.cbegin(); it != objects.cend(); ++it) {
         if (has_type(dictionary_part(it.value()), QStringLiteral("ObjStm"))) {
             objectStreams.push_back({it.key(), it.value()});
@@ -268,6 +285,11 @@ void extract_object_streams(ObjectMap& objects) {
             qCWarning(logMedia) << "Could not decode object stream" << objectStreamNumber;
             continue;
         }
+        if (decoded.size() > kMaximumTotalInflatedObjectStreamBytes - total_inflated_bytes) {
+            qCWarning(logMedia) << "Stopping object-stream expansion at the aggregate memory limit";
+            break;
+        }
+        total_inflated_bytes += decoded.size();
 
         const QString header = QString::fromLatin1(decoded.left(*first));
         const QRegularExpression pairExpression(QStringLiteral(R"((\d+)\s+(\d+))"));
@@ -377,6 +399,32 @@ QString normalized_package_path(QString path) {
     return QDir::cleanPath(path);
 }
 
+/** @brief Returns a canonical path when possible and a normalized absolute path otherwise. */
+QString canonical_or_absolute_path(const QString& path) {
+    const QFileInfo info(path);
+    const QString canonical_path = info.canonicalFilePath();
+    return QDir::cleanPath(QDir::fromNativeSeparators(
+        canonical_path.isEmpty() ? info.absoluteFilePath() : canonical_path));
+}
+
+/** @brief Returns whether @p candidate is contained by @p directory. */
+bool is_path_within_directory(const QString& candidate, const QString& directory) {
+    const QString canonical_candidate = canonical_or_absolute_path(candidate);
+    QString canonical_directory = canonical_or_absolute_path(directory);
+    if (canonical_candidate.isEmpty() || canonical_directory.isEmpty()) {
+        return false;
+    }
+
+    if (!canonical_directory.endsWith(QLatin1Char('/'))) {
+        canonical_directory.append(QLatin1Char('/'));
+    }
+#if defined(Q_OS_WIN)
+    return canonical_candidate.startsWith(canonical_directory, Qt::CaseInsensitive);
+#else
+    return canonical_candidate.startsWith(canonical_directory, Qt::CaseSensitive);
+#endif
+}
+
 /** @brief Resolves an annotation's media filename against a PDF or UIL package root. */
 QString resolve_media_path(
     const QString& pdfPath,
@@ -387,22 +435,22 @@ QString resolve_media_path(
         return {};
     }
 
-    QFileInfo mediaInfo(fileName);
-    if (mediaInfo.isAbsolute()) {
-        return mediaInfo.absoluteFilePath();
-    }
-
     const QString normalizedTarget = normalized_package_path(fileName);
     if (!package_root_path.isEmpty()) {
         for (const QString& assetPath : package_movie_asset_paths) {
             if (normalizedTarget == normalized_package_path(assetPath)) {
-                return QFileInfo(QDir(package_root_path), normalizedTarget).absoluteFilePath();
+                const QString candidate = QFileInfo(QDir(package_root_path), normalizedTarget).absoluteFilePath();
+                return is_path_within_directory(candidate, package_root_path) ? candidate : QString();
             }
         }
+        return {};
     }
 
     const QFileInfo pdfInfo(pdfPath);
-    return QFileInfo(pdfInfo.absoluteDir(), fileName).absoluteFilePath();
+    const QString candidate = QFileInfo(fileName).isAbsolute()
+        ? QFileInfo(fileName).absoluteFilePath()
+        : QFileInfo(pdfInfo.absoluteDir(), fileName).absoluteFilePath();
+    return is_path_within_directory(candidate, pdfInfo.absolutePath()) ? candidate : QString();
 }
 
 /** @brief Resolves media paths and extracts preview frames when supported. */
@@ -413,6 +461,13 @@ void resolve_and_extract_media_frames(
     const QStringList& package_movie_asset_paths) {
     for (PdfMediaAnnotation& annotation : result.annotations) {
         annotation.resolved_file_path = resolve_media_path(pdfPath, annotation.fileName, package_root_path, package_movie_asset_paths);
+        if (annotation.is_mp4() && annotation.resolved_file_path.isEmpty()) {
+            performance_log::record_event(QStringLiteral("pdf.media_path_rejected"), {
+                {QStringLiteral("file_name"), QFileInfo(annotation.fileName).fileName()},
+                {QStringLiteral("page"), annotation.page_index + 1}
+            });
+            continue;
+        }
         if (annotation.is_mp4()) {
             performance_log::ScopedSpan frame_span(QStringLiteral("pdf.media_first_frame"), {
                 {QStringLiteral("file_name"), QFileInfo(annotation.resolved_file_path).fileName()},
@@ -488,10 +543,37 @@ PdfMediaScanResult scan_pdf_media_annotations(
     }
     scan_span.checkpoint(QStringLiteral("open_file"));
 
+    if (file.size() < 0 || file.size() > kMaximumPdfScanBytes) {
+        scan_span.add_field(QStringLiteral("error_stage"), QStringLiteral("file_size_limit"));
+        scan_span.set_outcome(QStringLiteral("skipped_too_large"));
+        qCWarning(logMedia) << "Skipping PDF media scan because the file exceeds the scan limit" << path;
+        return result;
+    }
+
     const QByteArray file_bytes = file.readAll();
+    if (file.error() != QFileDevice::NoError || file_bytes.size() != file.size()) {
+        scan_span.add_field(QStringLiteral("error_stage"), QStringLiteral("read_file"));
+        scan_span.set_outcome(QStringLiteral("failed"));
+        qCWarning(logMedia) << "Could not completely read PDF for media scanning" << path;
+        return result;
+    }
     scan_span.checkpoint(
         QStringLiteral("read_file"),
         {{QStringLiteral("bytes_read"), file_bytes.size()}});
+
+    const bool raw_media_candidate = contains_media_marker(file_bytes);
+    const bool has_compressed_objects = file_bytes.contains("/ObjStm");
+    scan_span.checkpoint(QStringLiteral("raw_media_marker_preflight"), {
+        {QStringLiteral("candidate_found"), raw_media_candidate},
+        {QStringLiteral("compressed_objects"), has_compressed_objects}
+    });
+    if (!raw_media_candidate && !has_compressed_objects) {
+        scan_span.add_field(QStringLiteral("annotation_count"), 0);
+        scan_span.set_outcome(QStringLiteral("no_media_markers"));
+        qCInfo(logMedia) << result.summary();
+        return result;
+    }
+
     ObjectMap objects = extract_indirect_objects(file_bytes);
     scan_span.checkpoint(
         QStringLiteral("extract_indirect_objects"),
@@ -500,6 +582,22 @@ PdfMediaScanResult scan_pdf_media_annotations(
     scan_span.checkpoint(
         QStringLiteral("extract_object_streams"),
         {{QStringLiteral("object_count"), objects.size()}});
+
+    const bool has_media_candidate = std::any_of(
+        objects.cbegin(),
+        objects.cend(),
+        [](const QByteArray& object_body) {
+            return contains_media_marker(object_body);
+        });
+    scan_span.checkpoint(
+        QStringLiteral("media_marker_preflight"),
+        {{QStringLiteral("candidate_found"), has_media_candidate}});
+    if (!has_media_candidate) {
+        scan_span.add_field(QStringLiteral("annotation_count"), 0);
+        scan_span.set_outcome(QStringLiteral("no_media_markers"));
+        qCInfo(logMedia) << result.summary();
+        return result;
+    }
 
     std::unordered_set<int> seenMediaObjects;
     const QVector<int> pages = ordered_page_objects(objects);

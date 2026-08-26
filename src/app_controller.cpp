@@ -9,6 +9,7 @@
 
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QImageReader>
 #include <QLoggingCategory>
 #include <QPageLayout>
 #include <QPageSize>
@@ -29,10 +30,30 @@
 Q_LOGGING_CATEGORY(logRender, "render")
 Q_LOGGING_CATEGORY(logScreens, "screens")
 
+namespace {
+constexpr int kMaximumOverlayDimension = 8192;
+constexpr qint64 kMaximumOverlayPixels = 34LL * 1024LL * 1024LL;
+
+/** @brief Decodes a bounded PNG overlay from an extracted package. */
+QImage read_safe_package_overlay(const QString& path) {
+    QImageReader reader(path);
+    reader.setDecideFormatFromContent(true);
+    const QSize size = reader.size();
+    if (reader.format().toLower() != QByteArrayLiteral("png")
+        || !size.isValid()
+        || size.width() > kMaximumOverlayDimension
+        || size.height() > kMaximumOverlayDimension
+        || qint64(size.width()) * qint64(size.height()) > kMaximumOverlayPixels) {
+        return {};
+    }
+    return reader.read();
+}
+}  // namespace
+
 AppController::AppController(QObject* parent)
     : QObject(parent),
       backend_(std::make_unique<QtPdfBackend>()),
-      slide_cache_(512ll * 1024ll * 1024ll),
+      slide_cache_(),
       render_scheduler_(this) {
     media_scan_pool_.setMaxThreadCount(1);
     media_scan_pool_.setExpiryTimeout(30'000);
@@ -118,9 +139,14 @@ bool AppController::open_pdf(const QString& path) {
         packageHiddenOverlayPages = packageResult.hidden_overlay_pages;
         packageOverlaysGloballyVisible = packageResult.overlays_globally_visible;
         for (auto it = packageResult.overlay_image_paths.constBegin(); it != packageResult.overlay_image_paths.constEnd(); ++it) {
-            QImage overlay(packageTempDir->filePath(it.value()));
+            const QImage overlay = read_safe_package_overlay(packageTempDir->filePath(it.value()));
             if (!overlay.isNull()) {
                 packageOverlayImages.insert(it.key(), overlay);
+            } else {
+                performance_log::record_event(QStringLiteral("package.overlay_rejected"), {
+                    {QStringLiteral("page"), it.key() + 1},
+                    {QStringLiteral("path"), it.value()}
+                });
             }
         }
         open_span.checkpoint(
@@ -142,9 +168,19 @@ bool AppController::open_pdf(const QString& path) {
         QStringLiteral("open_pdf_backend"),
         {{QStringLiteral("page_count"), backend->page_count()}});
 
+    QVector<QSizeF> page_sizes_points;
+    page_sizes_points.reserve(backend->page_count());
+    for (int page_index = 0; page_index < backend->page_count(); ++page_index) {
+        page_sizes_points.push_back(backend->page_size_points(page_index));
+    }
+    open_span.checkpoint(
+        QStringLiteral("cache_page_geometry"),
+        {{QStringLiteral("page_count"), page_sizes_points.size()}});
+
     ++media_scan_generation_;
     media_scan_pool_.clear();
     backend_ = std::move(backend);
+    page_sizes_points_ = std::move(page_sizes_points);
     package_temp_dir_ = packageTempDir;
     current_path_ = pdfPath;
     current_package_path_ = isUilPackage ? QFileInfo(path).absoluteFilePath() : QString();
@@ -188,8 +224,7 @@ bool AppController::open_pdf(const QString& path) {
     open_span.checkpoint(QStringLiteral("notify_media_scan_changed"));
     update_visible_slides();
     open_span.checkpoint(QStringLiteral("update_visible_slides"));
-    schedule_predictive_renders();
-    open_span.checkpoint(QStringLiteral("schedule_predictive_renders"));
+    open_span.checkpoint(QStringLiteral("defer_predictive_renders"));
     schedule_media_scan(
         pdfPath,
         package_root_path,
@@ -321,8 +356,15 @@ void AppController::request_deck_overview_renders(
     const int first_page = std::max(0, visible_first - prefetch_count);
     const int last_page = std::min(page_count() - 1, visible_last + prefetch_count);
     const int visible_center = std::clamp(focusedPage, visible_first, visible_last);
-    deck_overview_first_page_ = first_page;
-    deck_overview_last_page_ = last_page;
+    deck_overview_first_page_ = visible_first;
+    deck_overview_last_page_ = visible_last;
+
+    if (awaiting_first_slide_image_) {
+        span.add_field(QStringLiteral("first_visible_page"), visible_first + 1);
+        span.add_field(QStringLiteral("last_visible_page"), visible_last + 1);
+        span.set_outcome(QStringLiteral("deferred_until_first_slide"));
+        return;
+    }
 
     int cache_hits = 0;
     for (int page = first_page; page <= last_page; ++page) {
@@ -399,15 +441,15 @@ bool AppController::export_annotated_pdf(const QString& path, const QHash<int, Q
 
     QPainter painter;
     for (int page_index = 0; page_index < page_count(); ++page_index) {
-        const QSizeF page_size_points = backend_->page_size_points(page_index);
-        if (!page_size_points.isValid()) {
+        const QSizeF page_size = page_size_points(page_index);
+        if (!page_size.isValid()) {
             if (error_message) {
                 *error_message = QStringLiteral("Could not determine page size for slide %1").arg(page_index + 1);
             }
             return false;
         }
 
-        const QPageSize pageSize(page_size_points, QPageSize::Point);
+        const QPageSize pageSize(page_size, QPageSize::Point);
         writer.setPageSize(pageSize);
         writer.setPageMargins(QMarginsF(0, 0, 0, 0), QPageLayout::Point);
         if (page_index > 0 && !writer.newPage()) {
@@ -425,8 +467,8 @@ bool AppController::export_annotated_pdf(const QString& path, const QHash<int, Q
         }
 
         const QSize target_pixel_size(
-            qMax(1, int(qRound(page_size_points.width() * 2.0))),
-            qMax(1, int(qRound(page_size_points.height() * 2.0))));
+            qMax(1, int(qRound(page_size.width() * 2.0))),
+            qMax(1, int(qRound(page_size.height() * 2.0))));
         QImage pageImage = image_with_media_frames(page_index, backend_->render_page(page_index, target_pixel_size));
         if (pageImage.isNull()) {
             if (error_message) {
@@ -442,7 +484,7 @@ bool AppController::export_annotated_pdf(const QString& path, const QHash<int, Q
             imagePainter.drawImage(pageImage.rect(), overlay);
         }
 
-        painter.drawImage(QRectF(QPointF(0, 0), page_size_points), pageImage);
+        painter.drawImage(QRectF(QPointF(0, 0), page_size), pageImage);
     }
 
     painter.end();
@@ -675,7 +717,7 @@ QSize AppController::audience_render_pixel_size(int page_index) const {
     const QSize boundingPixels(qMax(1, int(qRound(logicalSize.width() * devicePixelRatio))),
                                qMax(1, int(qRound(logicalSize.height() * devicePixelRatio))));
 
-    return contained_size_for_aspect(backend_->page_size_points(page_index), boundingPixels);
+    return contained_size_for_aspect(page_size_points(page_index), boundingPixels);
 }
 
 SlideCacheKey AppController::cache_key_for_page(int page_index) const {
@@ -690,7 +732,7 @@ SlideCacheKey AppController::cache_key_for_page_at_size(int page_index, const QS
     return SlideCacheKey{
         document_hash_,
         page_index,
-        contained_size_for_aspect(backend_->page_size_points(page_index), bounding_pixel_size),
+        contained_size_for_aspect(page_size_points(page_index), bounding_pixel_size),
         0
     };
 }
@@ -706,6 +748,13 @@ QString AppController::texture_key_for_cache_key(const SlideCacheKey& key) const
 
 bool AppController::has_document() const {
     return backend_ && backend_->page_count() > 0;
+}
+
+QSizeF AppController::page_size_points(int page_index) const {
+    if (page_index < 0 || page_index >= page_sizes_points_.size()) {
+        return {};
+    }
+    return page_sizes_points_.at(page_index);
 }
 
 RenderRequest AppController::render_request_for_page(int page_index) const {
@@ -800,7 +849,7 @@ QImage AppController::image_with_media_frames(int page_index, const QImage& imag
     QPainter painter(&result);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
-    const QSizeF pageSize = backend_->page_size_points(page_index);
+    const QSizeF pageSize = page_size_points(page_index);
     if (!pageSize.isValid()) {
         return result;
     }
@@ -841,7 +890,7 @@ QRectF AppController::normalized_media_rect(const PdfMediaAnnotation& annotation
         return {};
     }
 
-    const QSizeF pageSize = backend_->page_size_points(annotation.page_index);
+    const QSizeF pageSize = page_size_points(annotation.page_index);
     if (!pageSize.isValid()) {
         return {};
     }
@@ -1013,7 +1062,6 @@ void AppController::handle_render_finished(const RenderRequest& request, const Q
         audience_window_->cache_slide_image(texture_key, displayImage);
     }
 
-    const SlideCacheKey currentKey = cache_key_for_page(current_page_index_);
     if (request.page_index == current_page_index_ && isAudienceRender) {
         if (awaiting_first_slide_image_ && document_open_timer_.isValid()) {
             performance_log::record_duration(
@@ -1026,6 +1074,14 @@ void AppController::handle_render_finished(const RenderRequest& request, const Q
                     {QStringLiteral("render_width"), request.pixel_size.width()}
                 });
             awaiting_first_slide_image_ = false;
+            schedule_predictive_renders();
+            if (deck_overview_render_size_.isValid()) {
+                request_deck_overview_renders(
+                    deck_overview_render_size_,
+                    current_page_index_,
+                    deck_overview_first_page_,
+                    deck_overview_last_page_);
+            }
         }
         emit current_slide_image_changed(displayImage);
         if (audience_window_) {

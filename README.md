@@ -102,6 +102,8 @@ exhaustive MSYS2 package-license crawl. Add `--third-party-notices` when a
 release audit is explicitly required. That opt-in writes
 `THIRD_PARTY_NOTICES.txt` and `third-party/` with package ownership, versions,
 license metadata, installed notice files, and GPL/LGPL-family review items.
+Every staged deployment also contains `deployment-checksums.sha256`, covering
+all packaged files except the checksum list itself.
 
 To build the installer, install Inno Setup 6 for Windows, make sure `ISCC.exe`
 is available on `PATH` or set `ISCC=/path/to/ISCC.exe`, then run:
@@ -109,6 +111,14 @@ is available on `PATH` or set `ISCC=/path/to/ISCC.exe`, then run:
 ```bash
 scripts/windows/build-inno-installer.sh
 ```
+
+The GitHub Actions release workflow signs both application executables and the
+installer. Tagged releases require repository secrets named
+`WINDOWS_SIGNING_CERTIFICATE_BASE64` (a base64-encoded PFX) and
+`WINDOWS_SIGNING_CERTIFICATE_PASSWORD`; an optional
+`WINDOWS_SIGNING_TIMESTAMP_URL` repository variable selects the RFC 3161
+timestamp service. Pull requests and ordinary branch builds remain unsigned
+when these secrets are absent.
 
 ## Performance logs
 
@@ -132,11 +142,12 @@ current instrumentation measures:
 - render queue wait, per-worker PDF backend reuse, and page rasterization; and
 - end-to-end time until the first slide is displayed.
 
-Media discovery runs on a dedicated background worker. Slide rendering uses a
-bounded four-thread pool, retains one PDF backend per worker, prioritizes the
-current slide, and renders only visible overview pages plus a small prefetch
-margin. Cache debug messages are disabled by default so profiling does not
-materially interfere with UI scheduling. FFmpeg is resolved on first media use
+Media discovery runs on a dedicated background worker. Slide rendering uses an
+adaptive bounded two-to-four-thread pool, retains one PDF backend per worker,
+promotes newly visible work ahead of queued prefetches, and renders only visible
+overview pages plus a small margin. The image cache scales with physical memory
+within fixed safety bounds. Cache debug messages are disabled by default so
+profiling does not materially interfere with UI scheduling. FFmpeg is resolved on first media use
 instead of being imported by the executable, keeping its large codec DLL tree
 out of ordinary PDF startup while retaining video support in packaged builds.
 
@@ -155,5 +166,6 @@ distribution. Windows release builds also redistribute the MSYS2 runtime
 dependency closure, including optional FFmpeg dependencies when FFmpeg is
 available at configure time. See [LICENSE](LICENSE) for the application LGPLv3
 text, [LICENSES/GPL-3.0-only.txt](LICENSES/GPL-3.0-only.txt) for the GPLv3
-terms incorporated by LGPLv3, and the generated third-party notices in release
-artifacts for redistributed dependency licenses.
+terms incorporated by LGPLv3. Dependency-license inventories can be generated
+explicitly with the deployment script's `--third-party-notices` option when
+preparing a redistribution audit.

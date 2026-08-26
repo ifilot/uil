@@ -5,6 +5,8 @@ function(add_uil_unit_test target)
     )
     target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src)
     target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    uil_enable_windows_hardening(${target})
+    uil_enable_sanitizers(${target})
     add_test(NAME ${target} COMMAND ${target})
     set_tests_properties(${target} PROPERTIES LABELS unit TIMEOUT 60)
 endfunction()
@@ -28,6 +30,13 @@ add_uil_unit_test(deck_overview_visibility_test
     deck_overview_visibility_test.cpp
 )
 target_link_libraries(deck_overview_visibility_test PRIVATE Qt6::Widgets)
+
+add_uil_unit_test(render_scheduler_test
+    render_scheduler_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/render/render_scheduler.cpp
+    ${PROJECT_SOURCE_DIR}/src/pdf/qt_pdf_backend.cpp
+)
+target_link_libraries(render_scheduler_test PRIVATE Qt6::Pdf)
 
 add_uil_unit_test(performance_log_test
     performance_log_test.cpp
@@ -70,6 +79,8 @@ if(WIN32)
     )
     target_include_directories(launcher_ready_probe PRIVATE ${PROJECT_SOURCE_DIR}/src)
     target_link_libraries(launcher_ready_probe PRIVATE shell32)
+    uil_enable_windows_hardening(launcher_ready_probe)
+    uil_enable_sanitizers(launcher_ready_probe)
     add_dependencies(launcher_ready_probe uil)
     add_custom_command(TARGET launcher_ready_probe POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -81,5 +92,5 @@ if(WIN32)
         COMMAND $<TARGET_FILE_DIR:launcher_ready_probe>/uil.exe
                 "--probe-forwarded=hello world"
     )
-    set_tests_properties(native_launcher_test PROPERTIES LABELS unit TIMEOUT 10)
+    set_tests_properties(native_launcher_test PROPERTIES LABELS unit TIMEOUT 30)
 endif()

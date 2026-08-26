@@ -16,6 +16,35 @@ bool write_test_file(const QString& path, const QByteArray& contents) {
         && file.write(contents) == contents.size();
 }
 
+/** @brief Writes a little-endian 32-bit value into mutable test bytes. */
+void write_uint32(QByteArray* bytes, qsizetype offset, quint32 value) {
+    for (int byte = 0; byte < 4; ++byte) {
+        (*bytes)[offset + byte] = char((value >> (byte * 8)) & 0xff);
+    }
+}
+
+/** @brief Creates a valid package containing a PDF and one movie asset. */
+QString create_test_package(QTemporaryDir* directory, QString* error_message) {
+    const QString pdf_path = directory->filePath(QStringLiteral("deck.pdf"));
+    const QString movie_path = directory->filePath(QStringLiteral("movies/clip.mov"));
+    const QString package_path = directory->filePath(QStringLiteral("deck.uil"));
+    if (!write_test_file(pdf_path, QByteArrayLiteral("%PDF-1.4\ntest\n%%EOF\n"))
+        || !write_test_file(movie_path, QByteArrayLiteral("movie"))
+        || !write_uil_package(
+            package_path,
+            pdf_path,
+            QStringLiteral("slides/deck.pdf"),
+            directory->path(),
+            {QStringLiteral("movies/clip.mov")},
+            {},
+            {},
+            true,
+            error_message)) {
+        return {};
+    }
+    return package_path;
+}
+
 /** @brief Reads all bytes from a test file. */
 QByteArray read_test_file(const QString& path) {
     QFile file(path);
@@ -36,11 +65,26 @@ private slots:
     /** @brief Verifies that duplicate package asset paths are rejected. */
     void duplicate_asset_path_is_rejected();
 
+    /** @brief Verifies case-insensitive output-path collisions are rejected. */
+    void case_insensitive_output_collision_is_rejected();
+
     /** @brief Verifies that missing source files produce actionable errors. */
     void missing_source_file_is_rejected();
 
     /** @brief Verifies that malformed archives fail without partial success. */
     void malformed_archive_is_rejected();
+
+    /** @brief Verifies that corrupted entry data is rejected by its CRC. */
+    void checksum_mismatch_is_rejected();
+
+    /** @brief Verifies that Windows-style traversal is rejected while reading. */
+    void backslash_traversal_is_rejected();
+
+    /** @brief Verifies that duplicate normalized input paths are rejected. */
+    void duplicate_input_path_is_rejected();
+
+    /** @brief Verifies that declared decompression sizes are bounded. */
+    void oversized_entry_is_rejected();
 
     /** @brief Verifies that callers must provide an extraction result. */
     void missing_result_pointer_is_rejected();
@@ -137,6 +181,27 @@ void UilPackageTest::duplicate_asset_path_is_rejected() {
     QVERIFY(error_message.contains(QStringLiteral("Duplicate package entry")));
 }
 
+void UilPackageTest::case_insensitive_output_collision_is_rejected() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source_path = directory.filePath(QStringLiteral("deck.pdf"));
+    const QString colliding_asset_path = directory.filePath(QStringLiteral("slides/DECK.PDF"));
+    QVERIFY(write_test_file(source_path, QByteArrayLiteral("pdf")));
+    QVERIFY(write_test_file(colliding_asset_path, QByteArrayLiteral("asset")));
+    QString error_message;
+
+    QVERIFY(!write_uil_package(directory.filePath(QStringLiteral("deck.uil")),
+                              source_path,
+                              QStringLiteral("slides/deck.pdf"),
+                              directory.path(),
+                              {QStringLiteral("slides/DECK.PDF")},
+                              {},
+                              {},
+                              true,
+                              &error_message));
+    QVERIFY(error_message.contains(QStringLiteral("Duplicate package entry")));
+}
+
 void UilPackageTest::missing_source_file_is_rejected() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -167,6 +232,82 @@ void UilPackageTest::malformed_archive_is_rejected() {
     QVERIFY(!extract_uil_package(package_path, extraction_directory, &result, &error_message));
     QVERIFY(!error_message.isEmpty());
     QVERIFY(result.entry_pdf_path.isEmpty());
+}
+
+void UilPackageTest::checksum_mismatch_is_rejected() {
+    QTemporaryDir directory;
+    QTemporaryDir extraction_directory;
+    QVERIFY(directory.isValid());
+    QVERIFY(extraction_directory.isValid());
+    QString error_message;
+    const QString package_path = create_test_package(&directory, &error_message);
+    QVERIFY2(!package_path.isEmpty(), qPrintable(error_message));
+
+    QByteArray bytes = read_test_file(package_path);
+    const qsizetype central_header = bytes.indexOf(QByteArrayLiteral("PK\x01\x02"));
+    QVERIFY(central_header >= 0);
+    bytes[central_header + 16] ^= char(0x01);
+    QVERIFY(write_test_file(package_path, bytes));
+
+    UilPackageOpenResult result;
+    QVERIFY(!extract_uil_package(package_path, extraction_directory, &result, &error_message));
+    QVERIFY(error_message.contains(QStringLiteral("checksum mismatch"), Qt::CaseInsensitive));
+}
+
+void UilPackageTest::backslash_traversal_is_rejected() {
+    QTemporaryDir directory;
+    QTemporaryDir extraction_directory;
+    QVERIFY(directory.isValid());
+    QVERIFY(extraction_directory.isValid());
+    QString error_message;
+    const QString package_path = create_test_package(&directory, &error_message);
+    QVERIFY2(!package_path.isEmpty(), qPrintable(error_message));
+
+    QByteArray bytes = read_test_file(package_path);
+    QCOMPARE(bytes.replace("slides/deck.pdf", "..\\outside.pdfx").count("..\\outside.pdfx"), 3);
+    QVERIFY(write_test_file(package_path, bytes));
+
+    UilPackageOpenResult result;
+    QVERIFY(!extract_uil_package(package_path, extraction_directory, &result, &error_message));
+    QVERIFY(error_message.contains(QStringLiteral("Unsafe path")));
+}
+
+void UilPackageTest::duplicate_input_path_is_rejected() {
+    QTemporaryDir directory;
+    QTemporaryDir extraction_directory;
+    QVERIFY(directory.isValid());
+    QVERIFY(extraction_directory.isValid());
+    QString error_message;
+    const QString package_path = create_test_package(&directory, &error_message);
+    QVERIFY2(!package_path.isEmpty(), qPrintable(error_message));
+
+    QByteArray bytes = read_test_file(package_path);
+    QCOMPARE(bytes.replace("movies/clip.mov", "slides/deck.pdf").count("slides/deck.pdf"), 6);
+    QVERIFY(write_test_file(package_path, bytes));
+
+    UilPackageOpenResult result;
+    QVERIFY(!extract_uil_package(package_path, extraction_directory, &result, &error_message));
+    QVERIFY(error_message.contains(QStringLiteral("Duplicate path")));
+}
+
+void UilPackageTest::oversized_entry_is_rejected() {
+    QTemporaryDir directory;
+    QTemporaryDir extraction_directory;
+    QVERIFY(directory.isValid());
+    QVERIFY(extraction_directory.isValid());
+    QString error_message;
+    const QString package_path = create_test_package(&directory, &error_message);
+    QVERIFY2(!package_path.isEmpty(), qPrintable(error_message));
+
+    QByteArray bytes = read_test_file(package_path);
+    const qsizetype central_header = bytes.indexOf(QByteArrayLiteral("PK\x01\x02"));
+    QVERIFY(central_header >= 0);
+    write_uint32(&bytes, central_header + 24, 768U * 1024U * 1024U);
+    QVERIFY(write_test_file(package_path, bytes));
+
+    UilPackageOpenResult result;
+    QVERIFY(!extract_uil_package(package_path, extraction_directory, &result, &error_message));
+    QVERIFY(error_message.contains(QStringLiteral("extraction limit")));
 }
 
 void UilPackageTest::missing_result_pointer_is_rejected() {

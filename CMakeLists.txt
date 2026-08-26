@@ -4,6 +4,8 @@ project(uil VERSION 0.2.0 LANGUAGES C CXX)
 
 include(CTest)
 
+option(UIL_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -37,6 +39,36 @@ endif()
 
 qt_standard_project_setup()
 
+# Applies exploit mitigations supported by the active Windows toolchain to UIL's
+# own binaries. Third-party libraries retain the protections they were built with.
+function(uil_enable_windows_hardening target)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /GS /guard:cf)
+        target_link_options(${target} PRIVATE /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA /guard:cf /CETCOMPAT)
+    elseif(MINGW)
+        target_compile_options(${target} PRIVATE
+            -fstack-protector-strong
+            $<$<COMPILE_LANGUAGE:CXX>:-fcf-protection=full>
+        )
+        target_compile_definitions(${target} PRIVATE
+            $<$<CONFIG:Release>:_FORTIFY_SOURCE=2>
+        )
+        target_link_options(${target} PRIVATE
+            -Wl,--dynamicbase
+            -Wl,--nxcompat
+            -Wl,--high-entropy-va
+        )
+    endif()
+endfunction()
+
+# Enables runtime memory and undefined-behavior checks for UIL's own targets.
+function(uil_enable_sanitizers target)
+    if(UIL_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${target} PRIVATE -fno-omit-frame-pointer -fsanitize=address,undefined)
+        target_link_options(${target} PRIVATE -fno-omit-frame-pointer -fsanitize=address,undefined)
+    endif()
+endfunction()
+
 set(FONT_AWESOME_SVG_FILES
     resources/fontawesome/svgs/regular/eye.svg
     resources/fontawesome/svgs/regular/eye-slash.svg
@@ -61,6 +93,7 @@ set(UIL_LAUNCHER_WINDOWS_RESOURCES)
 set(UIL_VIEWER_WINDOWS_RESOURCES)
 if(WIN32)
     set(UIL_WINDOWS_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/uil.ico")
+    set(UIL_WINDOWS_MANIFEST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/uil.manifest")
     set(UIL_WINDOWS_VERSION_TWEAK "${PROJECT_VERSION_TWEAK}")
     if(UIL_WINDOWS_VERSION_TWEAK STREQUAL "")
         set(UIL_WINDOWS_VERSION_TWEAK 0)
@@ -179,6 +212,8 @@ target_compile_definitions(${UIL_VIEWER_TARGET} PRIVATE
 set_target_properties(${UIL_VIEWER_TARGET} PROPERTIES
     WIN32_EXECUTABLE TRUE
 )
+uil_enable_windows_hardening(${UIL_VIEWER_TARGET})
+uil_enable_sanitizers(${UIL_VIEWER_TARGET})
 
 if(WIN32)
     set_target_properties(${UIL_VIEWER_TARGET} PROPERTIES
@@ -205,6 +240,8 @@ if(WIN32)
         gdi32
         shell32
     )
+    uil_enable_windows_hardening(uil)
+    uil_enable_sanitizers(uil)
 endif()
 
 if(FFMPEG_FOUND)

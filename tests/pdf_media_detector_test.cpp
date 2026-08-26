@@ -30,6 +30,18 @@ QByteArray media_pdf_fixture() {
         "/F (orphan.wav) >>\nendobj\n"
         "%%EOF\n");
 }
+
+/** @brief Returns a one-page PDF fixture referencing a caller-provided movie path. */
+QByteArray movie_path_pdf_fixture(const QByteArray& movie_path) {
+    return QByteArrayLiteral(
+        "%PDF-1.4\n"
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>\nendobj\n"
+        "4 0 obj\n<< /Type /Annot /Subtype /Movie /Rect [0 0 10 10] /F (")
+        + movie_path
+        + QByteArrayLiteral(") >>\nendobj\n%%EOF\n");
+}
 }
 
 class PdfMediaDetectorTest final : public QObject {
@@ -47,6 +59,12 @@ private slots:
 
     /** @brief Verifies that nonexistent PDFs produce an empty result. */
     void missing_pdf_returns_empty_result();
+
+    /** @brief Verifies that raw PDFs cannot escape their containing directory. */
+    void traversal_media_path_is_rejected();
+
+    /** @brief Verifies that packages can only resolve declared media assets. */
+    void undeclared_package_media_is_rejected();
 
 #if defined(UIL_HAVE_FFMPEG)
     /** @brief Verifies that the optional FFmpeg runtime can be loaded on first use. */
@@ -102,11 +120,37 @@ void PdfMediaDetectorTest::scans_linked_and_orphan_annotations() {
     QCOMPARE(orphan.object_number, 6);
     QCOMPARE(orphan.subtype, QStringLiteral("Sound"));
     QCOMPARE(orphan.fileName, QStringLiteral("orphan.wav"));
-    QCOMPARE(orphan.resolved_file_path,
-             QFileInfo(directory.path(), QStringLiteral("orphan.wav")).absoluteFilePath());
+    QVERIFY(orphan.resolved_file_path.isEmpty());
 
     QVERIFY(result.summary().contains(QStringLiteral("page 1 Movie")));
     QVERIFY(result.summary().contains(QStringLiteral("unknown page Sound")));
+}
+
+void PdfMediaDetectorTest::traversal_media_path_is_rejected() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString pdf_path = directory.filePath(QStringLiteral("deck.pdf"));
+    QVERIFY(write_pdf_fixture(pdf_path, movie_path_pdf_fixture(QByteArrayLiteral("../outside.mp4"))));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.annotations.size(), 1);
+    QVERIFY(result.annotations.first().resolved_file_path.isEmpty());
+    QVERIFY(!result.annotations.first().has_first_frame());
+}
+
+void PdfMediaDetectorTest::undeclared_package_media_is_rejected() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString pdf_path = directory.filePath(QStringLiteral("deck.pdf"));
+    QVERIFY(write_pdf_fixture(pdf_path, movie_path_pdf_fixture(QByteArrayLiteral("movies/hidden.mp4"))));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(
+        pdf_path,
+        directory.filePath(QStringLiteral("package")),
+        {QStringLiteral("movies/allowed.mp4")});
+    QCOMPARE(result.annotations.size(), 1);
+    QVERIFY(result.annotations.first().resolved_file_path.isEmpty());
+    QVERIFY(!result.annotations.first().has_first_frame());
 }
 
 void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {

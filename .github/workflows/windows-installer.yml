@@ -11,12 +11,19 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-installer:
     name: Build Windows installer
     runs-on: windows-latest
+    outputs:
+      output_base: ${{ steps.version.outputs.output_base }}
+
+    env:
+      WINDOWS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+      WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+      WINDOWS_SIGNING_TIMESTAMP_URL: ${{ vars.WINDOWS_SIGNING_TIMESTAMP_URL }}
 
     defaults:
       run:
@@ -24,10 +31,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up MSYS2 UCRT64
-        uses: msys2/setup-msys2@v2
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
         with:
           msystem: UCRT64
           update: true
@@ -54,7 +63,11 @@ jobs:
         run: |
           version="$(bash scripts/windows/project-version.sh)"
           if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
-            version="${GITHUB_REF_NAME#v}"
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [[ "$tag_version" != "$version" ]]; then
+              echo "Tag version $tag_version does not match CMake project version $version" >&2
+              exit 1
+            fi
           fi
 
           output_base="uil-${version}-windows-x64-setup"
@@ -73,6 +86,25 @@ jobs:
       - name: Build
         run: cmake --build build-windows --parallel
 
+      - name: Run unit tests
+        run: ctest --test-dir build-windows --output-on-failure --parallel 4
+
+      - name: Require signing credentials for releases
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: powershell
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_BASE64) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD)) {
+            throw "Release tags require the Windows signing certificate secrets"
+          }
+
+      - name: Sign application binaries
+        if: env.WINDOWS_SIGNING_CERTIFICATE_BASE64 != ''
+        shell: powershell
+        run: >-
+          ./scripts/windows/sign_artifacts.ps1
+          -Paths build-windows/uil.exe,build-windows/uil-viewer.exe
+
       - name: Stage runtime dependencies
         run: >
           bash scripts/windows/deploy-msys2.sh
@@ -87,61 +119,64 @@ jobs:
           --version "$UIL_VERSION"
           --output-base "$UIL_OUTPUT_BASE"
 
+      - name: Sign installer
+        if: env.WINDOWS_SIGNING_CERTIFICATE_BASE64 != ''
+        shell: powershell
+        run: >-
+          ./scripts/windows/sign_artifacts.ps1
+          -Paths "dist/$($env:UIL_OUTPUT_BASE).exe"
+
+      - name: Refresh signed installer checksum
+        run: sha256sum "dist/$UIL_OUTPUT_BASE.exe" > "dist/$UIL_OUTPUT_BASE.exe.sha256"
+
       - name: Write release notes
         run: >
           bash scripts/windows/write-release-notes.sh
           --version "$UIL_VERSION"
           --installer "dist/$UIL_OUTPUT_BASE.exe"
           --manifest dist/uil-windows-x64/deployment-manifest.txt
-          --notices dist/uil-windows-x64/THIRD_PARTY_NOTICES.txt
-          --license-review dist/uil-windows-x64/third-party/license-review.md
           --output dist/release-notes.md
 
-      - name: Archive third-party notices
-        shell: powershell
-        run: >
-          Compress-Archive
-          -Path dist/uil-windows-x64/THIRD_PARTY_NOTICES.txt,dist/uil-windows-x64/third-party
-          -DestinationPath dist/uil-third-party-notices.zip
-
-      - name: Show license review
-        run: cat dist/uil-windows-x64/third-party/license-review.md
-
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: uil-windows-x64-installer
           if-no-files-found: error
           path: |
             dist/${{ steps.version.outputs.output_base }}.exe
             dist/${{ steps.version.outputs.output_base }}.exe.sha256
-            dist/uil-third-party-notices.zip
             dist/release-notes.md
             dist/uil-windows-x64/deployment-manifest.txt
+            dist/uil-windows-x64/deployment-checksums.sha256
             dist/uil-windows-x64/deployment-summary.md
             dist/uil-windows-x64/deployment-imports.txt
             dist/uil-windows-x64/deployment-ldd.txt
-            dist/uil-windows-x64/THIRD_PARTY_NOTICES.txt
-            dist/uil-windows-x64/third-party/package-inventory.tsv
-            dist/uil-windows-x64/third-party/staged-file-inventory.tsv
-            dist/uil-windows-x64/third-party/license-review.md
-            dist/uil-windows-x64/third-party/licenses/**
+
+  release:
+    name: Publish signed release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-installer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download verified installer artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: uil-windows-x64-installer
+          path: release-assets
 
       - name: Create GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: uil ${{ github.ref_name }}
-          body_path: dist/release-notes.md
+          body_path: release-assets/release-notes.md
           files: |
-            dist/${{ steps.version.outputs.output_base }}.exe
-            dist/${{ steps.version.outputs.output_base }}.exe.sha256
-            dist/uil-third-party-notices.zip
-            dist/uil-windows-x64/deployment-manifest.txt
-            dist/uil-windows-x64/deployment-summary.md
-            dist/uil-windows-x64/deployment-imports.txt
-            dist/uil-windows-x64/deployment-ldd.txt
-            dist/uil-windows-x64/THIRD_PARTY_NOTICES.txt
-            dist/uil-windows-x64/third-party/package-inventory.tsv
-            dist/uil-windows-x64/third-party/staged-file-inventory.tsv
-            dist/uil-windows-x64/third-party/license-review.md
+            release-assets/${{ needs.build-installer.outputs.output_base }}.exe
+            release-assets/${{ needs.build-installer.outputs.output_base }}.exe.sha256
+            release-assets/uil-windows-x64/deployment-manifest.txt
+            release-assets/uil-windows-x64/deployment-checksums.sha256
+            release-assets/uil-windows-x64/deployment-summary.md
+            release-assets/uil-windows-x64/deployment-imports.txt
+            release-assets/uil-windows-x64/deployment-ldd.txt

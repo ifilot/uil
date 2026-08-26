@@ -11,6 +11,7 @@
 #include <QJsonValue>
 #include <QLoggingCategory>
 #include <QSaveFile>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QVector>
 
@@ -18,6 +19,7 @@
 #include <array>
 #include <limits>
 #include <optional>
+#include <utility>
 
 #include <zlib.h>
 
@@ -29,14 +31,26 @@ constexpr quint32 kCentralDirectoryHeaderSignature = 0x02014b50;
 constexpr quint32 kEndOfCentralDirectorySignature = 0x06054b50;
 constexpr quint16 kZipStoreMethod = 0;
 constexpr quint16 kZipDeflateMethod = 8;
+constexpr quint64 kMaximumPackageBytes = 1024ULL * 1024ULL * 1024ULL;
+constexpr quint64 kMaximumEntryBytes = 512ULL * 1024ULL * 1024ULL;
+constexpr quint64 kMaximumExtractedBytes = 2ULL * 1024ULL * 1024ULL * 1024ULL;
+constexpr quint32 kMaximumManifestBytes = 4U * 1024U * 1024U;
+constexpr quint32 kMaximumCompressionRatio = 200;
+constexpr int kMaximumEntryCount = 4096;
 
 struct ZipEntry {
     QString path;
     quint16 compressionMethod = 0;
+    quint32 crc = 0;
     quint32 compressedSize = 0;
     quint32 uncompressedSize = 0;
     quint32 localHeaderOffset = 0;
 };
+
+/** @brief Normalizes separators and removes redundant path components. */
+QString normalized_package_path(const QString& path) {
+    return QDir::cleanPath(QDir::fromNativeSeparators(path));
+}
 
 struct ZipWriteEntry {
     QString path;
@@ -84,19 +98,20 @@ std::optional<qsizetype> find_end_of_central_directory(const QByteArray& bytes) 
 
 /** @brief Returns whether a package path is relative and traversal-safe. */
 bool is_safe_relative_path(const QString& path) {
-    if (path.isEmpty() || path.startsWith(QLatin1Char('/')) || path.startsWith(QLatin1Char('\\'))) {
+    if (path.isEmpty() || path.contains(QChar::Null)) {
         return false;
     }
 
-    if (path.contains(QLatin1Char(':'))) {
+    const QString normalized_path = normalized_package_path(path);
+    if (normalized_path.startsWith(QLatin1Char('/'))
+        || normalized_path.contains(QLatin1Char(':'))) {
         return false;
     }
 
-    const QString cleanPath = QDir::cleanPath(path);
-    return cleanPath != QStringLiteral(".")
-        && !cleanPath.startsWith(QStringLiteral("../"))
-        && !cleanPath.contains(QStringLiteral("/../"))
-        && cleanPath != QStringLiteral("..");
+    return normalized_path != QStringLiteral(".")
+        && !normalized_path.startsWith(QStringLiteral("../"))
+        && !normalized_path.contains(QStringLiteral("/../"))
+        && normalized_path != QStringLiteral("..");
 }
 
 /** @brief Parses ZIP central-directory entries from package bytes. */
@@ -109,16 +124,28 @@ bool parse_central_directory(const QByteArray& bytes, QVector<ZipEntry>* entries
 
     const quint16 diskNumber = read_uint16(bytes, *eocdOffset + 4);
     const quint16 centralDirectoryDisk = read_uint16(bytes, *eocdOffset + 6);
+    const quint16 diskEntryCount = read_uint16(bytes, *eocdOffset + 8);
     const quint16 entryCount = read_uint16(bytes, *eocdOffset + 10);
     const quint32 centralDirectorySize = read_uint32(bytes, *eocdOffset + 12);
     const quint32 centralDirectoryOffset = read_uint32(bytes, *eocdOffset + 16);
-    if (diskNumber != 0 || centralDirectoryDisk != 0) {
+    const quint16 comment_length = read_uint16(bytes, *eocdOffset + 20);
+    if (diskNumber != 0 || centralDirectoryDisk != 0 || diskEntryCount != entryCount) {
         set_error(error_message, QStringLiteral("Multi-disk ZIP packages are not supported"));
+        return false;
+    }
+
+    if (*eocdOffset + 22 + comment_length != bytes.size()) {
+        set_error(error_message, QStringLiteral("ZIP end record has an invalid comment or trailing data"));
         return false;
     }
 
     if (centralDirectoryOffset == 0xffffffffu || centralDirectorySize == 0xffffffffu || entryCount == 0xffffu) {
         set_error(error_message, QStringLiteral("ZIP64 packages are not supported"));
+        return false;
+    }
+
+    if (entryCount > kMaximumEntryCount) {
+        set_error(error_message, QStringLiteral("UIL package contains too many files"));
         return false;
     }
 
@@ -128,15 +155,19 @@ bool parse_central_directory(const QByteArray& bytes, QVector<ZipEntry>* entries
     }
 
     entries->clear();
+    QSet<QString> normalized_paths;
+    quint64 total_uncompressed_size = 0;
     qsizetype offset = centralDirectoryOffset;
+    const qsizetype central_directory_end = qsizetype(centralDirectoryOffset) + qsizetype(centralDirectorySize);
     for (quint16 i = 0; i < entryCount; ++i) {
-        if (offset + 46 > bytes.size() || read_uint32(bytes, offset) != kCentralDirectoryHeaderSignature) {
+        if (offset + 46 > central_directory_end || read_uint32(bytes, offset) != kCentralDirectoryHeaderSignature) {
             set_error(error_message, QStringLiteral("Invalid ZIP central directory entry"));
             return false;
         }
 
         const quint16 generalPurposeFlags = read_uint16(bytes, offset + 8);
         const quint16 compressionMethod = read_uint16(bytes, offset + 10);
+        const quint32 checksum = read_uint32(bytes, offset + 16);
         const quint32 compressedSize = read_uint32(bytes, offset + 20);
         const quint32 uncompressedSize = read_uint32(bytes, offset + 24);
         const quint16 fileNameLength = read_uint16(bytes, offset + 28);
@@ -144,7 +175,8 @@ bool parse_central_directory(const QByteArray& bytes, QVector<ZipEntry>* entries
         const quint16 commentLength = read_uint16(bytes, offset + 32);
         const quint32 localHeaderOffset = read_uint32(bytes, offset + 42);
         const qsizetype nameOffset = offset + 46;
-        if (nameOffset + fileNameLength > bytes.size()) {
+        const qsizetype next_offset = nameOffset + fileNameLength + extraLength + commentLength;
+        if (next_offset > central_directory_end) {
             set_error(error_message, QStringLiteral("Invalid ZIP entry name"));
             return false;
         }
@@ -154,16 +186,68 @@ bool parse_central_directory(const QByteArray& bytes, QVector<ZipEntry>* entries
             return false;
         }
 
-        const QString path = QString::fromUtf8(bytes.mid(nameOffset, fileNameLength));
-        if (!path.endsWith(QLatin1Char('/'))) {
+        if (compressionMethod != kZipStoreMethod && compressionMethod != kZipDeflateMethod) {
+            set_error(error_message, QStringLiteral("Unsupported ZIP compression method"));
+            return false;
+        }
+
+        if (uncompressedSize > kMaximumEntryBytes) {
+            set_error(error_message, QStringLiteral("UIL package entry exceeds the extraction limit"));
+            return false;
+        }
+        total_uncompressed_size += uncompressedSize;
+        if (total_uncompressed_size > kMaximumExtractedBytes) {
+            set_error(error_message, QStringLiteral("UIL package exceeds the total extraction limit"));
+            return false;
+        }
+        if (compressionMethod == kZipDeflateMethod
+            && uncompressedSize > 1024 * 1024
+            && (compressedSize == 0
+                || quint64(uncompressedSize) > quint64(compressedSize) * kMaximumCompressionRatio)) {
+            set_error(error_message, QStringLiteral("UIL package entry has an unsafe compression ratio"));
+            return false;
+        }
+
+        const QByteArray encoded_path = bytes.mid(nameOffset, fileNameLength);
+        const QString path = QString::fromUtf8(encoded_path);
+        if (path.toUtf8() != encoded_path) {
+            set_error(error_message, QStringLiteral("ZIP entry name is not valid UTF-8"));
+            return false;
+        }
+        if (path.endsWith(QLatin1Char('/'))) {
+            QString directory_path = path;
+            directory_path.chop(1);
+            if (!is_safe_relative_path(directory_path)) {
+                set_error(error_message, QStringLiteral("Unsafe directory path in package: %1").arg(path));
+                return false;
+            }
+        } else {
             if (!is_safe_relative_path(path)) {
                 set_error(error_message, QStringLiteral("Unsafe path in package: %1").arg(path));
                 return false;
             }
-            entries->push_back(ZipEntry{QDir::cleanPath(path), compressionMethod, compressedSize, uncompressedSize, localHeaderOffset});
+            const QString normalized_path = normalized_package_path(path);
+            const QString collision_key = normalized_path.toCaseFolded();
+            if (normalized_paths.contains(collision_key)) {
+                set_error(error_message, QStringLiteral("Duplicate path in UIL package: %1").arg(normalized_path));
+                return false;
+            }
+            normalized_paths.insert(collision_key);
+            entries->push_back(ZipEntry{
+                normalized_path,
+                compressionMethod,
+                checksum,
+                compressedSize,
+                uncompressedSize,
+                localHeaderOffset});
         }
 
-        offset = nameOffset + fileNameLength + extraLength + commentLength;
+        offset = next_offset;
+    }
+
+    if (offset != central_directory_end) {
+        set_error(error_message, QStringLiteral("ZIP central directory size does not match its entries"));
+        return false;
     }
 
     return true;
@@ -171,6 +255,10 @@ bool parse_central_directory(const QByteArray& bytes, QVector<ZipEntry>* entries
 
 /** @brief Inflates a raw DEFLATE stream from a ZIP entry. */
 QByteArray inflate_raw_deflate(const QByteArray& input, quint32 expected_size, QString* error_message) {
+    if (expected_size > kMaximumEntryBytes) {
+        set_error(error_message, QStringLiteral("ZIP entry exceeds the decompression limit"));
+        return {};
+    }
     z_stream stream{};
     stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.constData()));
     stream.avail_in = uInt(input.size());
@@ -189,6 +277,11 @@ QByteArray inflate_raw_deflate(const QByteArray& input, quint32 expected_size, Q
         stream.avail_out = uInt(buffer.size());
         result = inflate(&stream, Z_NO_FLUSH);
         output.append(buffer.data(), int(buffer.size() - stream.avail_out));
+        if (quint64(output.size()) > expected_size || quint64(output.size()) > kMaximumEntryBytes) {
+            inflateEnd(&stream);
+            set_error(error_message, QStringLiteral("ZIP entry expanded beyond its declared size"));
+            return {};
+        }
     }
 
     inflateEnd(&stream);
@@ -210,6 +303,18 @@ QByteArray entry_payload(const QByteArray& bytes, const ZipEntry& entry, QString
 
     const quint16 fileNameLength = read_uint16(bytes, offset + 26);
     const quint16 extraLength = read_uint16(bytes, offset + 28);
+    const quint16 local_compression_method = read_uint16(bytes, offset + 8);
+    if (local_compression_method != entry.compressionMethod) {
+        set_error(error_message, QStringLiteral("ZIP compression method mismatch for %1").arg(entry.path));
+        return {};
+    }
+    const QByteArray local_encoded_path = bytes.mid(offset + 30, fileNameLength);
+    const QString local_decoded_path = QString::fromUtf8(local_encoded_path);
+    const QString local_path = normalized_package_path(local_decoded_path);
+    if (local_path != entry.path || local_decoded_path.toUtf8() != local_encoded_path) {
+        set_error(error_message, QStringLiteral("ZIP local and central names differ for %1").arg(entry.path));
+        return {};
+    }
     const qsizetype dataOffset = offset + 30 + fileNameLength + extraLength;
     if (dataOffset + entry.compressedSize > bytes.size()) {
         set_error(error_message, QStringLiteral("ZIP entry payload points outside the package: %1").arg(entry.path));
@@ -222,6 +327,14 @@ QByteArray entry_payload(const QByteArray& bytes, const ZipEntry& entry, QString
             set_error(error_message, QStringLiteral("Stored ZIP entry has an unexpected size: %1").arg(entry.path));
             return {};
         }
+        const quint32 checksum = crc32(
+            0L,
+            reinterpret_cast<const Bytef*>(compressed.constData()),
+            uInt(compressed.size()));
+        if (checksum != entry.crc) {
+            set_error(error_message, QStringLiteral("ZIP checksum mismatch for %1").arg(entry.path));
+            return {};
+        }
         return compressed;
     }
 
@@ -229,6 +342,14 @@ QByteArray entry_payload(const QByteArray& bytes, const ZipEntry& entry, QString
         QByteArray inflated = inflate_raw_deflate(compressed, entry.uncompressedSize, error_message);
         if (inflated.size() != int(entry.uncompressedSize)) {
             set_error(error_message, QStringLiteral("Deflated ZIP entry has an unexpected size: %1").arg(entry.path));
+            return {};
+        }
+        const quint32 checksum = crc32(
+            0L,
+            reinterpret_cast<const Bytef*>(inflated.constData()),
+            uInt(inflated.size()));
+        if (checksum != entry.crc) {
+            set_error(error_message, QStringLiteral("ZIP checksum mismatch for %1").arg(entry.path));
             return {};
         }
         return inflated;
@@ -240,7 +361,7 @@ QByteArray entry_payload(const QByteArray& bytes, const ZipEntry& entry, QString
 
 /** @brief Finds a ZIP entry by normalized package path. */
 const ZipEntry* find_entry(const QVector<ZipEntry>& entries, const QString& path) {
-    const QString cleanPath = QDir::cleanPath(path);
+    const QString cleanPath = normalized_package_path(path);
     for (const ZipEntry& entry : entries) {
         if (entry.path == cleanPath) {
             return &entry;
@@ -265,7 +386,11 @@ bool write_file(const QString& path, const QByteArray& contents, QString* error_
         return false;
     }
 
-    file.write(contents);
+    if (file.write(contents) != contents.size()) {
+        set_error(error_message, QStringLiteral("Could not fully write %1: %2").arg(path, file.errorString()));
+        file.cancelWriting();
+        return false;
+    }
     if (!file.commit()) {
         set_error(error_message, QStringLiteral("Could not finalize %1: %2").arg(path, file.errorString()));
         return false;
@@ -296,24 +421,37 @@ bool read_file_bytes(const QString& path, QByteArray* contents, QString* error_m
         return false;
     }
 
+    if (quint64(file.size()) > kMaximumEntryBytes) {
+        set_error(error_message, QStringLiteral("Input file exceeds the package entry limit: %1").arg(path));
+        return false;
+    }
+
     *contents = file.readAll();
+    if (file.error() != QFileDevice::NoError || contents->size() != file.size()) {
+        set_error(error_message, QStringLiteral("Could not fully read %1: %2").arg(path, file.errorString()));
+        return false;
+    }
     return true;
 }
 
 /** @brief Adds an in-memory file to a pending ZIP archive. */
 bool add_zip_entry(QVector<ZipWriteEntry>* entries, const QString& path, const QByteArray& data, QString* error_message) {
-    const QString cleanPath = QDir::cleanPath(path);
+    const QString cleanPath = normalized_package_path(path);
     if (!is_safe_relative_path(cleanPath)) {
         set_error(error_message, QStringLiteral("Unsafe package output path: %1").arg(path));
         return false;
     }
-    if (data.size() > std::numeric_limits<quint32>::max()) {
+    if (quint64(data.size()) > kMaximumEntryBytes) {
         set_error(error_message, QStringLiteral("Package entry is too large: %1").arg(cleanPath));
+        return false;
+    }
+    if (entries->size() >= kMaximumEntryCount) {
+        set_error(error_message, QStringLiteral("UIL package contains too many files"));
         return false;
     }
 
     const auto existing = std::find_if(entries->cbegin(), entries->cend(), [&cleanPath](const ZipWriteEntry& entry) {
-        return entry.path == cleanPath;
+        return entry.path.compare(cleanPath, Qt::CaseInsensitive) == 0;
     });
     if (existing != entries->cend()) {
         set_error(error_message, QStringLiteral("Duplicate package entry: %1").arg(cleanPath));
@@ -445,7 +583,16 @@ bool extract_uil_package(const QString& package_path, QTemporaryDir& destination
         return false;
     }
 
+    if (quint64(packageFile.size()) > kMaximumPackageBytes) {
+        set_error(error_message, QStringLiteral("UIL package exceeds the maximum supported size"));
+        return false;
+    }
+
     const QByteArray bytes = packageFile.readAll();
+    if (packageFile.error() != QFileDevice::NoError || bytes.size() != packageFile.size()) {
+        set_error(error_message, QStringLiteral("Could not completely read UIL package: %1").arg(packageFile.errorString()));
+        return false;
+    }
     QVector<ZipEntry> entries;
     if (!parse_central_directory(bytes, &entries, error_message)) {
         return false;
@@ -454,6 +601,10 @@ bool extract_uil_package(const QString& package_path, QTemporaryDir& destination
     const ZipEntry* manifestEntry = find_entry(entries, QStringLiteral("manifest.json"));
     if (!manifestEntry) {
         set_error(error_message, QStringLiteral("UIL package is missing manifest.json"));
+        return false;
+    }
+    if (manifestEntry->uncompressedSize > kMaximumManifestBytes) {
+        set_error(error_message, QStringLiteral("UIL manifest exceeds the size limit"));
         return false;
     }
 
@@ -483,7 +634,8 @@ bool extract_uil_package(const QString& package_path, QTemporaryDir& destination
         return false;
     }
 
-    const QString entryPdf = QDir::cleanPath(manifest.value(QStringLiteral("entry_pdf")).toString(QStringLiteral("build/presentation.pdf")));
+    const QString entryPdf = normalized_package_path(
+        manifest.value(QStringLiteral("entry_pdf")).toString(QStringLiteral("build/presentation.pdf")));
     if (!is_safe_relative_path(entryPdf)) {
         set_error(error_message, QStringLiteral("Unsafe entry_pdf path in UIL manifest"));
         return false;
@@ -505,7 +657,7 @@ bool extract_uil_package(const QString& package_path, QTemporaryDir& destination
         if (rawPath.isEmpty()) {
             continue;
         }
-        const QString path = QDir::cleanPath(rawPath);
+        const QString path = normalized_package_path(rawPath);
         if (!is_safe_relative_path(path)) {
             set_error(error_message, QStringLiteral("Unsafe movie asset path in UIL manifest: %1").arg(path));
             return false;
@@ -533,7 +685,7 @@ bool extract_uil_package(const QString& package_path, QTemporaryDir& destination
             continue;
         }
 
-        const QString path = QDir::cleanPath(rawPath);
+        const QString path = normalized_package_path(rawPath);
         if (!is_safe_relative_path(path)) {
             set_error(error_message, QStringLiteral("Unsafe overlay path in UIL manifest: %1").arg(path));
             return false;
@@ -554,7 +706,21 @@ bool extract_uil_package(const QString& package_path, QTemporaryDir& destination
         }
     }
 
+    QSet<QString> required_paths{
+        QStringLiteral("manifest.json"),
+        entryPdf
+    };
+    for (const QString& path : std::as_const(movie_asset_paths)) {
+        required_paths.insert(path);
+    }
+    for (const QString& path : std::as_const(overlay_image_paths)) {
+        required_paths.insert(path);
+    }
+
     for (const ZipEntry& entry : entries) {
+        if (!required_paths.contains(entry.path)) {
+            continue;
+        }
         const QByteArray payload = entry_payload(bytes, entry, error_message);
         if (payload.isEmpty() && entry.uncompressedSize > 0) {
             return false;
@@ -596,7 +762,7 @@ bool write_uil_package(
         return false;
     }
 
-    const QString entryPdf = QDir::cleanPath(entry_pdf_relative_path.isEmpty()
+    const QString entryPdf = normalized_package_path(entry_pdf_relative_path.isEmpty()
             ? QStringLiteral("build/presentation.pdf")
             : entry_pdf_relative_path);
     if (!is_safe_relative_path(entryPdf)) {
@@ -611,7 +777,7 @@ bool write_uil_package(
 
     QJsonArray movieAssets;
     for (const QString& rawPath : movie_asset_paths) {
-        const QString assetPath = QDir::cleanPath(rawPath);
+        const QString assetPath = normalized_package_path(rawPath);
         if (!is_safe_relative_path(assetPath)) {
             set_error(error_message, QStringLiteral("Unsafe movie asset path: %1").arg(assetPath));
             return false;

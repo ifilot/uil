@@ -80,6 +80,15 @@ QPixmap create_loading_splash_pixmap() {
 }
 
 #ifdef Q_OS_WIN
+/** @brief Restricts subsequent Windows DLL resolution to trusted search locations. */
+void harden_windows_dll_search() {
+    if (!SetDefaultDllDirectories(
+            LOAD_LIBRARY_SEARCH_APPLICATION_DIR
+            | LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+        SetDllDirectoryW(L"");
+    }
+}
+
 /** @brief Returns elapsed time since Windows created the current process. */
 qint64 windows_process_age_ms() {
     FILETIME creation_time;
@@ -108,6 +117,10 @@ qint64 windows_process_age_ms() {
         : 0;
 }
 #else
+/** @brief Performs no DLL search configuration on non-Windows platforms. */
+void harden_windows_dll_search() {
+}
+
 /** @brief Returns zero when process-creation timing is unavailable. */
 qint64 windows_process_age_ms() {
     return 0;
@@ -146,6 +159,7 @@ int main(int argc, char* argv[]) {
     QElapsedTimer process_start_timer;
     process_start_timer.start();
     const qint64 process_to_main_ms = windows_process_age_ms();
+    harden_windows_dll_search();
     launcher_readiness::initialize(argc, argv);
     QApplication app(argc, argv);
     const qint64 application_construction_ms = process_start_timer.elapsed();

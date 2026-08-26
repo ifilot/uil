@@ -37,6 +37,9 @@ private slots:
 
     /** @brief Verifies that clearing removes entries and resets statistics. */
     void clear_resets_cache_state();
+
+    /** @brief Verifies that the platform-adaptive default remains bounded. */
+    void adaptive_default_is_bounded();
 };
 
 void SlideCacheTest::lookup_updates_statistics() {
@@ -114,6 +117,12 @@ void SlideCacheTest::clear_resets_cache_state() {
     QCOMPARE(cache.hits(), 0);
     QCOMPARE(cache.misses(), 0);
     QCOMPARE(cache.evictions(), 0);
+}
+
+void SlideCacheTest::adaptive_default_is_bounded() {
+    const qint64 budget = SlideCache::recommended_memory_limit_bytes();
+    QVERIFY(budget >= 128LL * 1024LL * 1024LL);
+    QVERIFY(budget <= 1024LL * 1024LL * 1024LL);
 }
 
 QTEST_GUILESS_MAIN(SlideCacheTest)

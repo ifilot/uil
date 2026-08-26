@@ -81,6 +81,36 @@ bool is_descendant_of(const QWidget* widget, const QWidget* ancestor) {
 
     return false;
 }
+
+/** @brief Returns the shared visible-overlay thumbnail icon. */
+const QIcon& thumbnail_overlay_visible_icon() {
+    static const QIcon icon = font_awesome::icon(
+        font_awesome::Style::Regular,
+        QStringLiteral("eye"),
+        QColor(0xff, 0xff, 0xff),
+        QSize(16, 16));
+    return icon;
+}
+
+/** @brief Returns the shared hidden-overlay thumbnail icon. */
+const QIcon& thumbnail_overlay_hidden_icon() {
+    static const QIcon icon = font_awesome::icon(
+        font_awesome::Style::Regular,
+        QStringLiteral("eye-slash"),
+        QColor(0x8a, 0x8a, 0x8a),
+        QSize(16, 16));
+    return icon;
+}
+
+/** @brief Returns the shared clear-overlay thumbnail icon. */
+const QIcon& thumbnail_clear_overlay_icon() {
+    static const QIcon icon = font_awesome::icon(
+        font_awesome::Style::Solid,
+        QStringLiteral("eraser"),
+        QColor(0xff, 0xff, 0xff),
+        QSize(16, 16));
+    return icon;
+}
 }
 
 SlidePreview::SlidePreview(QWidget* parent)
@@ -134,9 +164,9 @@ public:
     explicit SlideThumbnail(int page_index, QWidget* parent = nullptr)
         : QWidget(parent),
           page_index_(page_index),
-          overlay_visible_icon_(font_awesome::icon(font_awesome::Style::Regular, QStringLiteral("eye"), QColor(0xff, 0xff, 0xff), QSize(16, 16))),
-          overlay_hidden_icon_(font_awesome::icon(font_awesome::Style::Regular, QStringLiteral("eye-slash"), QColor(0x8a, 0x8a, 0x8a), QSize(16, 16))),
-          clear_overlay_icon_(font_awesome::icon(font_awesome::Style::Solid, QStringLiteral("eraser"), QColor(0xff, 0xff, 0xff), QSize(16, 16))) {
+          overlay_visible_icon_(thumbnail_overlay_visible_icon()),
+          overlay_hidden_icon_(thumbnail_overlay_hidden_icon()),
+          clear_overlay_icon_(thumbnail_clear_overlay_icon()) {
         setObjectName(QStringLiteral("slideThumbnail"));
         setFixedSize(180, 128);
         setCursor(Qt::PointingHandCursor);
@@ -378,9 +408,17 @@ public:
         while (QLayoutItem* item = grid_->takeAt(0)) {
             delete item;
         }
+        if (row_count_ > 0) {
+            grid_->setRowStretch(row_count_, 0);
+        }
+        if (column_count_ > 0) {
+            grid_->setColumnStretch(column_count_, 0);
+        }
         qDeleteAll(thumbnails_);
         thumbnails_.clear();
         current_page_ = -1;
+        column_count_ = 0;
+        row_count_ = 0;
         span.checkpoint(QStringLiteral("clear_previous_thumbnails"));
 
         for (int page = 0; page < page_count; ++page) {
@@ -485,17 +523,28 @@ protected:
 private:
     /** @brief Arranges overview thumbnails into the available columns. */
     void relayout() {
-        while (QLayoutItem* item = grid_->takeAt(0)) {
-            delete item;
-        }
-
         const int tileWidth = 180;
         const int availableWidth = qMax(tileWidth, viewport()->width() - 16);
         const int columns = qMax(1, availableWidth / (tileWidth + grid_->horizontalSpacing()));
+        if (columns == column_count_ && grid_->count() == thumbnails_.size()) {
+            return;
+        }
+
+        while (QLayoutItem* item = grid_->takeAt(0)) {
+            delete item;
+        }
+        if (row_count_ > 0) {
+            grid_->setRowStretch(row_count_, 0);
+        }
+        if (column_count_ > 0) {
+            grid_->setColumnStretch(column_count_, 0);
+        }
         for (int i = 0; i < thumbnails_.size(); ++i) {
             grid_->addWidget(thumbnails_.at(i), i / columns, i % columns);
         }
-        grid_->setRowStretch((thumbnails_.size() + columns - 1) / columns, 1);
+        row_count_ = (thumbnails_.size() + columns - 1) / columns;
+        column_count_ = columns;
+        grid_->setRowStretch(row_count_, 1);
         grid_->setColumnStretch(columns, 1);
         grid_->activate();
     }
@@ -549,6 +598,8 @@ private:
     QTimer* render_request_timer_ = nullptr;
     QList<SlideThumbnail*> thumbnails_;
     int current_page_ = -1;
+    int column_count_ = 0;
+    int row_count_ = 0;
 };
 
 class IconToolButton final : public QToolButton {

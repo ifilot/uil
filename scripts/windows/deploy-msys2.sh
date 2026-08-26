@@ -136,21 +136,67 @@ is_mingw_path() {
     [[ "$path_l" == "$MINGW_PREFIX_L/"* ]]
 }
 
-is_msys_runtime_path() {
-    local path_l="${1,,}"
-    [[ "$path_l" == /usr/bin/* ]]
-}
-
-should_copy_dependency() {
-    local dep="$1"
-    [[ -f "$dep" ]] || return 1
-    is_stage_path "$dep" && return 1
-    is_windows_system_path "$dep" && return 1
-    is_mingw_path "$dep" && [[ "${dep,,}" == *.dll ]]
-}
-
 find_stage_binaries() {
     find "$STAGE_DIR" -type f \( -iname '*.exe' -o -iname '*.dll' \) -print | sort
+}
+
+import_names_for_binary() {
+    objdump -p "$1" 2>/dev/null \
+        | sed -n 's/^[[:space:]]*DLL Name: //p' \
+        | sort -fu
+}
+
+index_dependency_directory() {
+    local directory="$1"
+    local index_name="$2"
+    local file
+    local -n index="$index_name"
+
+    while IFS= read -r file; do
+        index["${file##*/}"]="$file"
+    done < <(find "$directory" -maxdepth 1 -type f -iname '*.dll' -print 2>/dev/null \
+        | awk '{print tolower($0)}')
+}
+
+refresh_stage_dependency_index() {
+    local file
+    STAGE_FILE_BY_NAME=()
+    while IFS= read -r file; do
+        STAGE_FILE_BY_NAME["${file##*/}"]="$file"
+    done < <(find "$STAGE_DIR" -maxdepth 1 -type f -iname '*.dll' -print 2>/dev/null \
+        | awk '{print tolower($0)}')
+}
+
+initialize_external_dependency_indexes() {
+    index_dependency_directory "$WINDOWS_SYSTEM_DIR" SYSTEM_FILE_BY_NAME
+    index_dependency_directory "$MINGW_PREFIX/bin" MINGW_FILE_BY_NAME
+}
+
+resolve_import_source() {
+    local name="$1"
+    local name_l="${name,,}"
+
+    if [[ -n "${STAGE_FILE_BY_NAME[$name_l]+x}" ]]; then
+        printf 'stage\t%s\n' "${STAGE_FILE_BY_NAME[$name_l]}"
+        return 0
+    fi
+
+    if [[ "$name_l" == api-ms-win-*.dll || "$name_l" == ext-ms-*.dll ]]; then
+        printf 'system\t%s\n' "$name"
+        return 0
+    fi
+
+    if [[ -n "${SYSTEM_FILE_BY_NAME[$name_l]+x}" ]]; then
+        printf 'system\t%s\n' "${SYSTEM_FILE_BY_NAME[$name_l]}"
+        return 0
+    fi
+
+    if [[ -n "${MINGW_FILE_BY_NAME[$name_l]+x}" ]]; then
+        printf 'mingw\t%s\n' "${MINGW_FILE_BY_NAME[$name_l]}"
+        return 0
+    fi
+
+    return 1
 }
 
 seed_lazy_ffmpeg_libraries() {
@@ -184,15 +230,18 @@ copy_runtime_dependency_closure() {
     local -a pending
     local index=0
     local binary
-    local dep
+    local import_name
+    local source
+    local source_kind
+    local source_path
     local dep_base
     local dest
     local key
-    local ldd_output
     local copied=0
     local scanned=0
     declare -A processed=()
 
+    refresh_stage_dependency_index
     mapfile -t pending < <(find_stage_binaries)
 
     while (( index < ${#pending[@]} )); do
@@ -208,97 +257,58 @@ copy_runtime_dependency_closure() {
         processed[$key]=1
         scanned=$((scanned + 1))
 
-        ldd_output="$(ldd "$binary" 2>&1 || true)"
         AUDIT_BINARIES+=("$binary")
-        AUDIT_LDD_OUTPUTS+=("$ldd_output")
 
-        while IFS= read -r dep; do
-            dep="$(canonical_file_path "$dep")"
-            if should_copy_dependency "$dep"; then
-                dep_base="${dep##*/}"
+        while IFS= read -r import_name; do
+            [[ -n "$import_name" ]] || continue
+            source="$(resolve_import_source "$import_name")" \
+                || die "could not resolve imported DLL $import_name required by $binary"
+            source_kind="${source%%$'\t'*}"
+            source_path="${source#*$'\t'}"
+            if [[ "$source_kind" == "mingw" ]]; then
+                dep_base="$(basename "$source_path")"
                 dest="$STAGE_DIR/$dep_base"
-                if [[ ! -f "$dest" ]]; then
-                    log "Bundling $dep_base"
-                    cp -f "$dep" "$dest"
-                    chmod u+w "$dest"
-                    pending+=("$dest")
-                    copied=$((copied + 1))
-                fi
+                log "Bundling $dep_base"
+                cp -f "$source_path" "$dest"
+                chmod u+w "$dest"
+                STAGE_FILE_BY_NAME["${dep_base,,}"]="$dest"
+                pending+=("$dest")
+                copied=$((copied + 1))
             fi
-        done < <(parse_ldd_output_paths <<<"$ldd_output")
+        done < <(import_names_for_binary "$binary")
     done
 
-    log "Bundled $copied dependency DLL(s) after scanning $scanned binary file(s)"
+    log "Bundled $copied dependency DLL(s) after statically scanning $scanned PE file(s)"
 }
 
 verify_dependency_closure() {
     local problems=0
     local binary
-    local dep
-    local dep_base
-    local ldd_output
+    local import_name
+    local source
     local rel
     local imports_log="$STAGE_DIR/deployment-imports.txt"
-    local ldd_log="$STAGE_DIR/deployment-ldd.txt"
-    local index
 
-    : > "$ldd_log"
+    refresh_stage_dependency_index
     : > "$imports_log"
 
-    for ((index = 0; index < ${#AUDIT_BINARIES[@]}; index++)); do
-        binary="${AUDIT_BINARIES[$index]}"
+    for binary in "${AUDIT_BINARIES[@]}"; do
         rel="${binary#"$STAGE_DIR"/}"
-        ldd_output="${AUDIT_LDD_OUTPUTS[$index]}"
-
         {
             printf '### %s\n' "$rel"
-            printf '%s\n' "$ldd_output"
-            printf '\n'
-        } >> "$ldd_log"
-
-        if grep -qi 'not found' <<<"$ldd_output"; then
-            printf 'unresolved dependency in %s:\n%s\n' "$rel" "$ldd_output" >&2
-            problems=$((problems + 1))
-        fi
-
-        while IFS= read -r dep; do
-            dep_base="${dep##*/}"
-
-            if is_stage_path "$dep" || is_windows_system_path "$dep"; then
-                continue
-            fi
-
-            if is_mingw_path "$dep"; then
-                if [[ ! -f "$STAGE_DIR/$dep_base" ]]; then
-                    printf 'dependency was resolved from MSYS2 but is not staged: %s -> %s\n' "$rel" "$dep" >&2
+            while IFS= read -r import_name; do
+                [[ -n "$import_name" ]] || continue
+                if source="$(resolve_import_source "$import_name")"; then
+                    printf '  %s -> %s\n' "$import_name" "$source"
+                else
+                    printf 'unresolved static import in %s: %s\n' "$rel" "$import_name" >&2
+                    printf '  %s -> unresolved\n' "$import_name"
                     problems=$((problems + 1))
                 fi
-                continue
-            fi
-
-            if is_msys_runtime_path "$dep"; then
-                printf 'native Windows deployment unexpectedly depends on MSYS runtime: %s -> %s\n' "$rel" "$dep" >&2
-                problems=$((problems + 1))
-                continue
-            fi
-
-            printf 'dependency is outside the staged app, Windows system directories, and %s: %s -> %s\n' \
-                "$MINGW_PREFIX" "$rel" "$dep" >&2
-            problems=$((problems + 1))
-        done < <(parse_ldd_output_paths <<<"$ldd_output")
-
-    done
-
-    if command -v objdump >/dev/null 2>&1; then
-        {
-            for binary in "$STAGE_DIR/$APP_NAME.exe" "$STAGE_DIR/$VIEWER_NAME.exe"; do
-                printf '### %s\n' "$(basename "$binary")"
-                objdump -p "$binary" 2>/dev/null \
-                    | sed -n 's/^[[:space:]]*DLL Name: /  /p' || true
-                printf '\n'
-            done
+            done < <(import_names_for_binary "$binary")
+            printf '\n'
         } >> "$imports_log"
-    fi
+    done
 
     if objdump -p "$STAGE_DIR/$APP_NAME.exe" 2>/dev/null \
         | sed -n 's/^[[:space:]]*DLL Name: //p' \
@@ -320,21 +330,69 @@ verify_dependency_closure() {
     if (( problems > 0 )); then
         die "deployment verification failed with $problems problem(s)"
     fi
+
+    verify_primary_binary_dependencies
 }
 
 validate_existing_dependency_audit() {
     local audit_count
     local binary_count
-    local audit_log="$STAGE_DIR/deployment-ldd.txt"
+    local audit_log="$STAGE_DIR/deployment-imports.txt"
 
     [[ -s "$audit_log" ]] || die "cannot finalize stage without a completed dependency audit"
-    grep -qi 'not found' "$audit_log" \
+    grep -qi 'unresolved' "$audit_log" \
         && die "cannot finalize stage because its dependency audit contains unresolved entries"
 
     audit_count="$(grep -c '^### ' "$audit_log" || true)"
     binary_count="$(find_stage_binaries | wc -l | tr -d '[:space:]')"
     [[ "$audit_count" == "$binary_count" ]] \
         || die "cannot finalize stage: audit covers $audit_count of $binary_count binaries"
+
+    verify_primary_binary_dependencies
+}
+
+verify_primary_binary_dependencies() {
+    local binary
+    local dep
+    local dep_base
+    local ldd_output
+    local ldd_log="$STAGE_DIR/deployment-ldd.txt"
+    local problems=0
+
+    : > "$ldd_log"
+    for binary in "$STAGE_DIR/$APP_NAME.exe" "$STAGE_DIR/$VIEWER_NAME.exe"; do
+        if ! ldd_output="$(timeout 20s ldd "$binary" 2>&1)"; then
+            printf 'runtime dependency check failed or timed out for %s:\n%s\n' \
+                "$binary" "$ldd_output" >&2
+            problems=$((problems + 1))
+        fi
+        {
+            printf '### %s\n' "$(basename "$binary")"
+            printf '%s\n\n' "$ldd_output"
+        } >> "$ldd_log"
+
+        if grep -qi 'not found' <<<"$ldd_output"; then
+            printf 'updated primary binary has an unresolved dependency: %s\n%s\n' \
+                "$binary" "$ldd_output" >&2
+            problems=$((problems + 1))
+        fi
+
+        while IFS= read -r dep; do
+            dep_base="${dep##*/}"
+            if is_stage_path "$dep" || is_windows_system_path "$dep"; then
+                continue
+            fi
+            if is_mingw_path "$dep" && [[ -f "$STAGE_DIR/$dep_base" ]]; then
+                continue
+            fi
+            printf 'updated primary binary resolves outside the verified deployment: %s -> %s\n' \
+                "$binary" "$dep" >&2
+            problems=$((problems + 1))
+        done < <(parse_ldd_output_paths <<<"$ldd_output")
+    done
+
+    (( problems == 0 )) \
+        || die "updated primary-binary verification failed with $problems problem(s)"
 }
 
 resolve_staged_source_path() {
@@ -581,9 +639,11 @@ copy_app_license_files() {
 write_manifest() {
     local manifest="$STAGE_DIR/deployment-manifest.txt"
     local summary="$STAGE_DIR/deployment-summary.md"
+    local checksums="$STAGE_DIR/deployment-checksums.sha256"
     local file_count
     local dll_count
 
+    : > "$checksums"
     file_count="$(find "$STAGE_DIR" -type f | wc -l | tr -d '[:space:]')"
     dll_count="$(find "$STAGE_DIR" -type f -iname '*.dll' | wc -l | tr -d '[:space:]')"
 
@@ -610,8 +670,15 @@ write_manifest() {
         printf -- '- Qt deploy tool: `%s`\n' "$WINDEPLOYQT"
         printf -- '- Files staged: `%s`\n' "$file_count"
         printf -- '- DLLs staged: `%s`\n' "$dll_count"
-        printf '\nThe staging directory was populated with `windeployqt`, then completed by recursively copying non-system DLL dependencies resolved by `ldd` from the active MSYS2 toolchain.\n'
+        printf '\nThe staging directory was populated with `windeployqt`, then completed by recursively copying non-system DLL imports found with `objdump`. `ldd` validates the final launcher and viewer with a strict timeout.\n'
     } > "$summary"
+
+    (
+        cd "$STAGE_DIR"
+        find . -type f ! -name 'deployment-checksums.sha256' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum
+    ) > "$checksums"
 }
 
 APP_NAME="uil"
@@ -621,7 +688,9 @@ STAGE_DIR="dist/uil-windows-x64"
 GENERATE_THIRD_PARTY_NOTICES=0
 FINALIZE_EXISTING=0
 declare -a AUDIT_BINARIES=()
-declare -a AUDIT_LDD_OUTPUTS=()
+declare -A STAGE_FILE_BY_NAME=()
+declare -A SYSTEM_FILE_BY_NAME=()
+declare -A MINGW_FILE_BY_NAME=()
 
 while (($#)); do
     case "$1" in
@@ -672,12 +741,17 @@ MINGW_PREFIX="${MINGW_PREFIX:-/ucrt64}"
 
 command -v cygpath >/dev/null 2>&1 || die "cygpath is required"
 command -v ldd >/dev/null 2>&1 || die "ldd is required"
+command -v objdump >/dev/null 2>&1 || die "objdump is required"
+command -v timeout >/dev/null 2>&1 || die "timeout is required"
 
 BUILD_DIR="$(absolute_path "$BUILD_DIR")"
 STAGE_DIR="$(absolute_path "$STAGE_DIR")"
 MINGW_PREFIX="$(absolute_path "$MINGW_PREFIX")"
+WINDOWS_ROOT="$(cygpath -u "${WINDIR:-C:\\Windows}")"
+WINDOWS_SYSTEM_DIR="$WINDOWS_ROOT/System32"
 STAGE_DIR_L="${STAGE_DIR,,}"
 MINGW_PREFIX_L="${MINGW_PREFIX,,}"
+initialize_external_dependency_indexes
 
 find_built_executable() {
     local executable_name="$1"

@@ -11,7 +11,10 @@
 class SlideCache {
 public:
     /** @brief Constructs a cache capped at @p memoryLimitBytes bytes. */
-    explicit SlideCache(qint64 memoryLimitBytes = 512ll * 1024ll * 1024ll);
+    explicit SlideCache(qint64 memoryLimitBytes = -1);
+
+    /** @brief Returns a platform-adaptive default cache budget. */
+    static qint64 recommended_memory_limit_bytes();
 
     /** @brief Returns whether an image is cached for @p key. */
     bool contains(const SlideCacheKey& key) const;

@@ -2,10 +2,35 @@
 
 #include <QLoggingCategory>
 
+#include <algorithm>
+
+#if defined(Q_OS_WIN)
+#include <windows.h>
+#endif
+
 Q_LOGGING_CATEGORY(logCache, "cache", QtInfoMsg)
 
 SlideCache::SlideCache(qint64 memoryLimitBytes)
-    : memory_limit_bytes_(memoryLimitBytes) {
+    : memory_limit_bytes_(memoryLimitBytes > 0
+              ? memoryLimitBytes
+              : recommended_memory_limit_bytes()) {
+}
+
+qint64 SlideCache::recommended_memory_limit_bytes() {
+    constexpr qint64 minimum_cache_bytes = 128LL * 1024LL * 1024LL;
+    constexpr qint64 default_cache_bytes = 512LL * 1024LL * 1024LL;
+    constexpr qint64 maximum_cache_bytes = 1024LL * 1024LL * 1024LL;
+#if defined(Q_OS_WIN)
+    MEMORYSTATUSEX memory_status{};
+    memory_status.dwLength = sizeof(memory_status);
+    if (GlobalMemoryStatusEx(&memory_status)) {
+        return std::clamp(
+            qint64(memory_status.ullTotalPhys / 8ULL),
+            minimum_cache_bytes,
+            maximum_cache_bytes);
+    }
+#endif
+    return default_cache_bytes;
 }
 
 bool SlideCache::contains(const SlideCacheKey& key) const {
@@ -76,7 +101,7 @@ int SlideCache::evictions() const {
 }
 
 qint64 SlideCache::estimate_bytes(const QImage& image) {
-    return qint64(image.width()) * qint64(image.height()) * 4ll;
+    return qint64(image.sizeInBytes());
 }
 
 void SlideCache::touch(const SlideCacheKey& key) {

@@ -3,8 +3,11 @@
 #include "../util/performance_log.hpp"
 
 #include <QByteArray>
+#include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QLibrary>
 #include <QLoggingCategory>
 #include <QMutex>
@@ -23,6 +26,9 @@ extern "C" {
 }
 
 namespace {
+constexpr int kMaximumVideoDimension = 8192;
+constexpr qint64 kMaximumVideoPixels = 34LL * 1024LL * 1024LL;
+
 /** @brief Lazily resolves the FFmpeg API without adding DLLs to the executable import table. */
 class FfmpegApi final {
 public:
@@ -91,10 +97,19 @@ private:
     /** @brief Configures platform-specific FFmpeg library names. */
     void configure_library_names() {
 #if defined(Q_OS_WIN)
-        avutil_.setFileName(QStringLiteral("avutil-%1").arg(LIBAVUTIL_VERSION_MAJOR));
-        swscale_.setFileName(QStringLiteral("swscale-%1").arg(LIBSWSCALE_VERSION_MAJOR));
-        avcodec_.setFileName(QStringLiteral("avcodec-%1").arg(LIBAVCODEC_VERSION_MAJOR));
-        avformat_.setFileName(QStringLiteral("avformat-%1").arg(LIBAVFORMAT_VERSION_MAJOR));
+        const QDir application_directory(QCoreApplication::applicationDirPath());
+        set_windows_library_name(
+            avutil_, application_directory,
+            QStringLiteral("avutil-%1.dll").arg(LIBAVUTIL_VERSION_MAJOR));
+        set_windows_library_name(
+            swscale_, application_directory,
+            QStringLiteral("swscale-%1.dll").arg(LIBSWSCALE_VERSION_MAJOR));
+        set_windows_library_name(
+            avcodec_, application_directory,
+            QStringLiteral("avcodec-%1.dll").arg(LIBAVCODEC_VERSION_MAJOR));
+        set_windows_library_name(
+            avformat_, application_directory,
+            QStringLiteral("avformat-%1.dll").arg(LIBAVFORMAT_VERSION_MAJOR));
 #else
         avutil_.setFileName(QStringLiteral("avutil"));
         swscale_.setFileName(QStringLiteral("swscale"));
@@ -102,6 +117,17 @@ private:
         avformat_.setFileName(QStringLiteral("avformat"));
 #endif
     }
+
+#if defined(Q_OS_WIN)
+    /** @brief Prefers an app-local DLL while retaining a development-build fallback. */
+    static void set_windows_library_name(
+        QLibrary& library,
+        const QDir& application_directory,
+        const QString& file_name) {
+        const QString local_path = application_directory.filePath(file_name);
+        library.setFileName(QFileInfo::exists(local_path) ? local_path : file_name);
+    }
+#endif
 
     /** @brief Loads one runtime library and records a useful error on failure. */
     bool load_library(QLibrary& library) {
@@ -232,8 +258,20 @@ QString av_error_to_string(int error_code) {
     return QString::fromLocal8Bit(buffer.data());
 }
 
+/** @brief Returns whether decoded frame dimensions fit the application's memory budget. */
+bool is_safe_frame_size(int width, int height) {
+    return width > 0
+        && height > 0
+        && width <= kMaximumVideoDimension
+        && height <= kMaximumVideoDimension
+        && qint64(width) * qint64(height) <= kMaximumVideoPixels;
+}
+
 /** @brief Converts a decoded FFmpeg frame to a detached Qt image. */
 QImage frame_to_image(const AVFrame* frame, AVCodecContext* codec_context) {
+    if (!frame || !codec_context || !is_safe_frame_size(frame->width, frame->height)) {
+        return {};
+    }
     std::unique_ptr<SwsContext, SwsContextDeleter> swsContext(
         ffmpeg_api().sws_get_context_fn(
             frame->width,
@@ -263,7 +301,7 @@ QImage frame_to_image(const AVFrame* frame, AVCodecContext* codec_context) {
         frame->data,
         frame->linesize,
         0,
-        codec_context->height,
+        frame->height,
         destinationData,
         destinationLinesize);
 
@@ -381,10 +419,28 @@ bool VideoFrameReader::Impl::open(const QString& path, QString* error_message) {
         return false;
     }
 
+    if (codec_context_->width > 0
+        && codec_context_->height > 0
+        && !is_safe_frame_size(codec_context_->width, codec_context_->height)) {
+        if (error_message) {
+            *error_message = QStringLiteral("Video dimensions exceed the safe decoding limit");
+        }
+        close();
+        return false;
+    }
+
     result = ffmpeg_api().avcodec_open2_fn(codec_context_.get(), codec, nullptr);
     if (result < 0) {
         if (error_message) {
             *error_message = QStringLiteral("Could not open decoder: %1").arg(av_error_to_string(result));
+        }
+        close();
+        return false;
+    }
+
+    if (!is_safe_frame_size(codec_context_->width, codec_context_->height)) {
+        if (error_message) {
+            *error_message = QStringLiteral("Video dimensions exceed the safe decoding limit");
         }
         close();
         return false;
@@ -405,6 +461,9 @@ bool VideoFrameReader::Impl::open(const QString& path, QString* error_message) {
 }
 
 std::optional<DecodedVideoFrame> VideoFrameReader::Impl::read_next_frame(QString* error_message) {
+    if (error_message) {
+        error_message->clear();
+    }
     if (!is_open()) {
         if (error_message) {
             *error_message = QStringLiteral("Video reader is not open");
@@ -415,6 +474,9 @@ std::optional<DecodedVideoFrame> VideoFrameReader::Impl::read_next_frame(QString
     while (true) {
         if (auto decoded = receive_frame(error_message)) {
             return decoded;
+        }
+        if (error_message && !error_message->isEmpty()) {
+            return std::nullopt;
         }
 
         if (draining_) {
@@ -464,6 +526,14 @@ std::optional<DecodedVideoFrame> VideoFrameReader::Impl::receive_frame(QString* 
         if (error_message) {
             *error_message = QStringLiteral("Could not receive frame: %1").arg(av_error_to_string(receiveResult));
         }
+        return std::nullopt;
+    }
+
+    if (!is_safe_frame_size(frame_->width, frame_->height)) {
+        if (error_message) {
+            *error_message = QStringLiteral("Decoded frame dimensions exceed the safe limit");
+        }
+        ffmpeg_api().av_frame_unref_fn(frame_.get());
         return std::nullopt;
     }
 

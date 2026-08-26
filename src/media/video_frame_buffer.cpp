@@ -9,6 +9,16 @@
 
 #include <algorithm>
 
+namespace {
+constexpr int kMaximumBufferedFrames = 180;
+constexpr qint64 kMaximumBufferedBytes = 256LL * 1024LL * 1024LL;
+
+/** @brief Returns the detached pixel storage occupied by a decoded frame. */
+qint64 frame_bytes(const DecodedVideoFrame& frame) {
+    return qint64(frame.image.sizeInBytes());
+}
+}  // namespace
+
 Q_LOGGING_CATEGORY(logVideoBuffer, "video.buffer")
 
 class VideoFrameBuffer::Impl {
@@ -19,8 +29,11 @@ public:
     QThread* thread = nullptr;
     QString error_message;
     int target_buffer_ms = 3000;
+    qint64 buffered_bytes = 0;
     bool stopRequested = false;
     bool finished = false;
+    bool frame_notification_pending = false;
+    bool buffer_notification_pending = false;
 };
 
 VideoFrameBuffer::VideoFrameBuffer(QObject* parent)
@@ -42,6 +55,9 @@ void VideoFrameBuffer::start(const QString& path, int target_buffer_ms) {
         impl_->finished = false;
         impl_->error_message.clear();
         impl_->frames.clear();
+        impl_->buffered_bytes = 0;
+        impl_->frame_notification_pending = false;
+        impl_->buffer_notification_pending = false;
     }
 
     impl_->thread = QThread::create([this, path] {
@@ -70,6 +86,7 @@ void VideoFrameBuffer::stop() {
     {
         QMutexLocker locker(&impl_->mutex);
         impl_->frames.clear();
+        impl_->buffered_bytes = 0;
         impl_->finished = true;
     }
 }
@@ -80,6 +97,7 @@ std::optional<DecodedVideoFrame> VideoFrameBuffer::take_frame() {
         QMutexLocker locker(&impl_->mutex);
         if (!impl_->frames.isEmpty()) {
             frame = impl_->frames.dequeue();
+            impl_->buffered_bytes -= frame_bytes(*frame);
             impl_->buffer_changed.wakeAll();
         }
     }
@@ -130,7 +148,10 @@ void VideoFrameBuffer::decode_loop(QString path) {
                 return;
             }
 
-            while (!impl_->stopRequested && buffered_duration_locked() >= impl_->target_buffer_ms) {
+            while (!impl_->stopRequested
+                   && (buffered_duration_locked() >= impl_->target_buffer_ms
+                       || impl_->frames.size() >= kMaximumBufferedFrames
+                       || impl_->buffered_bytes >= kMaximumBufferedBytes)) {
                 impl_->buffer_changed.wait(&impl_->mutex, 50);
             }
 
@@ -155,11 +176,30 @@ void VideoFrameBuffer::decode_loop(QString path) {
             return;
         }
 
+        const qint64 decoded_frame_bytes = frame_bytes(*frame);
+        if (decoded_frame_bytes <= 0 || decoded_frame_bytes > kMaximumBufferedBytes) {
+            const QString size_error = QStringLiteral("Decoded video frame exceeds the buffer memory limit");
+            {
+                QMutexLocker locker(&impl_->mutex);
+                impl_->error_message = size_error;
+                impl_->finished = true;
+            }
+            emit_failed_queued(size_error);
+            return;
+        }
+
         {
             QMutexLocker locker(&impl_->mutex);
+            while (!impl_->stopRequested
+                   && !impl_->frames.isEmpty()
+                   && (impl_->frames.size() >= kMaximumBufferedFrames
+                       || impl_->buffered_bytes + decoded_frame_bytes > kMaximumBufferedBytes)) {
+                impl_->buffer_changed.wait(&impl_->mutex, 50);
+            }
             if (impl_->stopRequested) {
                 return;
             }
+            impl_->buffered_bytes += decoded_frame_bytes;
             impl_->frames.enqueue(*frame);
         }
 
@@ -187,7 +227,19 @@ int VideoFrameBuffer::buffered_duration_locked() const {
 }
 
 void VideoFrameBuffer::emit_frame_available_queued() {
+    {
+        QMutexLocker locker(&impl_->mutex);
+        if (impl_->frame_notification_pending) {
+            return;
+        }
+        impl_->frame_notification_pending = true;
+    }
+
     QMetaObject::invokeMethod(this, [this] {
+        {
+            QMutexLocker locker(&impl_->mutex);
+            impl_->frame_notification_pending = false;
+        }
         emit frame_available();
     }, Qt::QueuedConnection);
 }
@@ -205,15 +257,23 @@ void VideoFrameBuffer::emit_failed_queued(const QString& error_message) {
 }
 
 void VideoFrameBuffer::emit_buffer_changed_queued() {
-    int durationMs = 0;
-    int frame_count = 0;
     {
         QMutexLocker locker(&impl_->mutex);
-        durationMs = buffered_duration_locked();
-        frame_count = impl_->frames.size();
+        if (impl_->buffer_notification_pending) {
+            return;
+        }
+        impl_->buffer_notification_pending = true;
     }
 
-    QMetaObject::invokeMethod(this, [this, durationMs, frame_count] {
-        emit buffer_changed(durationMs, frame_count);
+    QMetaObject::invokeMethod(this, [this] {
+        int duration_ms = 0;
+        int frame_count = 0;
+        {
+            QMutexLocker locker(&impl_->mutex);
+            impl_->buffer_notification_pending = false;
+            duration_ms = buffered_duration_locked();
+            frame_count = impl_->frames.size();
+        }
+        emit buffer_changed(duration_ms, frame_count);
     }, Qt::QueuedConnection);
 }
