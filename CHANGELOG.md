@@ -2,6 +2,14 @@
 
 Notable user-facing changes to `uil` are documented here.
 
+## 0.1.1 - 2026-08-27
+
+### Changed
+
+- Refreshed the application branding and splash screen.
+- Added classic Bluecurve-style icons to menus and buttons.
+- Improved Windows license-inventory generation performance.
+
 ## 0.1.0 - 2026-08-26
 
 Initial release.

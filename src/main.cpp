@@ -56,13 +56,14 @@ QPixmap create_loading_splash_pixmap() {
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(QRect(0, 0, 6, kSplashHeight), QColor(0x00, 0x8c, 0x8c));
+    painter.drawPixmap(QPoint(24, 20), QPixmap(QStringLiteral(":/icons/uil-splash.bmp")));
     painter.setPen(QColor(0xee, 0xee, 0xee));
 
     QFont title_font = QApplication::font();
     title_font.setPointSize(24);
     title_font.setBold(true);
     painter.setFont(title_font);
-    painter.drawText(QRect(32, 24, kSplashWidth - 64, 48),
+    painter.drawText(QRect(150, 24, kSplashWidth - 182, 48),
                      Qt::AlignLeft | Qt::AlignVCenter,
                      QStringLiteral("uil"));
 
@@ -70,7 +71,7 @@ QPixmap create_loading_splash_pixmap() {
     message_font.setPointSize(10);
     painter.setFont(message_font);
     painter.setPen(QColor(0xb8, 0xb8, 0xb8));
-    painter.drawText(QRect(34, 80, kSplashWidth - 68, 36),
+    painter.drawText(QRect(152, 80, kSplashWidth - 220, 36),
                      Qt::AlignLeft | Qt::AlignVCenter,
                      QStringLiteral("Loading presenter…"));
 
@@ -191,7 +192,7 @@ int main(int argc, char* argv[]) {
             performance_log::process_elapsed_ms());
     }
 
-    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/uil.png")));
     performance_log::record_event(QStringLiteral("session.environment"), {
         {QStringLiteral("build_configuration"), QStringLiteral(UIL_BUILD_CONFIG)},
         {QStringLiteral("compiler"), QStringLiteral(UIL_COMPILER_ID " " UIL_COMPILER_VERSION)},

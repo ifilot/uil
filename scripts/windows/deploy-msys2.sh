@@ -435,32 +435,6 @@ package_version() {
     pacman -Q "$package" 2>/dev/null | awk '{print $2}'
 }
 
-copy_package_license_files() {
-    local package="$1"
-    local destination="$2"
-    local file
-    local rel
-    local copied=0
-
-    mkdir -p "$destination/files"
-    pacman -Qi "$package" > "$destination/PACMAN_INFO.txt" 2>/dev/null || true
-
-    while IFS= read -r file; do
-        [[ -f "$file" ]] || continue
-        rel="${file#/}"
-        mkdir -p "$destination/files/$(dirname "$rel")"
-        cp -f "$file" "$destination/files/$rel"
-        copied=$((copied + 1))
-    done < <(pacman -Qlq "$package" 2>/dev/null \
-        | grep -Ei '(^|/)(copying|copyright|licen[cs]e|notice|authors)([._ -]?[^/]*)?$' \
-        | sort -u)
-
-    if (( copied == 0 )); then
-        printf 'No installed license-like files were found for %s by pacman -Qlq.\n' "$package" \
-            > "$destination/NO_INSTALLED_LICENSE_FILES_FOUND.txt"
-    fi
-}
-
 write_third_party_notices() {
     local notices="$STAGE_DIR/THIRD_PARTY_NOTICES.txt"
     local third_party_dir="$STAGE_DIR/third-party"
@@ -468,6 +442,9 @@ write_third_party_notices() {
     local package_inventory="$third_party_dir/package-inventory.tsv"
     local review="$third_party_dir/license-review.md"
     local licenses_dir="$third_party_dir/licenses"
+    local package_file_index="$third_party_dir/.package-files.tsv"
+    local ownership_requests="$third_party_dir/.ownership-requests.txt"
+    local ownership_index="$third_party_dir/.ownership-index.tsv"
     local generated_utc
     local staged_file
     local rel
@@ -479,25 +456,43 @@ write_third_party_notices() {
     local description
     local license_l
     local package_slug
+    local current_package
+    local line
+    local index
+    local phase_started
     local review_required=0
     local -a packages=()
     local -a unresolved=()
+    local -a staged_rels=()
+    local -a staged_sources=()
+    local -a staged_packages=()
+    local -a owned_indices=()
+    local -a ownership_sources=()
+    local -a installed_mingw_packages=()
     declare -A package_by_name=()
+    declare -A owner_by_source=()
     declare -A staged_by_package=()
     declare -A unresolved_files=()
+    declare -A package_versions=()
+    declare -A package_licenses=()
+    declare -A package_urls=()
+    declare -A package_descriptions=()
+    declare -A copied_license_count=()
 
     command -v pacman >/dev/null 2>&1 || die "pacman is required to write third-party notices"
 
+    rm -rf -- "$third_party_dir"
+    mkdir -p "$licenses_dir"
     generated_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     mapfile -t STAGED_NOTICE_FILES < <(find "$STAGE_DIR" -type f | sort)
 
-    rm -rf -- "$third_party_dir"
-    mkdir -p "$licenses_dir"
+    if [[ -f resources/bluecurve/LICENSE.txt ]]; then
+        mkdir -p "$licenses_dir/bluecurve"
+        cp -f resources/bluecurve/LICENSE.txt "$licenses_dir/bluecurve/LICENSE.txt"
+        cp -f resources/bluecurve/README.md "$licenses_dir/bluecurve/README.md"
+    fi
 
-    {
-        printf 'staged_path\tsource_path\tpackage\tversion\tlicenses\n'
-    } > "$stage_inventory"
-
+    phase_started=$SECONDS
     for staged_file in "${STAGED_NOTICE_FILES[@]}"; do
         rel="${staged_file#"$STAGE_DIR"/}"
 
@@ -506,45 +501,143 @@ write_third_party_notices() {
         fi
 
         source_path=""
-        package=""
-        version=""
-        licenses=""
-
+        index="${#staged_rels[@]}"
+        staged_rels+=("$rel")
+        staged_sources+=("")
+        staged_packages+=("")
         if source_path="$(resolve_staged_source_path "$staged_file")"; then
-            if package="$(pacman -Qoq "$source_path" 2>/dev/null | head -n 1)"; then
-                version="$(package_version "$package")"
-                licenses="$(package_field "$package" "Licenses")"
-                package_by_name["$package"]=1
-                staged_by_package["$package"]+="${rel}"$'\n'
-            else
-                unresolved_files["$rel"]="no owning package for resolved source $source_path"
-            fi
+            staged_sources[$index]="$source_path"
+            owned_indices+=("$index")
+            ownership_sources+=("$source_path")
         else
             unresolved_files["$rel"]="could not map staged file back to an MSYS2 source path"
         fi
-
-        printf '%s\t%s\t%s\t%s\t%s\n' "$rel" "$source_path" "$package" "$version" "$licenses" \
-            >> "$stage_inventory"
     done
+    log "Resolved ${#staged_rels[@]} staged source path(s) in $((SECONDS - phase_started))s"
 
-    {
-        printf 'package\tversion\tlicenses\turl\tdescription\tmsys2_package_page\n'
-    } > "$package_inventory"
+    if ((${#ownership_sources[@]} > 0)); then
+        phase_started=$SECONDS
+        mapfile -t installed_mingw_packages < <(
+            pacman -Qq 2>/dev/null | grep -E "^${MINGW_PACKAGE_PREFIX}-"
+        )
+        ((${#installed_mingw_packages[@]} > 0)) \
+            || die "no installed packages found for prefix $MINGW_PACKAGE_PREFIX"
+        pacman -Ql -- "${installed_mingw_packages[@]}" > "$package_file_index"
+        printf '%s\n' "${ownership_sources[@]}" | sort -u > "$ownership_requests"
+        awk '
+            NR == FNR { requested[$0] = 1; next }
+            {
+                package = $1
+                sub(/^[^ ]+ /, "")
+                if ($0 in requested) {
+                    print package "\t" $0
+                }
+            }
+        ' "$ownership_requests" "$package_file_index" > "$ownership_index"
+        while IFS=$'\t' read -r package source_path; do
+            [[ -n "$package" && -n "$source_path" ]] || continue
+            owner_by_source["$source_path"]="$package"
+        done < "$ownership_index"
+
+        for index in "${owned_indices[@]}"; do
+            source_path="${staged_sources[$index]}"
+            rel="${staged_rels[$index]}"
+            package="${owner_by_source[$source_path]:-}"
+            if [[ -z "$package" ]]; then
+                unresolved_files["$rel"]="no owning package for resolved source $source_path"
+                continue
+            fi
+            staged_packages[$index]="$package"
+            package_by_name["$package"]=1
+            staged_by_package["$package"]+="${rel}"$'\n'
+        done
+        log "Indexed package ownership in $((SECONDS - phase_started))s"
+    fi
 
     mapfile -t packages < <(printf '%s\n' "${!package_by_name[@]}" | sed '/^$/d' | sort)
     mapfile -t unresolved < <(printf '%s\n' "${!unresolved_files[@]}" | sed '/^$/d' | sort)
 
     for package in "${packages[@]}"; do
-        version="$(package_version "$package")"
-        licenses="$(package_field "$package" "Licenses")"
-        url="$(package_field "$package" "URL")"
-        description="$(package_field "$package" "Description")"
+        package_slug="${package//[^A-Za-z0-9_.+-]/_}"
+        mkdir -p "$licenses_dir/$package_slug/files"
+        : > "$licenses_dir/$package_slug/PACMAN_INFO.txt"
+        copied_license_count["$package"]=0
+    done
+
+    phase_started=$SECONDS
+    current_package=""
+    while IFS= read -r line; do
+        line="${line%$'\r'}"
+        if [[ "$line" =~ ^Name[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            current_package="${BASH_REMATCH[1]}"
+        fi
+        if [[ -n "$current_package" ]]; then
+            package_slug="${current_package//[^A-Za-z0-9_.+-]/_}"
+            printf '%s\n' "$line" >> "$licenses_dir/$package_slug/PACMAN_INFO.txt"
+        fi
+        if [[ "$line" =~ ^Version[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            package_versions["$current_package"]="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^Licenses[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            package_licenses["$current_package"]="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^URL[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            package_urls["$current_package"]="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^Description[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            package_descriptions["$current_package"]="${BASH_REMATCH[1]}"
+        fi
+    done < <(pacman -Qi -- "${packages[@]}" 2>/dev/null)
+    log "Loaded metadata for ${#packages[@]} package(s) in $((SECONDS - phase_started))s"
+
+    phase_started=$SECONDS
+    while IFS=' ' read -r package source_path; do
+        [[ -n "$package" && -n "$source_path" ]] || continue
+        [[ -n "${package_by_name[$package]:-}" ]] || continue
+        [[ "$source_path" =~ (^|/)([Cc][Oo][Pp][Yy][Ii][Nn][Gg]|[Cc][Oo][Pp][Yy][Rr][Ii][Gg][Hh][Tt]|[Ll][Ii][Cc][Ee][Nn][CcSs][Ee]|[Nn][Oo][Tt][Ii][Cc][Ee]|[Aa][Uu][Tt][Hh][Oo][Rr][Ss])([._\ -]?[^/]*)?$ ]] || continue
+        [[ -f "$source_path" ]] || continue
+        package_slug="${package//[^A-Za-z0-9_.+-]/_}"
+        rel="${source_path#/}"
+        mkdir -p "$licenses_dir/$package_slug/files/$(dirname "$rel")"
+        cp -f "$source_path" "$licenses_dir/$package_slug/files/$rel"
+        copied_license_count["$package"]=$((copied_license_count["$package"] + 1))
+    done < "$package_file_index"
+
+    for package in "${packages[@]}"; do
+        if ((copied_license_count["$package"] == 0)); then
+            package_slug="${package//[^A-Za-z0-9_.+-]/_}"
+            printf 'No installed license-like files were found for %s by pacman -Ql.\n' "$package" \
+                > "$licenses_dir/$package_slug/NO_INSTALLED_LICENSE_FILES_FOUND.txt"
+        fi
+    done
+    log "Copied package license files in $((SECONDS - phase_started))s"
+    rm -f -- "$package_file_index" "$ownership_requests" "$ownership_index"
+
+    {
+        printf 'staged_path\tsource_path\tpackage\tversion\tlicenses\n'
+        for ((index = 0; index < ${#staged_rels[@]}; ++index)); do
+            rel="${staged_rels[$index]}"
+            source_path="${staged_sources[$index]}"
+            package="${staged_packages[$index]}"
+            version=""
+            licenses=""
+            if [[ -n "$package" ]]; then
+                version="${package_versions[$package]:-}"
+                licenses="${package_licenses[$package]:-}"
+            fi
+            printf '%s\t%s\t%s\t%s\t%s\n' "$rel" "$source_path" "$package" "$version" "$licenses"
+        done
+    } > "$stage_inventory"
+
+    {
+        printf 'package\tversion\tlicenses\turl\tdescription\tmsys2_package_page\n'
+    } > "$package_inventory"
+
+    for package in "${packages[@]}"; do
+        version="${package_versions[$package]:-}"
+        licenses="${package_licenses[$package]:-}"
+        url="${package_urls[$package]:-}"
+        description="${package_descriptions[$package]:-}"
         printf '%s\t%s\t%s\t%s\t%s\thttps://packages.msys2.org/package/%s\n' \
             "$package" "$version" "$licenses" "$url" "$description" "$package" \
             >> "$package_inventory"
-
-        package_slug="${package//[^A-Za-z0-9_.+-]/_}"
-        copy_package_license_files "$package" "$licenses_dir/$package_slug"
     done
 
     {
@@ -557,15 +650,19 @@ write_third_party_notices() {
         printf '  License: GNU Lesser General Public License v3.0 only\n'
         printf '  Repository: https://github.com/ifilot/uil\n'
         printf '  Installed license texts: LICENSE.txt and LICENSES/GPL-3.0-only.txt\n\n'
+        printf 'Red Hat Bluecurve icon artwork:\n'
+        printf '  Source: https://github.com/neeeeow/Bluecurve\n'
+        printf '  License: GNU General Public License v3.0\n'
+        printf '  Installed license text: third-party/licenses/bluecurve/LICENSE.txt\n\n'
         printf 'Important compliance note:\n'
         printf '  MSYS2 packages are independent upstream projects with their own licenses.\n'
         printf '  The package license strings below are generated from the local pacman database.\n'
         printf '  Installed license and notice files, when present in the packages, are copied under third-party/licenses/.\n\n'
         printf 'Package inventory:\n'
         for package in "${packages[@]}"; do
-            version="$(package_version "$package")"
-            licenses="$(package_field "$package" "Licenses")"
-            url="$(package_field "$package" "URL")"
+            version="${package_versions[$package]:-}"
+            licenses="${package_licenses[$package]:-}"
+            url="${package_urls[$package]:-}"
             printf '\n%s %s\n' "$package" "$version"
             printf '  Licenses: %s\n' "${licenses:-unknown}"
             printf '  Upstream: %s\n' "${url:-unknown}"
@@ -590,10 +687,12 @@ write_third_party_notices() {
         printf 'Generated UTC: `%s`\n\n' "$generated_utc"
         printf 'This review is generated from staged files and MSYS2 pacman metadata. It is an audit aid, not legal advice.\n\n'
         printf '## Copyleft Attention Items\n\n'
+        printf -- '- `Bluecurve icon artwork`: `GPL-3.0`\n'
     } > "$review"
+    review_required=1
 
     for package in "${packages[@]}"; do
-        licenses="$(package_field "$package" "Licenses")"
+        licenses="${package_licenses[$package]:-}"
         license_l="${licenses,,}"
         if [[ "$license_l" == *gpl* ]]; then
             review_required=1
@@ -738,6 +837,7 @@ if [[ "${MSYSTEM:-}" != "UCRT64" ]]; then
 fi
 
 MINGW_PREFIX="${MINGW_PREFIX:-/ucrt64}"
+MINGW_PACKAGE_PREFIX="${MINGW_PACKAGE_PREFIX:-mingw-w64-ucrt-x86_64}"
 
 command -v cygpath >/dev/null 2>&1 || die "cygpath is required"
 command -v ldd >/dev/null 2>&1 || die "ldd is required"

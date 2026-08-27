@@ -1,5 +1,6 @@
 #include "audience_window.hpp"
 
+#include "ui/bluecurve.hpp"
 #include "ui/font_awesome.hpp"
 
 #include <QApplication>
@@ -211,14 +212,14 @@ private:
         bottomRow->setContentsMargins(0, 0, 0, 0);
         bottomRow->setSpacing(10);
 
-        QToolButton* clearButton = create_bottom_button(QStringLiteral("Clear"), QStringLiteral("trash-can"), QStringLiteral("featureDangerButton"), 92);
-        QToolButton* closeButton = create_bottom_button(QStringLiteral("Close slideshow"), QStringLiteral("door-open"), QStringLiteral("featureCloseButton"), 148);
-        QToolButton* firstButton = create_icon_bottom_button(QStringLiteral("First slide"), QStringLiteral("angles-left"), QStringLiteral("featureNavButton"));
-        QToolButton* previousButton = create_icon_bottom_button(QStringLiteral("Previous slide"), QStringLiteral("chevron-left"), QStringLiteral("featureNavButton"));
-        grid_button_ = create_icon_bottom_button(QStringLiteral("Show slide grid"), QStringLiteral("table-cells-large"), QStringLiteral("featureNavButton"));
+        QToolButton* clearButton = create_bottom_button(QStringLiteral("Clear"), QStringLiteral("stock-clear"), QStringLiteral("featureDangerButton"), 92);
+        QToolButton* closeButton = create_bottom_button(QStringLiteral("Close slideshow"), QStringLiteral("stock-quit"), QStringLiteral("featureCloseButton"), 148);
+        QToolButton* firstButton = create_icon_bottom_button(QStringLiteral("First slide"), QStringLiteral("stock-goto-first"), QStringLiteral("featureNavButton"));
+        QToolButton* previousButton = create_icon_bottom_button(QStringLiteral("Previous slide"), QStringLiteral("stock-go-back"), QStringLiteral("featureNavButton"));
+        grid_button_ = create_icon_bottom_button(QStringLiteral("Show slide grid"), QStringLiteral("stock_display-grid"), QStringLiteral("featureNavButton"));
         grid_button_->installEventFilter(this);
-        QToolButton* nextButton = create_icon_bottom_button(QStringLiteral("Next slide"), QStringLiteral("chevron-right"), QStringLiteral("featureNavButton"));
-        QToolButton* lastButton = create_icon_bottom_button(QStringLiteral("Last slide"), QStringLiteral("angles-right"), QStringLiteral("featureNavButton"));
+        QToolButton* nextButton = create_icon_bottom_button(QStringLiteral("Next slide"), QStringLiteral("stock-go-forward"), QStringLiteral("featureNavButton"));
+        QToolButton* lastButton = create_icon_bottom_button(QStringLiteral("Last slide"), QStringLiteral("stock-goto-last"), QStringLiteral("featureNavButton"));
 
         connect(clearButton, &QToolButton::clicked, this, [this] {
             confirm_clear_annotations();
@@ -303,7 +304,7 @@ private:
         auto* button = new QToolButton(this);
         button->setObjectName(object_name);
         button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        button->setIcon(menu_icon(icon_name, QColor(0xff, 0xff, 0xff), QSize(18, 18)));
+        button->setIcon(bluecurve::icon(icon_name, QSize(18, 18)));
         button->setIconSize(QSize(18, 18));
         button->setText(text);
         button->setMinimumSize(minimum_width, 38);
@@ -316,7 +317,7 @@ private:
         auto* button = new QToolButton(this);
         button->setObjectName(object_name);
         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-        button->setIcon(menu_icon(icon_name, QColor(0xff, 0xff, 0xff), QSize(20, 20)));
+        button->setIcon(bluecurve::icon(icon_name, QSize(20, 20)));
         button->setIconSize(QSize(20, 20));
         button->setToolTip(tool_tip);
         button->setFixedSize(42, 38);
@@ -674,7 +675,7 @@ private:
 AudienceWindow::AudienceWindow()
     : QWidget(nullptr, Qt::Window) {
     setWindowTitle(QStringLiteral("uil Audience"));
-    setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
+    setWindowIcon(QIcon(QStringLiteral(":/icons/uil.png")));
     resize(960, 540);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);

@@ -3,6 +3,7 @@
 #include "ui/deck_overview_visibility.hpp"
 #include "app_controller.hpp"
 #include "launcher/launcher_protocol.h"
+#include "ui/bluecurve.hpp"
 #include "ui/font_awesome.hpp"
 #include "util/image_util.hpp"
 #include "util/launcher_readiness.hpp"
@@ -104,11 +105,7 @@ const QIcon& thumbnail_overlay_hidden_icon() {
 
 /** @brief Returns the shared clear-overlay thumbnail icon. */
 const QIcon& thumbnail_clear_overlay_icon() {
-    static const QIcon icon = font_awesome::icon(
-        font_awesome::Style::Solid,
-        QStringLiteral("eraser"),
-        QColor(0xff, 0xff, 0xff),
-        QSize(16, 16));
+    static const QIcon icon = bluecurve::icon(QStringLiteral("stock-clear"));
     return icon;
 }
 }
@@ -644,7 +641,7 @@ public:
           icon_on_right_(iconOnRight) {
         setObjectName(QStringLiteral("slideNavButton"));
         setText(text);
-        setIcon(font_awesome::icon(font_awesome::Style::Solid, icon_name, QColor(0xff, 0xff, 0xff), QSize(16, 16)));
+        setIcon(bluecurve::icon(icon_name));
         setIconSize(QSize(14, 14));
         setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         setFocusPolicy(Qt::NoFocus);
@@ -704,7 +701,7 @@ PresenterWindow::PresenterWindow(AppController* controller, QWidget* parent)
       controller_(controller) {
     performance_log::ScopedSpan span(QStringLiteral("startup.presenter_window"));
     setWindowTitle(QStringLiteral("uil Presenter"));
-    setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
+    setWindowIcon(QIcon(QStringLiteral(":/icons/uil.png")));
     setWindowFlag(Qt::FramelessWindowHint, true);
     span.checkpoint(QStringLiteral("configure_window"));
     create_actions();
@@ -1002,8 +999,8 @@ void PresenterWindow::show_slide_overview() {
 void PresenterWindow::show_about() {
     QMessageBox aboutBox(this);
     aboutBox.setWindowTitle(QStringLiteral("About uil"));
-    aboutBox.setWindowIcon(QIcon(QStringLiteral(":/icons/uil.svg")));
-    aboutBox.setIconPixmap(QIcon(QStringLiteral(":/icons/uil.svg")).pixmap(QSize(96, 96)));
+    aboutBox.setWindowIcon(QIcon(QStringLiteral(":/icons/uil.png")));
+    aboutBox.setIconPixmap(QIcon(QStringLiteral(":/icons/uil.png")).pixmap(QSize(96, 96)));
     aboutBox.setTextFormat(Qt::RichText);
     aboutBox.setTextInteractionFlags(Qt::TextBrowserInteraction);
     aboutBox.setText(QStringLiteral(
@@ -1049,6 +1046,7 @@ void PresenterWindow::show_about() {
         "<li><b>zlib</b>: compression library used through ZLIB::ZLIB for PDF media stream handling and .uil package extraction; zlib License.</li>"
         "%8"
         "<li><b>Font Awesome Free 7.2.0</b>: vendored SVG icon assets under resources/fontawesome. The SVG icons are licensed under CC BY 4.0. The upstream package also includes MIT-licensed code and SIL OFL 1.1 fonts; this app uses the SVG assets. Copyright Fonticons, Inc.</li>"
+        "<li><b>Red Hat Bluecurve icons</b>: a focused set of original size-specific action SVGs from the Bluecurve restoration project, licensed under GNU GPL v3.0.</li>"
         "<li><b>MSYS2/GCC runtime libraries</b>: deployed on Windows as needed by the toolchain and audited by the installer staging script.</li>"
         "</ul>"
         "<p>Application rendering, scheduling, caching, and presentation control code is local to uil.</p>"
@@ -1062,9 +1060,6 @@ void PresenterWindow::show_about() {
             QString::fromLatin1(qVersion()),
             QLibraryInfo::build(),
             ffmpegLine);
-    informative_text += QStringLiteral(
-        "<p><b>Current performance log:</b><br><code>%1</code></p>")
-                            .arg(performance_log::log_file_path().toHtmlEscaped());
     aboutBox.setInformativeText(informative_text);
     aboutBox.setStandardButtons(QMessageBox::Ok);
     aboutBox.exec();
@@ -1187,17 +1182,22 @@ void PresenterWindow::create_actions() {
     menu_bar_->setFixedHeight(31);
 
     open_action_ = new QAction(QStringLiteral("&Open Presentation"), this);
+    open_action_->setIcon(bluecurve::icon(QStringLiteral("stock-open")));
     open_action_->setShortcut(QKeySequence::Open);
 
     save_action_ = new QAction(QStringLiteral("&Save"), this);
+    save_action_->setIcon(bluecurve::icon(QStringLiteral("stock-save")));
     save_action_->setShortcut(QKeySequence::Save);
 
     save_as_action_ = new QAction(QStringLiteral("Save &As"), this);
+    save_as_action_->setIcon(bluecurve::icon(QStringLiteral("stock-save-as")));
     save_as_action_->setShortcut(QKeySequence::SaveAs);
 
     export_pdf_action_ = new QAction(QStringLiteral("Export as PDF"), this);
+    export_pdf_action_->setIcon(bluecurve::icon(QStringLiteral("stock_save-pdf")));
 
     next_action_ = new QAction(QStringLiteral("Next"), this);
+    next_action_->setIcon(bluecurve::icon(QStringLiteral("stock-go-forward")));
     next_action_->setShortcuts({
         QKeySequence(Qt::Key_Right),
         QKeySequence(Qt::Key_PageDown),
@@ -1205,6 +1205,7 @@ void PresenterWindow::create_actions() {
     });
 
     previous_action_ = new QAction(QStringLiteral("Previous"), this);
+    previous_action_->setIcon(bluecurve::icon(QStringLiteral("stock-go-back")));
     previous_action_->setShortcuts({
         QKeySequence(Qt::Key_Left),
         QKeySequence(Qt::Key_PageUp),
@@ -1212,21 +1213,27 @@ void PresenterWindow::create_actions() {
     });
 
     first_action_ = new QAction(QStringLiteral("First"), this);
+    first_action_->setIcon(bluecurve::icon(QStringLiteral("stock-goto-first")));
     first_action_->setShortcut(Qt::Key_Home);
 
     last_action_ = new QAction(QStringLiteral("Last"), this);
+    last_action_->setIcon(bluecurve::icon(QStringLiteral("stock-goto-last")));
     last_action_->setShortcut(Qt::Key_End);
 
     start_presentation_action_ = new QAction(QStringLiteral("Start Presentation"), this);
+    start_presentation_action_->setIcon(bluecurve::icon(QStringLiteral("stock-media-play")));
     start_presentation_action_->setShortcut(Qt::Key_F5);
 
     play_pause_media_action_ = new QAction(QStringLiteral("Play/Pause Media"), this);
+    play_pause_media_action_->setIcon(bluecurve::icon(QStringLiteral("stock-media-pause")));
     play_pause_media_action_->setShortcut(Qt::Key_Return);
 
     jump_to_page_action_ = new QAction(QStringLiteral("Jump to Page"), this);
+    jump_to_page_action_->setIcon(bluecurve::icon(QStringLiteral("stock-jump-to")));
     jump_to_page_action_->setShortcut(Qt::Key_J);
 
     slide_overview_action_ = new QAction(QStringLiteral("Slide Overview"), this);
+    slide_overview_action_->setIcon(bluecurve::icon(QStringLiteral("stock_display-grid")));
     slide_overview_action_->setShortcut(Qt::Key_O);
 
     black_screen_action_ = new QAction(QStringLiteral("Black Screen"), this);
@@ -1236,6 +1243,7 @@ void PresenterWindow::create_actions() {
     white_screen_action_->setShortcut(Qt::Key_W);
 
     fullscreen_action_ = new QAction(QStringLiteral("Toggle Audience Fullscreen"), this);
+    fullscreen_action_->setIcon(bluecurve::icon(QStringLiteral("stock-fullscreen")));
     fullscreen_action_->setShortcut(Qt::Key_F11);
 
     show_audience_overlay_action_ = new QAction(QStringLiteral("Show Audience Overlay"), this);
@@ -1243,9 +1251,11 @@ void PresenterWindow::create_actions() {
     show_audience_overlay_action_->setChecked(true);
 
     quit_action_ = new QAction(QStringLiteral("&Quit"), this);
+    quit_action_->setIcon(bluecurve::icon(QStringLiteral("stock-quit")));
     quit_action_->setShortcut(QKeySequence::Quit);
 
     about_action_ = new QAction(QStringLiteral("About uil"), this);
+    about_action_->setIcon(bluecurve::icon(QStringLiteral("stock-about")));
 
     QMenu* fileMenu = menu_bar_->addMenu(QStringLiteral("&File"));
     fileMenu->addAction(open_action_);
@@ -1253,6 +1263,7 @@ void PresenterWindow::create_actions() {
     fileMenu->addAction(save_as_action_);
     fileMenu->addAction(export_pdf_action_);
     open_recent_menu_ = fileMenu->addMenu(QStringLiteral("Open &Recent"));
+    open_recent_menu_->setIcon(bluecurve::icon(QStringLiteral("stock-history")));
     rebuild_open_recent_menu();
     fileMenu->addSeparator();
     fileMenu->addAction(quit_action_);
@@ -1310,7 +1321,7 @@ QWidget* PresenterWindow::create_title_bar() {
     iconLabel->setObjectName(QStringLiteral("titleIcon"));
     iconLabel->setFixedSize(36, 32);
     iconLabel->setAlignment(Qt::AlignCenter);
-    iconLabel->setPixmap(QIcon(QStringLiteral(":/icons/uil.svg")).pixmap(QSize(16, 16)));
+    iconLabel->setPixmap(QIcon(QStringLiteral(":/icons/uil.png")).pixmap(QSize(16, 16)));
 
     titleLayout->addWidget(iconLabel);
     titleLayout->addWidget(menu_bar_, 0, Qt::AlignTop);
@@ -1390,13 +1401,13 @@ void PresenterWindow::create_layout() {
     navigationLayout->setContentsMargins(10, 0, 10, 10);
     navigationLayout->setSpacing(8);
 
-    auto* firstButton = new SlideNavButton(QStringLiteral("First"), QStringLiteral("angles-left"), false, currentSlidePanel);
+    auto* firstButton = new SlideNavButton(QStringLiteral("First"), QStringLiteral("stock-goto-first"), false, currentSlidePanel);
     firstButton->setToolTip(QStringLiteral("First slide"));
-    auto* previousButton = new SlideNavButton(QStringLiteral("Previous"), QStringLiteral("chevron-left"), false, currentSlidePanel);
+    auto* previousButton = new SlideNavButton(QStringLiteral("Previous"), QStringLiteral("stock-go-back"), false, currentSlidePanel);
     previousButton->setToolTip(QStringLiteral("Previous slide"));
-    auto* nextButton = new SlideNavButton(QStringLiteral("Next"), QStringLiteral("chevron-right"), true, currentSlidePanel);
+    auto* nextButton = new SlideNavButton(QStringLiteral("Next"), QStringLiteral("stock-go-forward"), true, currentSlidePanel);
     nextButton->setToolTip(QStringLiteral("Next slide"));
-    auto* lastButton = new SlideNavButton(QStringLiteral("Last"), QStringLiteral("angles-right"), true, currentSlidePanel);
+    auto* lastButton = new SlideNavButton(QStringLiteral("Last"), QStringLiteral("stock-goto-last"), true, currentSlidePanel);
     lastButton->setToolTip(QStringLiteral("Last slide"));
 
     connect(firstButton, &QToolButton::clicked, first_action_, &QAction::trigger);
@@ -1455,7 +1466,7 @@ void PresenterWindow::create_layout() {
     clear_all_overlays_button_->setAutoRaise(true);
     clear_all_overlays_button_->setFocusPolicy(Qt::NoFocus);
     clear_all_overlays_button_->setFixedSize(31, 30);
-    clear_all_overlays_button_->setIcon(font_awesome::icon(font_awesome::Style::Solid, QStringLiteral("eraser"), QColor(0xff, 0xff, 0xff), QSize(16, 16)));
+    clear_all_overlays_button_->setIcon(bluecurve::icon(QStringLiteral("stock-clear")));
     clear_all_overlays_button_->setIconSize(QSize(16, 16));
     clear_all_overlays_button_->setToolTip(QStringLiteral("Clear all drawing overlays"));
 

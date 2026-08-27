@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(uil VERSION 0.1.0 LANGUAGES C CXX)
+project(uil VERSION 0.1.1 LANGUAGES C CXX)
 
 include(CTest)
 
@@ -89,10 +89,39 @@ set(FONT_AWESOME_SVG_FILES
     resources/fontawesome/svgs/solid/xmark.svg
 )
 
+set(BLUECURVE_ACTION_ICONS
+    stock-about
+    stock-clear
+    stock-fullscreen
+    stock-go-back
+    stock-go-forward
+    stock-goto-first
+    stock-goto-last
+    stock-history
+    stock-jump-to
+    stock-media-pause
+    stock-media-play
+    stock-open
+    stock-quit
+    stock-save-as
+    stock-save
+    stock_display-grid
+    stock_save-pdf
+)
+set(BLUECURVE_SVG_FILES)
+foreach(BLUECURVE_SIZE 16 20)
+    foreach(BLUECURVE_ICON IN LISTS BLUECURVE_ACTION_ICONS)
+        list(APPEND BLUECURVE_SVG_FILES
+            "resources/bluecurve/${BLUECURVE_SIZE}x${BLUECURVE_SIZE}/actions/${BLUECURVE_ICON}.svg"
+        )
+    endforeach()
+endforeach()
+
 set(UIL_LAUNCHER_WINDOWS_RESOURCES)
 set(UIL_VIEWER_WINDOWS_RESOURCES)
 if(WIN32)
     set(UIL_WINDOWS_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/uil.ico")
+    set(UIL_WINDOWS_SPLASH_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/uil-splash.bmp")
     set(UIL_WINDOWS_MANIFEST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/uil.manifest")
     set(UIL_WINDOWS_VERSION_TWEAK "${PROJECT_VERSION_TWEAK}")
     if(UIL_WINDOWS_VERSION_TWEAK STREQUAL "")
@@ -146,6 +175,8 @@ qt_add_executable(${UIL_VIEWER_TARGET}
     src/render/render_scheduler.cpp
     src/ui/audience_window.hpp
     src/ui/audience_window.cpp
+    src/ui/bluecurve.hpp
+    src/ui/bluecurve.cpp
     src/ui/font_awesome.hpp
     src/ui/font_awesome.cpp
     src/ui/deck_overview_visibility.hpp
@@ -174,8 +205,11 @@ qt_add_resources(${UIL_VIEWER_TARGET} "uil_resources"
     PREFIX "/"
     BASE "resources"
     FILES
-        resources/icons/uil.svg
-        resources/icons/uil.ico
+        resources/icons/uil.png
+        resources/icons/uil-splash.bmp
+        resources/bluecurve/LICENSE.txt
+        resources/bluecurve/README.md
+        ${BLUECURVE_SVG_FILES}
         resources/fontawesome/LICENSE.txt
         resources/fontawesome/package.json
         ${FONT_AWESOME_SVG_FILES}

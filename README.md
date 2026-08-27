@@ -2,8 +2,9 @@
 
 Pronounced `/œyl/`.
 
-[![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](https://github.com/ifilot/uil/releases)
+[![Version](https://img.shields.io/badge/version-v0.1.1-blue.svg)](https://github.com/ifilot/uil/releases)
 [![License: LGPL v3](https://img.shields.io/badge/license-LGPL--3.0--only-blue.svg)](LICENSE)
+[![Sanitizers](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml)
 
 `uil` is a presentation app for Windows. It displays PDF slide decks, supports
 embedded video in Beamer presentations, and lets you annotate slides while

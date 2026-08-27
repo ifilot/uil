@@ -6,6 +6,7 @@
 #include "launcher_protocol.h"
 
 #define UIL_ICON_RESOURCE_ID 101
+#define UIL_SPLASH_BITMAP_RESOURCE_ID 102
 #define UIL_COMMAND_LINE_CAPACITY 32768
 #define UIL_SPLASH_WIDTH 420
 #define UIL_SPLASH_HEIGHT 176
@@ -229,6 +230,45 @@ static ULONGLONG launcher_creation_file_time(void) {
     return file_time_value(creation_time);
 }
 
+/** @brief Draws the bundled application logo without loading image codecs. */
+static void paint_loading_logo(HDC device_context) {
+    static HBITMAP logo_bitmap = NULL;
+    BITMAP bitmap_details;
+    HDC bitmap_context;
+    HGDIOBJ previous_bitmap;
+
+    if (logo_bitmap == NULL) {
+        logo_bitmap = (HBITMAP)LoadImageW(
+            GetModuleHandleW(NULL),
+            MAKEINTRESOURCEW(UIL_SPLASH_BITMAP_RESOURCE_ID),
+            IMAGE_BITMAP,
+            0,
+            0,
+            LR_CREATEDIBSECTION);
+    }
+    if (logo_bitmap == NULL || GetObjectW(logo_bitmap, sizeof(bitmap_details), &bitmap_details) == 0) {
+        return;
+    }
+
+    bitmap_context = CreateCompatibleDC(device_context);
+    if (bitmap_context == NULL) {
+        return;
+    }
+    previous_bitmap = SelectObject(bitmap_context, logo_bitmap);
+    BitBlt(
+        device_context,
+        24,
+        20,
+        bitmap_details.bmWidth,
+        bitmap_details.bmHeight,
+        bitmap_context,
+        0,
+        0,
+        SRCCOPY);
+    SelectObject(bitmap_context, previous_bitmap);
+    DeleteDC(bitmap_context);
+}
+
 /** @brief Paints the lightweight launcher window using only GDI. */
 static void paint_loading_window(HWND window) {
     PAINTSTRUCT paint;
@@ -260,6 +300,8 @@ static void paint_loading_window(HWND window) {
     FillRect(device_context, &accent_rect, accent_brush);
     DeleteObject(accent_brush);
 
+    paint_loading_logo(device_context);
+
     SetBkMode(device_context, TRANSPARENT);
     SetTextColor(device_context, RGB(0xee, 0xee, 0xee));
     title_font = CreateFontW(
@@ -267,7 +309,7 @@ static void paint_loading_window(HWND window) {
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
         DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     previous_font = SelectObject(device_context, title_font);
-    SetRect(&title_rect, 32, 24, UIL_SPLASH_WIDTH - 32, 72);
+    SetRect(&title_rect, 150, 24, UIL_SPLASH_WIDTH - 32, 72);
     DrawTextW(device_context, L"uil", -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     SetTextColor(device_context, RGB(0xb8, 0xb8, 0xb8));
@@ -276,7 +318,7 @@ static void paint_loading_window(HWND window) {
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
         DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     SelectObject(device_context, message_font);
-    SetRect(&message_rect, 34, 80, UIL_SPLASH_WIDTH - 84, 116);
+    SetRect(&message_rect, 152, 80, UIL_SPLASH_WIDTH - 84, 116);
     DrawTextW(
         device_context,
         stage_description(loading_stage),
@@ -286,7 +328,7 @@ static void paint_loading_window(HWND window) {
 
     paint_loading_spinner(device_context);
 
-    SetRect(&progress_track_rect, 34, 132, UIL_SPLASH_WIDTH - 34, 138);
+    SetRect(&progress_track_rect, 152, 132, UIL_SPLASH_WIDTH - 34, 138);
     progress_track_brush = CreateSolidBrush(RGB(0x32, 0x32, 0x32));
     FillRect(device_context, &progress_track_rect, progress_track_brush);
     DeleteObject(progress_track_brush);
