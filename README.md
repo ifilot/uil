@@ -38,6 +38,18 @@ From the presenter window, press `O` for the slide overview or `J` to jump to a
 page. Use **File > Save** to preserve the presentation and annotations as a
 `.uil` file, or **File > Export as PDF** to create an annotated PDF.
 
+## Interactive molecules (experimental)
+
+The first experimental molecule implementation accepts XYZ geometry referenced
+by the dedicated `\molecule` command in `latex/uilmolecule.sty`. UIL replaces
+the command's poster rectangle with a ball-and-stick view: drag with the left
+mouse button to rotate, use the mouse wheel to zoom, and double-click to reset.
+
+See `examples/molecule/molecule-example.tex` for a Beamer example whose geometry
+is defined in the `.tex` file with `filecontents*`. pdfLaTeX and LuaLaTeX are
+supported. The generated XYZ file must remain beside a raw PDF; saving as a
+`.uil` package bundles the molecule asset.
+
 ## Troubleshooting
 
 The current session log is listed under **Help > About uil**. Logs can contain

@@ -673,6 +673,36 @@ bool extract_uil_package(const QString& package_path, QTemporaryDir& destination
         }
     }
 
+    QStringList molecule_asset_paths;
+    const QJsonArray molecule_assets =
+        manifest.value(QStringLiteral("molecule_assets")).toArray();
+    for (const QJsonValue& value : molecule_assets) {
+        if (!value.isObject()) {
+            continue;
+        }
+
+        const QString raw_path = value.toObject().value(QStringLiteral("path")).toString();
+        if (raw_path.isEmpty()) {
+            continue;
+        }
+        const QString path = normalized_package_path(raw_path);
+        if (!is_safe_relative_path(path)) {
+            set_error(
+                error_message,
+                QStringLiteral("Unsafe molecule asset path in UIL manifest: %1").arg(path));
+            return false;
+        }
+        if (!find_entry(entries, path)) {
+            set_error(
+                error_message,
+                QStringLiteral("UIL package is missing molecule asset: %1").arg(path));
+            return false;
+        }
+        if (!molecule_asset_paths.contains(path)) {
+            molecule_asset_paths.push_back(path);
+        }
+    }
+
     QHash<int, QString> overlay_image_paths;
     const QJsonArray overlays = manifest.value(QStringLiteral("overlays")).toArray();
     for (const QJsonValue& value : overlays) {
@@ -715,6 +745,9 @@ bool extract_uil_package(const QString& package_path, QTemporaryDir& destination
     for (const QString& path : std::as_const(movie_asset_paths)) {
         required_paths.insert(path);
     }
+    for (const QString& path : std::as_const(molecule_asset_paths)) {
+        required_paths.insert(path);
+    }
     for (const QString& path : std::as_const(overlay_image_paths)) {
         required_paths.insert(path);
     }
@@ -738,6 +771,7 @@ bool extract_uil_package(const QString& package_path, QTemporaryDir& destination
     result->entry_pdf_path = destination.filePath(entryPdf);
     result->package_root_path = destination.path();
     result->movie_asset_paths = movie_asset_paths;
+    result->molecule_asset_paths = molecule_asset_paths;
     result->overlay_image_paths = overlay_image_paths;
     result->hidden_overlay_pages = hidden_overlay_pages;
     result->overlays_globally_visible = manifest.value(QStringLiteral("overlays_visible")).toBool(true);
@@ -751,6 +785,7 @@ bool write_uil_package(
     const QString& entry_pdf_relative_path,
     const QString& asset_root_path,
     const QStringList& movie_asset_paths,
+    const QStringList& molecule_asset_paths,
     const QHash<int, QImage>& overlay_images,
     const QSet<int>& hidden_overlay_pages,
     bool overlays_globally_visible,
@@ -795,6 +830,27 @@ bool write_uil_package(
         movieAssets.append(assetObject);
     }
 
+    QJsonArray molecule_assets;
+    for (const QString& raw_path : molecule_asset_paths) {
+        const QString asset_path = normalized_package_path(raw_path);
+        if (!is_safe_relative_path(asset_path)) {
+            set_error(
+                error_message,
+                QStringLiteral("Unsafe molecule asset path: %1").arg(asset_path));
+            return false;
+        }
+
+        const QString source_asset_path =
+            QFileInfo(QDir(asset_root_path), asset_path).absoluteFilePath();
+        if (!add_file_zip_entry(&entries, asset_path, source_asset_path, error_message)) {
+            return false;
+        }
+
+        QJsonObject asset_object;
+        asset_object.insert(QStringLiteral("path"), asset_path);
+        molecule_assets.append(asset_object);
+    }
+
     QJsonArray overlays;
     QList<int> overlayPages = overlay_images.keys();
     std::sort(overlayPages.begin(), overlayPages.end());
@@ -833,6 +889,7 @@ bool write_uil_package(
     manifest.insert(QStringLiteral("format_version"), 2);
     manifest.insert(QStringLiteral("entry_pdf"), entryPdf);
     manifest.insert(QStringLiteral("movie_assets"), movieAssets);
+    manifest.insert(QStringLiteral("molecule_assets"), molecule_assets);
     manifest.insert(QStringLiteral("overlays"), overlays);
     manifest.insert(QStringLiteral("hidden_overlay_pages"), hiddenPages);
     manifest.insert(QStringLiteral("overlays_visible"), overlays_globally_visible);

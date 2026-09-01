@@ -1,5 +1,7 @@
 #pragma once
 
+#include "molecule/molecule_geometry.hpp"
+
 #include <QColor>
 #include <QHash>
 #include <QImage>
@@ -10,6 +12,7 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <memory>
 #include <vector>
 
 class QCloseEvent;
@@ -18,7 +21,9 @@ class QEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QPaintEvent;
+class QResizeEvent;
 class QWheelEvent;
+class MoleculeWidget;
 
 class AudienceWindow : public QWidget {
     Q_OBJECT
@@ -43,6 +48,10 @@ public:
     void set_video_frame(const QImage& image, QRectF slide_rect);
     /** @brief Clears the active video overlay. */
     void clear_video_overlay();
+    /** @brief Displays an interactive molecule over a normalized slide rectangle. */
+    void set_molecule_overlay(const MoleculeGeometry& geometry, QRectF slide_rect);
+    /** @brief Clears the active interactive molecule. */
+    void clear_molecule_overlay();
     /** @brief Selects the screen on which the audience window appears. */
     void set_audience_screen(QScreen* screen);
     /** @brief Enters full-screen presentation mode. */
@@ -125,6 +134,8 @@ protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
     /** @brief Paints the audience slide, media, and annotations. */
     void paintEvent(QPaintEvent* event) override;
+    /** @brief Repositions interactive content after an audience-window resize. */
+    void resizeEvent(QResizeEvent* event) override;
     /** @brief Handles Qt keyboard events for presentation controls. */
     void keyPressEvent(QKeyEvent* event) override;
     /** @brief Handles Qt pointer-leave events. */
@@ -211,12 +222,16 @@ private:
     void scroll_deck_overview_by(int delta_y);
     /** @brief Saves the current annotated slide as an image. */
     void save_annotated_slide_image();
+    /** @brief Repositions and shows or hides the active molecular rendering surface. */
+    void update_molecule_overlay_geometry();
 
     QString current_texture_key_;
     QImage current_slide_image_;
     std::vector<CachedSlide> slide_cache_;
     QImage video_frame_;
     QRectF video_rect_;
+    std::unique_ptr<MoleculeWidget> molecule_widget_;
+    QRectF molecule_rect_;
     QHash<int, QImage> deck_overview_images_;
     QSize deck_overview_image_size_;
     QHash<QString, QImage> annotation_images_;

@@ -1103,7 +1103,9 @@ void PresenterWindow::update_media_label(const PdfMediaScanResult& result) {
         return;
     }
 
-    media_label_->setText(QStringLiteral("Media: %1 item(s)").arg(result.annotations.size()));
+    media_label_->setText(
+        QStringLiteral("Media: %1 item(s)")
+            .arg(result.annotations.size() + result.molecule_annotations.size()));
     media_label_->setToolTip(result.summary());
     statusBar()->showMessage(result.summary());
 }

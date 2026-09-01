@@ -1,0 +1,92 @@
+%% uilmolecule.sty -- UIL interactive molecule annotations
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{uilmolecule}[2026/09/01 v0.1 UIL molecule annotations]
+
+\RequirePackage{iftex}
+\RequirePackage{graphicx}
+\RequirePackage{keyval}
+\RequirePackage{pdfescape}
+
+\newif\ifuilmol@supported
+\uilmol@supportedfalse
+\ifPDFTeX
+  \let\uilmol@pdfannot\pdfannot
+  \uilmol@supportedtrue
+\fi
+\ifLuaTeX
+  \protected\def\uilmol@pdfannot{\pdfextension annot }
+  \uilmol@supportedtrue
+\fi
+
+\newif\ifuilmol@widthset
+\newif\ifuilmol@heightset
+\newif\ifuilmol@depthset
+\newdimen\uilmol@width
+\newdimen\uilmol@height
+\newdimen\uilmol@depth
+
+\define@key{uilmolecule}{width}{\uilmol@width=#1\relax\uilmol@widthsettrue}
+\define@key{uilmolecule}{height}{\uilmol@height=#1\relax\uilmol@heightsettrue}
+\define@key{uilmolecule}{depth}{\uilmol@depth=#1\relax\uilmol@depthsettrue}
+\define@key{uilmolecule}{borderwidth}{\def\uilmol@borderwidth{#1}}
+
+%% Usage: \molecule[width=...,height=...]{poster material}{geometry.xyz}
+\newcommand\molecule[3][]{%
+  \leavevmode
+  \IfFileExists{#3}{}{%
+    \PackageWarning{uilmolecule}{The molecule geometry `#3' was not found}%
+  }%
+  \setbox\@tempboxa=\hbox{#2}%
+  \uilmol@width=\wd\@tempboxa
+  \uilmol@height=\ht\@tempboxa
+  \uilmol@depth=\dp\@tempboxa
+  \def\uilmol@borderwidth{0}%
+  \uilmol@widthsetfalse
+  \uilmol@heightsetfalse
+  \uilmol@depthsetfalse
+  \setkeys{uilmolecule}{#1}%
+  \ifuilmol@heightset
+    \ifuilmol@depthset\else
+      \uilmol@depth=0pt
+    \fi
+  \fi
+  \ifuilmol@widthset
+    \ifuilmol@heightset
+      \setbox\@tempboxa=\hbox{%
+        \resizebox*{\uilmol@width}{\dimexpr\uilmol@height+\uilmol@depth\relax}{\box\@tempboxa}}%
+    \else
+      \ifuilmol@depthset
+        \setbox\@tempboxa=\hbox{%
+          \resizebox*{\uilmol@width}{\dimexpr\uilmol@height+\uilmol@depth\relax}{\box\@tempboxa}}%
+      \else
+        \setbox\@tempboxa=\hbox{\resizebox{\uilmol@width}{!}{\box\@tempboxa}}%
+      \fi
+    \fi
+  \else
+    \ifuilmol@heightset
+      \setbox\@tempboxa=\hbox{%
+        \resizebox*{!}{\dimexpr\uilmol@height+\uilmol@depth\relax}{\box\@tempboxa}}%
+    \else
+      \ifuilmol@depthset
+        \setbox\@tempboxa=\hbox{%
+          \resizebox*{!}{\dimexpr\uilmol@height+\uilmol@depth\relax}{\box\@tempboxa}}%
+      \fi
+    \fi
+  \fi
+  \uilmol@width=\wd\@tempboxa
+  \uilmol@height=\ht\@tempboxa
+  \uilmol@depth=\dp\@tempboxa
+  \EdefEscapeString\uilmol@asset{#3}%
+  \ifuilmol@supported
+    \uilmol@pdfannot width \uilmol@width height \uilmol@height depth \uilmol@depth {%
+      /Subtype /UILMolecule
+      /Border [0 0 \uilmol@borderwidth]
+      /UIL << /Version 1 /F (\uilmol@asset) >>
+    }%
+  \else
+    \PackageError{uilmolecule}{Only pdfLaTeX and LuaLaTeX are currently supported}{}%
+  \fi
+  \box\@tempboxa
+}
+
+\endinput

@@ -53,6 +53,7 @@ add_uil_unit_test(pdf_media_detector_test
     pdf_media_detector_test.cpp
     ${PROJECT_SOURCE_DIR}/src/util/pdf_media_detector.cpp
     ${PROJECT_SOURCE_DIR}/src/media/video_frame_extractor.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
 )
 target_link_libraries(pdf_media_detector_test PRIVATE ZLIB::ZLIB)
 if(FFMPEG_FOUND)

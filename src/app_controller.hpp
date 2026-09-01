@@ -143,6 +143,10 @@ private:
     const PdfMediaAnnotation* current_playable_media_annotation() const;
     /** @brief Normalizes a PDF media rectangle to slide-relative coordinates. */
     QRectF normalized_media_rect(const PdfMediaAnnotation& annotation) const;
+    /** @brief Normalizes an arbitrary PDF rectangle to slide-relative coordinates. */
+    QRectF normalized_pdf_rect(int page_index, const QRectF& rect) const;
+    /** @brief Shows the first ready molecule attached to the current page. */
+    void update_active_molecule();
     /** @brief Starts playback of the current slide's media. */
     void start_media_playback();
     /** @brief Stops active media playback and clears its frame overlay. */
@@ -166,6 +170,7 @@ private:
         const QString& pdf_path,
         const QString& package_root_path,
         const QStringList& package_movie_asset_paths,
+        const QStringList& package_molecule_asset_paths,
         const QString& document_hash,
         int generation,
         std::shared_ptr<QTemporaryDir> package_lifetime);
@@ -188,6 +193,7 @@ private:
     QString package_root_path_;
     QString entry_pdf_relative_path_;
     QStringList package_movie_asset_paths_;
+    QStringList package_molecule_asset_paths_;
     QString document_hash_;
     QVector<QSizeF> page_sizes_points_;
     PdfMediaScanResult media_scan_result_;

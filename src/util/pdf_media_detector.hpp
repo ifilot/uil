@@ -1,5 +1,7 @@
 #pragma once
 
+#include "molecule/molecule_geometry.hpp"
+
 #include <QImage>
 #include <QRectF>
 #include <QString>
@@ -21,10 +23,24 @@ struct PdfMediaAnnotation {
     bool is_mp4() const;
 };
 
+struct PdfMoleculeAnnotation {
+    int page_index = -1;
+    int object_number = -1;
+    QString file_name;
+    QString resolved_file_path;
+    QRectF rect;
+    MoleculeGeometry geometry;
+    QString error_message;
+
+    /** @brief Returns whether a valid geometry was loaded for this annotation. */
+    bool is_ready() const;
+};
+
 struct PdfMediaScanResult {
     QVector<PdfMediaAnnotation> annotations;
+    QVector<PdfMoleculeAnnotation> molecule_annotations;
 
-    /** @brief Returns whether the scan found at least one media annotation. */
+    /** @brief Returns whether the scan found at least one interactive annotation. */
     bool has_media() const;
     /** @brief Returns a concise user-facing summary of the scan. */
     QString summary() const;
@@ -34,4 +50,5 @@ struct PdfMediaScanResult {
 PdfMediaScanResult scan_pdf_media_annotations(
     const QString& path,
     const QString& package_root_path = QString(),
-    const QStringList& package_movie_asset_paths = {});
+    const QStringList& package_movie_asset_paths = {},
+    const QStringList& package_molecule_asset_paths = {});

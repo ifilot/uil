@@ -2,6 +2,7 @@
 
 #include "ui/bluecurve.hpp"
 #include "ui/font_awesome.hpp"
+#include "ui/molecule_widget.hpp"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -25,6 +26,7 @@
 #include <QPainter>
 #include <QPen>
 #include <QPixmap>
+#include <QResizeEvent>
 #include <QSizePolicy>
 #include <QSlider>
 #include <QStandardPaths>
@@ -700,6 +702,7 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
     current_slide_image_ = image;
     cache_slide_image(texture_key, image);
     emit annotation_overlay_changed(current_annotation_overlay_image());
+    update_molecule_overlay_geometry();
     update();
 }
 
@@ -709,6 +712,7 @@ void AudienceWindow::clear_slide_image() {
     video_frame_ = {};
     video_rect_ = {};
     has_video_overlay_ = false;
+    clear_molecule_overlay();
     emit annotation_overlay_changed({});
     update();
 }
@@ -805,6 +809,30 @@ void AudienceWindow::clear_video_overlay() {
     update();
 }
 
+void AudienceWindow::set_molecule_overlay(
+    const MoleculeGeometry& geometry,
+    QRectF slide_rect) {
+    if (!geometry.is_valid() || !slide_rect.isValid()) {
+        clear_molecule_overlay();
+        return;
+    }
+
+    if (!molecule_widget_) {
+        molecule_widget_ = std::make_unique<MoleculeWidget>(this);
+    }
+    molecule_rect_ = slide_rect;
+    molecule_widget_->set_geometry(geometry);
+    molecule_widget_->raise();
+    update_molecule_overlay_geometry();
+}
+
+void AudienceWindow::clear_molecule_overlay() {
+    molecule_rect_ = {};
+    if (molecule_widget_) {
+        molecule_widget_->hide();
+    }
+}
+
 void AudienceWindow::set_audience_screen(QScreen* screen) {
     if (!screen) {
         return;
@@ -889,6 +917,7 @@ void AudienceWindow::set_cursor_tool() {
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
+    update_molecule_overlay_geometry();
     update();
 }
 
@@ -897,6 +926,7 @@ void AudienceWindow::set_pointer_tool() {
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
+    update_molecule_overlay_geometry();
     update();
 }
 
@@ -906,6 +936,7 @@ void AudienceWindow::set_pen_tool() {
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
+    update_molecule_overlay_geometry();
     update();
 }
 
@@ -915,6 +946,7 @@ void AudienceWindow::set_eraser_tool() {
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
+    update_molecule_overlay_geometry();
     update();
 }
 
@@ -1076,6 +1108,7 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.fillRect(rect(), blank_mode_ == BlankMode::White ? Qt::white : Qt::black);
+    update_molecule_overlay_geometry();
 
     if (blank_mode_ != BlankMode::None) {
         return;
@@ -1113,6 +1146,11 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
 
     draw_pointer(painter);
     draw_eraser_cursor(painter);
+}
+
+void AudienceWindow::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    update_molecule_overlay_geometry();
 }
 
 void AudienceWindow::keyPressEvent(QKeyEvent* event) {
@@ -1458,6 +1496,39 @@ QRectF AudienceWindow::slide_logical_rect(QSize texture_size) const {
         (height() - displayedSize.height()) / 2.0,
         displayedSize.width(),
         displayedSize.height());
+}
+
+void AudienceWindow::update_molecule_overlay_geometry() {
+    if (!molecule_widget_) {
+        return;
+    }
+    if (!molecule_rect_.isValid() || current_slide_image_.isNull()
+        || blank_mode_ != BlankMode::None || deck_overview_visible_
+        || interaction_tool_ != InteractionTool::Cursor) {
+        molecule_widget_->hide();
+        return;
+    }
+
+    const QRectF slide_rect = slide_logical_rect(current_slide_image_.size());
+    if (!slide_rect.isValid()) {
+        molecule_widget_->hide();
+        return;
+    }
+
+    const QRect target = QRectF(
+        slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
+        slide_rect.top() + molecule_rect_.top() * slide_rect.height(),
+        molecule_rect_.width() * slide_rect.width(),
+        molecule_rect_.height() * slide_rect.height())
+                             .toAlignedRect();
+    if (target.width() < 2 || target.height() < 2) {
+        molecule_widget_->hide();
+        return;
+    }
+
+    molecule_widget_->setGeometry(target);
+    molecule_widget_->show();
+    molecule_widget_->raise();
 }
 
 QPointF AudienceWindow::slide_image_point(QPointF window_point, QSize texture_size, bool* inside) const {
