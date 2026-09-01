@@ -31,6 +31,11 @@ add_uil_unit_test(deck_overview_visibility_test
 )
 target_link_libraries(deck_overview_visibility_test PRIVATE Qt6::Widgets)
 
+add_uil_unit_test(molecule_camera_test
+    molecule_camera_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+)
+
 add_uil_unit_test(render_scheduler_test
     render_scheduler_test.cpp
     ${PROJECT_SOURCE_DIR}/src/render/render_scheduler.cpp

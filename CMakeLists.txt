@@ -23,6 +23,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Core
     Gui
     Widgets
+    OpenGL
     OpenGLWidgets
     Pdf
     Svg
@@ -199,6 +200,8 @@ qt_add_executable(${UIL_VIEWER_TARGET}
     src/media/video_frame_buffer.cpp
     src/molecule/molecule_geometry.hpp
     src/molecule/molecule_geometry.cpp
+    src/molecule/molecule_camera.hpp
+    src/molecule/molecule_camera.cpp
     src/ui/molecule_widget.hpp
     src/ui/molecule_widget.cpp
     src/package/uil_package.hpp
@@ -229,6 +232,7 @@ target_link_libraries(${UIL_VIEWER_TARGET} PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Qt6::OpenGL
     Qt6::OpenGLWidgets
     Qt6::Pdf
     Qt6::Svg
