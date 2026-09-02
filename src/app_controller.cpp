@@ -67,6 +67,9 @@ AppController::~AppController() {
     ++media_scan_generation_;
     media_scan_pool_.clear();
     media_scan_pool_.waitForDone();
+    render_scheduler_.stop_and_wait();
+    backend_.reset();
+    package_temp_dir_.reset();
 }
 
 void AppController::set_audience_window(AudienceWindow* audience_window) {
@@ -82,6 +85,7 @@ void AppController::set_audience_window(AudienceWindow* audience_window) {
         if (audience_screen_) {
             audience_window_->set_audience_screen(audience_screen_);
         }
+        update_active_molecule();
     }
 }
 
@@ -102,6 +106,7 @@ bool AppController::open_pdf(const QString& path) {
     QString documentHashPath = path;
     QString package_root_path;
     QStringList package_movie_asset_paths;
+    QStringList package_molecule_asset_paths;
     QString entry_pdf_relative_path = QStringLiteral("build/presentation.pdf");
     QHash<int, QImage> packageOverlayImages;
     QSet<int> packageHiddenOverlayPages;
@@ -129,12 +134,14 @@ bool AppController::open_pdf(const QString& path) {
         }
         open_span.checkpoint(QStringLiteral("extract_uil_package"), {
             {QStringLiteral("movie_asset_count"), packageResult.movie_asset_paths.size()},
+            {QStringLiteral("molecule_asset_count"), packageResult.molecule_asset_paths.size()},
             {QStringLiteral("overlay_count"), packageResult.overlay_image_paths.size()}
         });
 
         pdfPath = packageResult.entry_pdf_path;
         package_root_path = packageResult.package_root_path;
         package_movie_asset_paths = packageResult.movie_asset_paths;
+        package_molecule_asset_paths = packageResult.molecule_asset_paths;
         entry_pdf_relative_path = packageResult.entry_pdf_relative_path;
         packageHiddenOverlayPages = packageResult.hidden_overlay_pages;
         packageOverlaysGloballyVisible = packageResult.overlays_globally_visible;
@@ -187,6 +194,7 @@ bool AppController::open_pdf(const QString& path) {
     package_root_path_ = package_root_path;
     entry_pdf_relative_path_ = entry_pdf_relative_path;
     package_movie_asset_paths_ = package_movie_asset_paths;
+    package_molecule_asset_paths_ = package_molecule_asset_paths;
     loaded_overlay_images_ = packageOverlayImages;
     loaded_hidden_overlay_pages_ = packageHiddenOverlayPages;
     loaded_overlays_globally_visible_ = packageOverlaysGloballyVisible;
@@ -229,6 +237,7 @@ bool AppController::open_pdf(const QString& path) {
         pdfPath,
         package_root_path,
         package_movie_asset_paths,
+        package_molecule_asset_paths,
         document_hash_,
         media_scan_generation_,
         package_temp_dir_);
@@ -242,6 +251,7 @@ void AppController::schedule_media_scan(
     const QString& pdf_path,
     const QString& package_root_path,
     const QStringList& package_movie_asset_paths,
+    const QStringList& package_molecule_asset_paths,
     const QString& document_hash,
     int generation,
     std::shared_ptr<QTemporaryDir> package_lifetime) {
@@ -251,6 +261,7 @@ void AppController::schedule_media_scan(
         pdf_path,
         package_root_path,
         package_movie_asset_paths,
+        package_molecule_asset_paths,
         document_hash,
         generation,
         package_lifetime = std::move(package_lifetime)] {
@@ -258,7 +269,8 @@ void AppController::schedule_media_scan(
         PdfMediaScanResult result = scan_pdf_media_annotations(
             pdf_path,
             package_root_path,
-            package_movie_asset_paths);
+            package_movie_asset_paths,
+            package_molecule_asset_paths);
         if (!self) {
             return;
         }
@@ -274,12 +286,35 @@ void AppController::schedule_media_scan(
             }
 
             self->media_scan_result_ = std::move(result);
+            if (self->current_package_path_.isEmpty()) {
+                self->package_movie_asset_paths_.clear();
+                self->package_molecule_asset_paths_.clear();
+                const QDir pdf_directory(QFileInfo(self->current_path_).absolutePath());
+                for (const PdfMediaAnnotation& annotation : self->media_scan_result_.annotations) {
+                    if (!annotation.resolved_file_path.isEmpty()) {
+                        self->package_movie_asset_paths_.push_back(
+                            pdf_directory.relativeFilePath(annotation.resolved_file_path));
+                    }
+                }
+                for (const PdfMoleculeAnnotation& annotation :
+                     self->media_scan_result_.molecule_annotations) {
+                    if (!annotation.resolved_file_path.isEmpty()) {
+                        self->package_molecule_asset_paths_.push_back(
+                            pdf_directory.relativeFilePath(annotation.resolved_file_path));
+                    }
+                }
+                self->package_movie_asset_paths_.removeDuplicates();
+                self->package_molecule_asset_paths_.removeDuplicates();
+            }
+            self->update_active_molecule();
             emit self->media_scan_changed(self->media_scan_result_);
             if (self->media_scan_result_.has_media()) {
                 emit self->status_message_changed(self->media_scan_result_.summary());
             }
             performance_log::record_event(QStringLiteral("pdf.media_scan_applied"), {
-                {QStringLiteral("annotation_count"), self->media_scan_result_.annotations.size()},
+                {QStringLiteral("annotation_count"),
+                 self->media_scan_result_.annotations.size()
+                     + self->media_scan_result_.molecule_annotations.size()},
                 {QStringLiteral("generation"), generation}
             });
         }, Qt::QueuedConnection);
@@ -313,6 +348,7 @@ void AppController::go_to_page(int page_index) {
 
     stop_media_playback();
     current_page_index_ = clampedPage;
+    update_active_molecule();
     request_page_render(current_page_index_, 1000);
     update_visible_slides();
     schedule_predictive_renders();
@@ -521,8 +557,10 @@ bool AppController::save_uil_package(
             path,
             current_path_,
             entryPdf,
-            package_root_path_,
+            package_root_path_.isEmpty() ? QFileInfo(current_path_).absolutePath()
+                                         : package_root_path_,
             package_movie_asset_paths_,
+            package_molecule_asset_paths_,
             packageOverlayImages,
             hidden_overlay_pages,
             overlays_globally_visible,
@@ -886,20 +924,40 @@ const PdfMediaAnnotation* AppController::current_playable_media_annotation() con
 }
 
 QRectF AppController::normalized_media_rect(const PdfMediaAnnotation& annotation) const {
-    if (!backend_ || !annotation.rect.isValid()) {
+    return normalized_pdf_rect(annotation.page_index, annotation.rect);
+}
+
+QRectF AppController::normalized_pdf_rect(int page_index, const QRectF& rect) const {
+    if (!backend_ || !rect.isValid()) {
         return {};
     }
 
-    const QSizeF pageSize = page_size_points(annotation.page_index);
+    const QSizeF pageSize = page_size_points(page_index);
     if (!pageSize.isValid()) {
         return {};
     }
 
     return QRectF(
-        annotation.rect.left() / pageSize.width(),
-        (pageSize.height() - annotation.rect.bottom()) / pageSize.height(),
-        annotation.rect.width() / pageSize.width(),
-        annotation.rect.height() / pageSize.height());
+        rect.left() / pageSize.width(),
+        (pageSize.height() - rect.bottom()) / pageSize.height(),
+        rect.width() / pageSize.width(),
+        rect.height() / pageSize.height());
+}
+
+void AppController::update_active_molecule() {
+    if (!audience_window_) {
+        return;
+    }
+
+    for (const PdfMoleculeAnnotation& annotation : media_scan_result_.molecule_annotations) {
+        if (annotation.page_index == current_page_index_ && annotation.is_ready()) {
+            audience_window_->set_molecule_overlay(
+                annotation.geometry,
+                normalized_pdf_rect(annotation.page_index, annotation.rect));
+            return;
+        }
+    }
+    audience_window_->clear_molecule_overlay();
 }
 
 void AppController::start_media_playback() {

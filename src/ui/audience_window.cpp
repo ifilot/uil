@@ -2,6 +2,7 @@
 
 #include "ui/bluecurve.hpp"
 #include "ui/font_awesome.hpp"
+#include "ui/molecule_widget.hpp"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -25,9 +26,12 @@
 #include <QPainter>
 #include <QPen>
 #include <QPixmap>
+#include <QResizeEvent>
 #include <QSizePolicy>
 #include <QSlider>
+#include <QSpinBox>
 #include <QStandardPaths>
+#include <QSettings>
 #include <QStringList>
 #include <QTimer>
 #include <QToolButton>
@@ -49,7 +53,10 @@ constexpr int kDeckOverviewColumns = 6;
 constexpr int kDeckOverviewFooterHeight = 28;
 constexpr int kDeckOverviewScrollTrackWidth = 5;
 constexpr int kDeckOverviewScrollbarGutter = 22;
-constexpr qreal kPointerLogicalSize = 46.0;
+constexpr int kDefaultPointerSize = 25;
+constexpr int kMinimumPointerSize = 12;
+constexpr int kMaximumPointerSize = 120;
+constexpr auto kPointerSizeSettingsKey = "audience/pointerSize";
 const QColor kMenuIconColor(0xcc, 0xcc, 0xcc);
 
 /** @brief Returns the usable source rectangle of an image. */
@@ -190,6 +197,7 @@ private:
         toolRow->setSpacing(14);
         cursor_button_ = create_tool_button(QStringLiteral("Classic\npointer"), QStringLiteral("arrow-pointer"), InteractionTool::Cursor);
         pointer_button_ = create_tool_button(QStringLiteral("Laser\npointer"), QStringLiteral("location-crosshairs"), InteractionTool::Pointer);
+        pointer_button_->setToolTip(QStringLiteral("Laser pointer (L)"));
         pen_button_ = create_tool_button(QStringLiteral("Pencil"), QStringLiteral("pencil"), InteractionTool::Pen);
         eraser_button_ = create_tool_button(QStringLiteral("Eraser"), QStringLiteral("eraser"), InteractionTool::Eraser);
         toolRow->addStretch(1);
@@ -216,7 +224,7 @@ private:
         QToolButton* closeButton = create_bottom_button(QStringLiteral("Close slideshow"), QStringLiteral("stock-quit"), QStringLiteral("featureCloseButton"), 148);
         QToolButton* firstButton = create_icon_bottom_button(QStringLiteral("First slide"), QStringLiteral("stock-goto-first"), QStringLiteral("featureNavButton"));
         QToolButton* previousButton = create_icon_bottom_button(QStringLiteral("Previous slide"), QStringLiteral("stock-go-back"), QStringLiteral("featureNavButton"));
-        grid_button_ = create_icon_bottom_button(QStringLiteral("Show slide grid"), QStringLiteral("stock_display-grid"), QStringLiteral("featureNavButton"));
+        grid_button_ = create_icon_bottom_button(QStringLiteral("Show slide grid (G)"), QStringLiteral("stock_display-grid"), QStringLiteral("featureNavButton"));
         grid_button_->installEventFilter(this);
         QToolButton* nextButton = create_icon_bottom_button(QStringLiteral("Next slide"), QStringLiteral("stock-go-forward"), QStringLiteral("featureNavButton"));
         QToolButton* lastButton = create_icon_bottom_button(QStringLiteral("Last slide"), QStringLiteral("stock-goto-last"), QStringLiteral("featureNavButton"));
@@ -258,6 +266,20 @@ private:
 
     /** @brief Handles clicks outside the feature menu and relevant window events. */
     bool eventFilter(QObject* watched, QEvent* event) override {
+        if (event->type() == QEvent::KeyPress) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent->key() == Qt::Key_G) {
+                open_deck_overview();
+                event->accept();
+                return true;
+            }
+            if (keyEvent->key() == Qt::Key_L) {
+                select_tool(InteractionTool::Pointer);
+                event->accept();
+                return true;
+            }
+        }
+
         if (event->type() == QEvent::MouseButtonPress && grid_button_) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton
@@ -423,8 +445,8 @@ private:
 
     /** @brief Adds pointer-specific controls to the settings panel. */
     void add_pointer_settings() {
-        auto* row = create_settings_row();
-        row->addWidget(create_settings_label(QStringLiteral("Pointer color")), 0, Qt::AlignVCenter);
+        auto* colorRow = create_settings_row();
+        colorRow->addWidget(create_settings_label(QStringLiteral("Pointer color")), 0, Qt::AlignVCenter);
         const std::array<QPair<QString, QColor>, 3> colors{{
             {QStringLiteral("Bright red"), QColor(255, 36, 36)},
             {QStringLiteral("Bright green"), QColor(28, 255, 83)},
@@ -436,10 +458,35 @@ private:
                 audience_->set_pointer_color(color);
                 rebuild_settings();
             });
-            row->addWidget(button, 0, Qt::AlignVCenter);
+            colorRow->addWidget(button, 0, Qt::AlignVCenter);
         }
-        row->addStretch(1);
-        settings_layout_->addLayout(row);
+        colorRow->addStretch(1);
+        settings_layout_->addLayout(colorRow);
+
+        auto* sizeRow = create_settings_row();
+        sizeRow->addWidget(create_settings_label(QStringLiteral("Pointer size")), 0, Qt::AlignVCenter);
+        auto* slider = new QSlider(Qt::Horizontal, this);
+        slider->setObjectName(QStringLiteral("featureSizeSlider"));
+        slider->setMinimumWidth(280);
+        slider->setRange(kMinimumPointerSize, kMaximumPointerSize);
+        slider->setSingleStep(1);
+        slider->setPageStep(10);
+        slider->setValue(audience_->pointer_size_);
+
+        auto* sizeInput = new QSpinBox(this);
+        sizeInput->setObjectName(QStringLiteral("pointerSizeInput"));
+        sizeInput->setRange(kMinimumPointerSize, kMaximumPointerSize);
+        sizeInput->setSuffix(QStringLiteral(" px"));
+        sizeInput->setValue(audience_->pointer_size_);
+        sizeInput->setFixedSize(90, 38);
+
+        connect(slider, &QSlider::valueChanged, sizeInput, &QSpinBox::setValue);
+        connect(sizeInput, qOverload<int>(&QSpinBox::valueChanged), slider, &QSlider::setValue);
+        connect(slider, &QSlider::valueChanged, audience_, &AudienceWindow::set_pointer_size);
+
+        sizeRow->addWidget(slider, 1, Qt::AlignVCenter);
+        sizeRow->addWidget(sizeInput, 0, Qt::AlignVCenter);
+        settings_layout_->addLayout(sizeRow);
     }
 
     /** @brief Adds pen-specific controls to the settings panel. */
@@ -674,6 +721,11 @@ private:
 
 AudienceWindow::AudienceWindow()
     : QWidget(nullptr, Qt::Window) {
+    QSettings settings;
+    pointer_size_ = std::clamp(
+        settings.value(QString::fromLatin1(kPointerSizeSettingsKey), kDefaultPointerSize).toInt(),
+        kMinimumPointerSize,
+        kMaximumPointerSize);
     setWindowTitle(QStringLiteral("uil Audience"));
     setWindowIcon(QIcon(QStringLiteral(":/icons/uil.png")));
     resize(960, 540);
@@ -686,6 +738,10 @@ AudienceWindow::AudienceWindow()
     cursor_hide_timer_.setSingleShot(true);
     cursor_hide_timer_.setInterval(2000);
     connect(&cursor_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_cursor);
+
+    pointer_hide_timer_.setSingleShot(true);
+    pointer_hide_timer_.setInterval(kPointerInactivityTimeoutMs);
+    connect(&pointer_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_pointer);
 }
 
 AudienceWindow::~AudienceWindow() = default;
@@ -700,6 +756,7 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
     current_slide_image_ = image;
     cache_slide_image(texture_key, image);
     emit annotation_overlay_changed(current_annotation_overlay_image());
+    update_molecule_overlay_geometry();
     update();
 }
 
@@ -709,6 +766,7 @@ void AudienceWindow::clear_slide_image() {
     video_frame_ = {};
     video_rect_ = {};
     has_video_overlay_ = false;
+    clear_molecule_overlay();
     emit annotation_overlay_changed({});
     update();
 }
@@ -805,6 +863,30 @@ void AudienceWindow::clear_video_overlay() {
     update();
 }
 
+void AudienceWindow::set_molecule_overlay(
+    const MoleculeGeometry& geometry,
+    QRectF slide_rect) {
+    if (!geometry.is_valid() || !slide_rect.isValid()) {
+        clear_molecule_overlay();
+        return;
+    }
+
+    if (!molecule_widget_) {
+        molecule_widget_ = std::make_unique<MoleculeWidget>(this);
+    }
+    molecule_rect_ = slide_rect;
+    molecule_widget_->set_geometry(geometry);
+    molecule_widget_->raise();
+    update_molecule_overlay_geometry();
+}
+
+void AudienceWindow::clear_molecule_overlay() {
+    molecule_rect_ = {};
+    if (molecule_widget_) {
+        molecule_widget_->hide();
+    }
+}
+
 void AudienceWindow::set_audience_screen(QScreen* screen) {
     if (!screen) {
         return;
@@ -855,7 +937,7 @@ void AudienceWindow::exit_fullscreen() {
 
     is_fullscreen_ = false;
     is_annotating_ = false;
-    pointer_visible_ = false;
+    hide_pointer();
     deck_overview_visible_ = false;
     showNormal();
     hide();
@@ -885,36 +967,41 @@ void AudienceWindow::clear_blank_screen() {
 
 void AudienceWindow::set_cursor_tool() {
     interaction_tool_ = InteractionTool::Cursor;
-    pointer_visible_ = false;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
+    update_molecule_overlay_geometry();
     update();
 }
 
 void AudienceWindow::set_pointer_tool() {
     interaction_tool_ = InteractionTool::Pointer;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
+    update_molecule_overlay_geometry();
     update();
 }
 
 void AudienceWindow::set_pen_tool() {
     interaction_tool_ = InteractionTool::Pen;
-    pointer_visible_ = false;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
+    update_molecule_overlay_geometry();
     update();
 }
 
 void AudienceWindow::set_eraser_tool() {
     interaction_tool_ = InteractionTool::Eraser;
-    pointer_visible_ = false;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
+    update_molecule_overlay_geometry();
     update();
 }
 
@@ -923,6 +1010,18 @@ void AudienceWindow::set_pointer_color(const QColor& color) {
         pointer_color_ = color;
         update();
     }
+}
+
+void AudienceWindow::set_pointer_size(int size) {
+    const int clampedSize = std::clamp(size, kMinimumPointerSize, kMaximumPointerSize);
+    if (pointer_size_ == clampedSize) {
+        return;
+    }
+
+    pointer_size_ = clampedSize;
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kPointerSizeSettingsKey), pointer_size_);
+    update();
 }
 
 void AudienceWindow::set_annotation_color(const QColor& color) {
@@ -1054,10 +1153,26 @@ qreal AudienceWindow::render_device_pixel_ratio() const {
     return devicePixelRatioF();
 }
 
+int AudienceWindow::pointer_size() const {
+    return pointer_size_;
+}
+
+bool AudienceWindow::is_pointer_visible() const {
+    return pointer_visible_;
+}
+
+bool AudienceWindow::is_pointer_tool_selected() const {
+    return interaction_tool_ == InteractionTool::Pointer;
+}
+
+bool AudienceWindow::is_deck_overview_visible() const {
+    return deck_overview_visible_;
+}
+
 void AudienceWindow::closeEvent(QCloseEvent* event) {
     is_fullscreen_ = false;
     is_annotating_ = false;
-    pointer_visible_ = false;
+    hide_pointer();
     deck_overview_visible_ = false;
     clear_blank_screen();
     unsetCursor();
@@ -1076,6 +1191,7 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.fillRect(rect(), blank_mode_ == BlankMode::White ? Qt::white : Qt::black);
+    update_molecule_overlay_geometry();
 
     if (blank_mode_ != BlankMode::None) {
         return;
@@ -1115,10 +1231,19 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
     draw_eraser_cursor(painter);
 }
 
+void AudienceWindow::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    update_molecule_overlay_geometry();
+}
+
 void AudienceWindow::keyPressEvent(QKeyEvent* event) {
     if (deck_overview_visible_) {
         switch (event->key()) {
         case Qt::Key_Escape:
+            exit_deck_overview();
+            event->accept();
+            return;
+        case Qt::Key_G:
             exit_deck_overview();
             event->accept();
             return;
@@ -1189,6 +1314,17 @@ void AudienceWindow::keyPressEvent(QKeyEvent* event) {
         toggle_white_screen();
         event->accept();
         return;
+    case Qt::Key_G:
+        enter_deck_overview();
+        event->accept();
+        return;
+    case Qt::Key_L:
+        if (deck_overview_visible_) {
+            exit_deck_overview();
+        }
+        set_pointer_tool();
+        event->accept();
+        return;
     case Qt::Key_F11:
         toggle_fullscreen();
         event->accept();
@@ -1213,7 +1349,7 @@ void AudienceWindow::keyPressEvent(QKeyEvent* event) {
 }
 
 void AudienceWindow::leaveEvent(QEvent* event) {
-    pointer_visible_ = false;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update();
@@ -1229,9 +1365,7 @@ void AudienceWindow::mouseMoveEvent(QMouseEvent* event) {
     }
 
     if (interaction_tool_ == InteractionTool::Pointer) {
-        pointer_position_ = event->position();
-        pointer_visible_ = true;
-        update();
+        show_pointer_at(event->position());
         event->accept();
         return;
     }
@@ -1290,9 +1424,7 @@ void AudienceWindow::mousePressEvent(QMouseEvent* event) {
     }
 
     if (event->button() == Qt::LeftButton && interaction_tool_ == InteractionTool::Pointer) {
-        pointer_position_ = event->position();
-        pointer_visible_ = true;
-        update();
+        show_pointer_at(event->position());
         event->accept();
         return;
     }
@@ -1460,6 +1592,39 @@ QRectF AudienceWindow::slide_logical_rect(QSize texture_size) const {
         displayedSize.height());
 }
 
+void AudienceWindow::update_molecule_overlay_geometry() {
+    if (!molecule_widget_) {
+        return;
+    }
+    if (!molecule_rect_.isValid() || current_slide_image_.isNull()
+        || blank_mode_ != BlankMode::None || deck_overview_visible_
+        || interaction_tool_ != InteractionTool::Cursor) {
+        molecule_widget_->hide();
+        return;
+    }
+
+    const QRectF slide_rect = slide_logical_rect(current_slide_image_.size());
+    if (!slide_rect.isValid()) {
+        molecule_widget_->hide();
+        return;
+    }
+
+    const QRect target = QRectF(
+        slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
+        slide_rect.top() + molecule_rect_.top() * slide_rect.height(),
+        molecule_rect_.width() * slide_rect.width(),
+        molecule_rect_.height() * slide_rect.height())
+                             .toAlignedRect();
+    if (target.width() < 2 || target.height() < 2) {
+        molecule_widget_->hide();
+        return;
+    }
+
+    molecule_widget_->setGeometry(target);
+    molecule_widget_->show();
+    molecule_widget_->raise();
+}
+
 QPointF AudienceWindow::slide_image_point(QPointF window_point, QSize texture_size, bool* inside) const {
     const QRectF slide_rect = slide_logical_rect(texture_size);
     const bool contains = slide_rect.contains(window_point);
@@ -1559,13 +1724,30 @@ void AudienceWindow::draw_pointer(QPainter& painter) const {
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(Qt::NoPen);
     painter.setBrush(glow);
-    painter.drawEllipse(pointer_position_, kPointerLogicalSize * 0.68, kPointerLogicalSize * 0.68);
+    painter.drawEllipse(pointer_position_, pointer_size_ * 0.68, pointer_size_ * 0.68);
     painter.setBrush(fill);
-    painter.drawEllipse(pointer_position_, kPointerLogicalSize * 0.35, kPointerLogicalSize * 0.35);
+    painter.drawEllipse(pointer_position_, pointer_size_ * 0.35, pointer_size_ * 0.35);
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(pointer_color_, 4.0));
-    painter.drawEllipse(pointer_position_, kPointerLogicalSize * 0.48, kPointerLogicalSize * 0.48);
+    painter.setPen(QPen(pointer_color_, std::max(2.0, pointer_size_ * 0.087)));
+    painter.drawEllipse(pointer_position_, pointer_size_ * 0.48, pointer_size_ * 0.48);
     painter.restore();
+}
+
+void AudienceWindow::show_pointer_at(const QPointF& position) {
+    pointer_position_ = position;
+    pointer_visible_ = true;
+    pointer_hide_timer_.start();
+    update();
+}
+
+void AudienceWindow::hide_pointer() {
+    pointer_hide_timer_.stop();
+    if (!pointer_visible_) {
+        return;
+    }
+
+    pointer_visible_ = false;
+    update();
 }
 
 void AudienceWindow::draw_eraser_cursor(QPainter& painter) const {
@@ -1620,7 +1802,7 @@ void AudienceWindow::enter_deck_overview() {
     deck_overview_visible_ = true;
     blank_mode_ = BlankMode::None;
     is_annotating_ = false;
-    pointer_visible_ = false;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     cursor_hide_timer_.stop();
     setCursor(QCursor(Qt::ArrowCursor));

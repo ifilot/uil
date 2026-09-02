@@ -38,6 +38,7 @@ QString create_test_package(QTemporaryDir* directory, QString* error_message) {
             {QStringLiteral("movies/clip.mov")},
             {},
             {},
+            {},
             true,
             error_message)) {
         return {};
@@ -98,12 +99,16 @@ void UilPackageTest::round_trip_preserves_package_contents() {
 
     const QByteArray pdf_contents("%PDF-1.4\nunit-test-deck\n%%EOF\n");
     const QByteArray movie_contents("synthetic movie payload");
+    const QByteArray molecule_contents("1\nHydrogen\nH 0 0 0\n");
     const QString pdf_path = source_directory.filePath(QStringLiteral("deck.pdf"));
     const QString movie_relative_path = QStringLiteral("movies/clip.mov");
     const QString movie_path = source_directory.filePath(movie_relative_path);
+    const QString molecule_relative_path = QStringLiteral("molecules/hydrogen.xyz");
+    const QString molecule_path = source_directory.filePath(molecule_relative_path);
     const QString package_path = source_directory.filePath(QStringLiteral("output/deck.uil"));
     QVERIFY(write_test_file(pdf_path, pdf_contents));
     QVERIFY(write_test_file(movie_path, movie_contents));
+    QVERIFY(write_test_file(molecule_path, molecule_contents));
 
     QImage overlay(3, 2, QImage::Format_ARGB32);
     overlay.fill(qRgba(20, 40, 60, 128));
@@ -116,6 +121,7 @@ void UilPackageTest::round_trip_preserves_package_contents() {
                               QStringLiteral("slides/deck.pdf"),
                               source_directory.path(),
                               {movie_relative_path},
+                              {molecule_relative_path},
                               overlays,
                               hidden_pages,
                               false,
@@ -128,7 +134,11 @@ void UilPackageTest::round_trip_preserves_package_contents() {
     QCOMPARE(result.entry_pdf_relative_path, QStringLiteral("slides/deck.pdf"));
     QCOMPARE(read_test_file(result.entry_pdf_path), pdf_contents);
     QCOMPARE(result.movie_asset_paths, QStringList{movie_relative_path});
+    QCOMPARE(result.molecule_asset_paths, QStringList{molecule_relative_path});
     QCOMPARE(read_test_file(extraction_directory.filePath(movie_relative_path)), movie_contents);
+    QCOMPARE(
+        read_test_file(extraction_directory.filePath(molecule_relative_path)),
+        molecule_contents);
     QVERIFY(result.hidden_overlay_pages == QSet<int>{2});
     QVERIFY(!result.overlays_globally_visible);
     QCOMPARE(result.overlay_image_paths.size(), 1);
@@ -154,6 +164,7 @@ void UilPackageTest::unsafe_entry_path_is_rejected() {
                               {},
                               {},
                               {},
+                              {},
                               true,
                               &error_message));
     QVERIFY(error_message.contains(QStringLiteral("Unsafe entry PDF path")));
@@ -174,6 +185,7 @@ void UilPackageTest::duplicate_asset_path_is_rejected() {
                               directory.path(),
                               {QStringLiteral("movies/clip.mov"),
                                QStringLiteral("movies/clip.mov")},
+                              {},
                               {},
                               {},
                               true,
@@ -197,6 +209,7 @@ void UilPackageTest::case_insensitive_output_collision_is_rejected() {
                               {QStringLiteral("slides/DECK.PDF")},
                               {},
                               {},
+                              {},
                               true,
                               &error_message));
     QVERIFY(error_message.contains(QStringLiteral("Duplicate package entry")));
@@ -211,6 +224,7 @@ void UilPackageTest::missing_source_file_is_rejected() {
                               directory.filePath(QStringLiteral("missing.pdf")),
                               QStringLiteral("deck.pdf"),
                               directory.path(),
+                              {},
                               {},
                               {},
                               {},

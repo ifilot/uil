@@ -2,6 +2,22 @@
 
 Notable user-facing changes to `uil` are documented here.
 
+## 0.2.0 - 2026-09-02
+
+### Added
+
+- Added a presenter start button, Logitech Spotlight presence status, and build identifier.
+- Added persistent slider and numeric controls for laser-pointer size.
+- Added `G` and `L` presentation shortcuts for the slide grid and laser pointer.
+- Added two bundled sample decks under **File > Examples**.
+
+### Changed
+
+- Updated the presentation controls and pointer-size input styling.
+- Hide the laser pointer after three seconds of inactivity, matching PowerPoint's default.
+- Expanded automated coverage for controller workflows, audience shortcuts and annotations,
+  pointer settings, Spotlight detection, render scheduling, PDF errors, and video buffering.
+
 ## 0.1.1 - 2026-08-27
 
 ### Changed

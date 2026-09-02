@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(uil VERSION 0.1.1 LANGUAGES C CXX)
+project(uil VERSION 0.2.0 LANGUAGES C CXX)
 
 include(CTest)
 
@@ -19,10 +19,34 @@ set(UIL_APP_COPYRIGHT "Copyright (C) 2026 Ivo Filot")
 set(UIL_APP_LICENSE "GNU Lesser General Public License v3.0 only")
 set(UIL_REPOSITORY_URL "https://github.com/ifilot/uil")
 
+set(UIL_GIT_COMMIT "unknown")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git/HEAD")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/.git/HEAD"
+        "${CMAKE_CURRENT_SOURCE_DIR}/.git/index"
+    )
+endif()
+find_package(Git QUIET)
+if(Git_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --short=8 HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE UIL_GIT_RESULT
+        OUTPUT_VARIABLE UIL_GIT_OUTPUT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(UIL_GIT_RESULT EQUAL 0 AND NOT UIL_GIT_OUTPUT STREQUAL "")
+        set(UIL_GIT_COMMIT "${UIL_GIT_OUTPUT}")
+    endif()
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS
     Core
     Gui
     Widgets
+    OpenGL
+    OpenGLWidgets
     Pdf
     Svg
 )
@@ -35,6 +59,7 @@ if(PkgConfig_FOUND)
         libavutil
         libswscale
     )
+    pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi)
 endif()
 
 qt_standard_project_setup()
@@ -81,6 +106,7 @@ set(FONT_AWESOME_SVG_FILES
     resources/fontawesome/svgs/solid/eraser.svg
     resources/fontawesome/svgs/solid/location-crosshairs.svg
     resources/fontawesome/svgs/solid/pencil.svg
+    resources/fontawesome/svgs/solid/satellite-dish.svg
     resources/fontawesome/svgs/solid/table-cells-large.svg
     resources/fontawesome/svgs/solid/trash-can.svg
     resources/fontawesome/svgs/solid/window-maximize.svg
@@ -116,6 +142,9 @@ foreach(BLUECURVE_SIZE 16 20)
         )
     endforeach()
 endforeach()
+list(APPEND BLUECURVE_SVG_FILES
+    resources/bluecurve/16x16/actions/icon-resize-screen.svg
+)
 
 set(UIL_LAUNCHER_WINDOWS_RESOURCES)
 set(UIL_VIEWER_WINDOWS_RESOURCES)
@@ -184,18 +213,28 @@ qt_add_executable(${UIL_VIEWER_TARGET}
     src/ui/presenter_window.cpp
     src/util/document_hash.hpp
     src/util/document_hash.cpp
+    src/util/example_presentations.hpp
+    src/util/example_presentations.cpp
     src/util/image_util.hpp
     src/util/image_util.cpp
     src/util/performance_log.hpp
     src/util/performance_log.cpp
     src/util/launcher_readiness.hpp
     src/util/launcher_readiness.cpp
+    src/util/spotlight_detector.hpp
+    src/util/spotlight_detector.cpp
     src/util/pdf_media_detector.hpp
     src/util/pdf_media_detector.cpp
     src/media/video_frame_extractor.hpp
     src/media/video_frame_extractor.cpp
     src/media/video_frame_buffer.hpp
     src/media/video_frame_buffer.cpp
+    src/molecule/molecule_geometry.hpp
+    src/molecule/molecule_geometry.cpp
+    src/molecule/molecule_camera.hpp
+    src/molecule/molecule_camera.cpp
+    src/ui/molecule_widget.hpp
+    src/ui/molecule_widget.cpp
     src/package/uil_package.hpp
     src/package/uil_package.cpp
     ${UIL_VIEWER_WINDOWS_RESOURCES}
@@ -207,6 +246,8 @@ qt_add_resources(${UIL_VIEWER_TARGET} "uil_resources"
     FILES
         resources/icons/uil.png
         resources/icons/uil-splash.bmp
+        resources/icons/spinbox-chevron-down.svg
+        resources/icons/spinbox-chevron-up.svg
         resources/bluecurve/LICENSE.txt
         resources/bluecurve/README.md
         ${BLUECURVE_SVG_FILES}
@@ -224,6 +265,8 @@ target_link_libraries(${UIL_VIEWER_TARGET} PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
     Qt6::Pdf
     Qt6::Svg
     ZLIB::ZLIB
@@ -241,6 +284,7 @@ target_compile_definitions(${UIL_VIEWER_TARGET} PRIVATE
     UIL_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
     UIL_CMAKE_VERSION="${CMAKE_VERSION}"
     UIL_BUILD_CONFIG="$<CONFIG>"
+    UIL_GIT_COMMIT="${UIL_GIT_COMMIT}"
 )
 
 set_target_properties(${UIL_VIEWER_TARGET} PROPERTIES
@@ -282,6 +326,11 @@ if(FFMPEG_FOUND)
     target_compile_definitions(${UIL_VIEWER_TARGET} PRIVATE UIL_HAVE_FFMPEG=1)
     target_include_directories(${UIL_VIEWER_TARGET} PRIVATE ${FFMPEG_INCLUDE_DIRS})
     target_compile_options(${UIL_VIEWER_TARGET} PRIVATE ${FFMPEG_CFLAGS_OTHER})
+endif()
+
+if(HIDAPI_FOUND)
+    target_compile_definitions(${UIL_VIEWER_TARGET} PRIVATE UIL_HAVE_HIDAPI=1)
+    target_link_libraries(${UIL_VIEWER_TARGET} PRIVATE PkgConfig::HIDAPI)
 endif()
 
 if(BUILD_TESTING)

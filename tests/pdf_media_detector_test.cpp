@@ -42,6 +42,18 @@ QByteArray movie_path_pdf_fixture(const QByteArray& movie_path) {
         + movie_path
         + QByteArrayLiteral(") >>\nendobj\n%%EOF\n");
 }
+
+/** @brief Returns a one-page PDF fixture containing a dedicated molecule annotation. */
+QByteArray molecule_pdf_fixture() {
+    return QByteArrayLiteral(
+        "%PDF-1.4\n"
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>\nendobj\n"
+        "4 0 obj\n<< /Type /Annot /Subtype /UILMolecule /Rect [10 20 110 220] "
+        "/UIL << /Version 1 /F (molecules/water.xyz) >> >>\nendobj\n"
+        "%%EOF\n");
+}
 }
 
 class PdfMediaDetectorTest final : public QObject {
@@ -65,6 +77,9 @@ private slots:
 
     /** @brief Verifies that packages can only resolve declared media assets. */
     void undeclared_package_media_is_rejected();
+
+    /** @brief Verifies dedicated molecule annotation detection and XYZ loading. */
+    void molecule_annotation_loads_xyz_geometry();
 
 #if defined(UIL_HAVE_FFMPEG)
     /** @brief Verifies that the optional FFmpeg runtime can be loaded on first use. */
@@ -153,6 +168,36 @@ void PdfMediaDetectorTest::undeclared_package_media_is_rejected() {
     QVERIFY(!result.annotations.first().has_first_frame());
 }
 
+void PdfMediaDetectorTest::molecule_annotation_loads_xyz_geometry() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QVERIFY(QDir().mkpath(directory.filePath(QStringLiteral("molecules"))));
+    const QString pdf_path = directory.filePath(QStringLiteral("deck.pdf"));
+    const QString xyz_path = directory.filePath(QStringLiteral("molecules/water.xyz"));
+    QVERIFY(write_pdf_fixture(pdf_path, molecule_pdf_fixture()));
+    QVERIFY(write_pdf_fixture(
+        xyz_path,
+        QByteArrayLiteral(
+            "3\nWater\n"
+            "O 0.0000 0.0000 0.0000\n"
+            "H 0.9572 0.0000 0.0000\n"
+            "H -0.2390 0.9270 0.0000\n")));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.annotations.size(), 0);
+    QCOMPARE(result.molecule_annotations.size(), 1);
+    const PdfMoleculeAnnotation& molecule = result.molecule_annotations.first();
+    QCOMPARE(molecule.page_index, 0);
+    QCOMPARE(molecule.object_number, 4);
+    QCOMPARE(molecule.file_name, QStringLiteral("molecules/water.xyz"));
+    QCOMPARE(molecule.rect, QRectF(10, 20, 100, 200));
+    QVERIFY2(molecule.is_ready(), qPrintable(molecule.error_message));
+    QCOMPARE(molecule.geometry.atoms.size(), 3);
+    QCOMPARE(molecule.geometry.bonds.size(), 2);
+    QCOMPARE(molecule.geometry.description, QStringLiteral("Water"));
+    QVERIFY(result.summary().contains(QStringLiteral("page 1 molecule")));
+}
+
 void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -161,6 +206,7 @@ void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {
 
     QVERIFY(!result.has_media());
     QVERIFY(result.annotations.isEmpty());
+    QVERIFY(result.molecule_annotations.isEmpty());
 }
 
 #if defined(UIL_HAVE_FFMPEG)

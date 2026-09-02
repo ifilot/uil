@@ -223,13 +223,19 @@ bool is_media_annotation(const QByteArray& bytes) {
         || QString::fromLatin1(bytes).contains(QStringLiteral("/Subtype /RichMedia"));
 }
 
+/** @brief Returns whether a PDF annotation describes a UIL molecule. */
+bool is_molecule_annotation(const QByteArray& bytes) {
+    return has_name(bytes, QStringLiteral("UILMolecule"));
+}
+
 /** @brief Cheaply detects whether object bytes could contain a supported media annotation. */
 bool contains_media_marker(const QByteArray& bytes) {
     return bytes.contains("/Movie")
         || bytes.contains("/RichMedia")
         || bytes.contains("/Rendition")
         || bytes.contains("/EmbeddedFile")
-        || bytes.contains("/Sound");
+        || bytes.contains("/Sound")
+        || bytes.contains("/UILMolecule");
 }
 
 /** @brief Extracts directly represented indirect objects from PDF bytes. */
@@ -393,6 +399,22 @@ PdfMediaAnnotation annotation_from_object(int page_index, int object_number, con
     };
 }
 
+/** @brief Builds a molecule annotation from a parsed PDF object. */
+PdfMoleculeAnnotation molecule_annotation_from_object(
+    int page_index,
+    int object_number,
+    const QByteArray& body) {
+    return PdfMoleculeAnnotation{
+        page_index,
+        object_number,
+        media_file_name(body),
+        QString(),
+        rect_for_annotation(body),
+        MoleculeGeometry(),
+        QString(),
+    };
+}
+
 /** @brief Normalizes a package-relative asset path. */
 QString normalized_package_path(QString path) {
     path.replace(QLatin1Char('\\'), QLatin1Char('/'));
@@ -486,6 +508,34 @@ void resolve_and_extract_media_frames(
         }
     }
 }
+
+/** @brief Resolves and parses molecule assets referenced by PDF annotations. */
+void resolve_and_load_molecules(
+    PdfMediaScanResult& result,
+    const QString& pdf_path,
+    const QString& package_root_path,
+    const QStringList& package_molecule_asset_paths) {
+    for (PdfMoleculeAnnotation& annotation : result.molecule_annotations) {
+        annotation.resolved_file_path = resolve_media_path(
+            pdf_path,
+            annotation.file_name,
+            package_root_path,
+            package_molecule_asset_paths);
+        if (annotation.resolved_file_path.isEmpty()) {
+            annotation.error_message =
+                QStringLiteral("Molecule asset path was rejected or is missing");
+            continue;
+        }
+        if (!annotation.resolved_file_path.endsWith(QStringLiteral(".xyz"), Qt::CaseInsensitive)) {
+            annotation.error_message = QStringLiteral("Only XYZ molecule assets are supported");
+            continue;
+        }
+        load_xyz_molecule(
+            annotation.resolved_file_path,
+            &annotation.geometry,
+            &annotation.error_message);
+    }
+}
 }
 
 bool PdfMediaAnnotation::has_first_frame() const {
@@ -497,12 +547,16 @@ bool PdfMediaAnnotation::is_mp4() const {
         || fileName.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive);
 }
 
+bool PdfMoleculeAnnotation::is_ready() const {
+    return rect.isValid() && geometry.is_valid() && error_message.isEmpty();
+}
+
 bool PdfMediaScanResult::has_media() const {
-    return !annotations.isEmpty();
+    return !annotations.isEmpty() || !molecule_annotations.isEmpty();
 }
 
 QString PdfMediaScanResult::summary() const {
-    if (annotations.isEmpty()) {
+    if (annotations.isEmpty() && molecule_annotations.isEmpty()) {
         return QStringLiteral("No PDF media annotations detected");
     }
 
@@ -520,13 +574,27 @@ QString PdfMediaScanResult::summary() const {
         }
         parts.push_back(part);
     }
-    return QStringLiteral("%1 media annotation(s): %2").arg(annotations.size()).arg(parts.join(QStringLiteral("; ")));
+    for (const PdfMoleculeAnnotation& annotation : molecule_annotations) {
+        QString part = annotation.page_index >= 0
+            ? QStringLiteral("page %1 molecule").arg(annotation.page_index + 1)
+            : QStringLiteral("unknown page molecule");
+        if (!annotation.file_name.isEmpty()) {
+            part += QStringLiteral(" (%1)").arg(annotation.file_name);
+        }
+        part += annotation.is_ready() ? QStringLiteral(" [geometry ready]")
+                                      : QStringLiteral(" [unavailable]");
+        parts.push_back(part);
+    }
+    return QStringLiteral("%1 interactive annotation(s): %2")
+        .arg(annotations.size() + molecule_annotations.size())
+        .arg(parts.join(QStringLiteral("; ")));
 }
 
 PdfMediaScanResult scan_pdf_media_annotations(
     const QString& path,
     const QString& package_root_path,
-    const QStringList& package_movie_asset_paths) {
+    const QStringList& package_movie_asset_paths,
+    const QStringList& package_molecule_asset_paths) {
     PdfMediaScanResult result;
     const QFileInfo file_info(path);
     performance_log::ScopedSpan scan_span(QStringLiteral("pdf.media_scan"), {
@@ -599,34 +667,56 @@ PdfMediaScanResult scan_pdf_media_annotations(
         return result;
     }
 
-    std::unordered_set<int> seenMediaObjects;
+    std::unordered_set<int> seen_interactive_objects;
     const QVector<int> pages = ordered_page_objects(objects);
     for (int page_index = 0; page_index < pages.size(); ++page_index) {
         const QByteArray page_body = objects.value(pages.at(page_index));
-        for (int annotationObject : annotation_objects_for_page(objects, page_body)) {
-            const QByteArray annotationBody = objects.value(annotationObject);
-            if (!annotationBody.isEmpty() && is_media_annotation(annotationBody)) {
-                result.annotations.push_back(annotation_from_object(page_index, annotationObject, annotationBody));
-                seenMediaObjects.insert(annotationObject);
+        for (int annotation_object : annotation_objects_for_page(objects, page_body)) {
+            const QByteArray annotation_body = objects.value(annotation_object);
+            if (!annotation_body.isEmpty() && is_molecule_annotation(annotation_body)) {
+                result.molecule_annotations.push_back(
+                    molecule_annotation_from_object(
+                        page_index,
+                        annotation_object,
+                        annotation_body));
+                seen_interactive_objects.insert(annotation_object);
+            } else if (!annotation_body.isEmpty() && is_media_annotation(annotation_body)) {
+                result.annotations.push_back(
+                    annotation_from_object(page_index, annotation_object, annotation_body));
+                seen_interactive_objects.insert(annotation_object);
             }
         }
     }
     scan_span.checkpoint(QStringLiteral("scan_page_annotations"), {
         {QStringLiteral("annotation_count"), result.annotations.size()},
+        {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
         {QStringLiteral("page_count"), pages.size()}
     });
 
     for (auto it = objects.cbegin(); it != objects.cend(); ++it) {
-        if (seenMediaObjects.contains(it.key()) || !is_media_annotation(it.value())) {
+        if (seen_interactive_objects.contains(it.key())) {
             continue;
         }
-        result.annotations.push_back(annotation_from_object(-1, it.key(), it.value()));
+        if (is_molecule_annotation(it.value())) {
+            result.molecule_annotations.push_back(
+                molecule_annotation_from_object(-1, it.key(), it.value()));
+        } else if (is_media_annotation(it.value())) {
+            result.annotations.push_back(annotation_from_object(-1, it.key(), it.value()));
+        }
     }
     scan_span.checkpoint(
         QStringLiteral("scan_unattached_annotations"),
-        {{QStringLiteral("annotation_count"), result.annotations.size()}});
+        {
+            {QStringLiteral("annotation_count"), result.annotations.size()},
+            {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
+        });
 
     resolve_and_extract_media_frames(result, path, package_root_path, package_movie_asset_paths);
+    resolve_and_load_molecules(
+        result,
+        path,
+        package_root_path,
+        package_molecule_asset_paths);
     int frames_ready = 0;
     for (const PdfMediaAnnotation& annotation : std::as_const(result.annotations)) {
         if (annotation.has_first_frame()) {
@@ -635,9 +725,12 @@ PdfMediaScanResult scan_pdf_media_annotations(
     }
     scan_span.checkpoint(QStringLiteral("resolve_media_and_extract_frames"), {
         {QStringLiteral("annotation_count"), result.annotations.size()},
+        {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
         {QStringLiteral("frames_ready"), frames_ready}
     });
-    scan_span.add_field(QStringLiteral("annotation_count"), result.annotations.size());
+    scan_span.add_field(
+        QStringLiteral("annotation_count"),
+        result.annotations.size() + result.molecule_annotations.size());
     scan_span.add_field(QStringLiteral("page_count"), pages.size());
     scan_span.set_outcome(QStringLiteral("scanned"));
     qCInfo(logMedia) << result.summary();

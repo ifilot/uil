@@ -25,11 +25,6 @@ struct WorkerPdfContext {
     int generation = -1;
 };
 
-/** @brief Returns the PDF backend retained by the current render worker. */
-WorkerPdfContext& worker_pdf_context() {
-    thread_local WorkerPdfContext context;
-    return context;
-}
 }  // namespace
 
 RenderScheduler::RenderScheduler(
@@ -50,8 +45,7 @@ RenderScheduler::RenderScheduler(
 }
 
 RenderScheduler::~RenderScheduler() {
-    clear();
-    render_pool_.waitForDone();
+    stop_and_wait();
 }
 
 void RenderScheduler::clear() {
@@ -61,6 +55,11 @@ void RenderScheduler::clear() {
         pending_jobs_.clear();
         active_jobs_.clear();
     }
+}
+
+void RenderScheduler::stop_and_wait() {
+    clear();
+    render_pool_.waitForDone();
 }
 
 int RenderScheduler::generation() const {
@@ -113,6 +112,7 @@ void RenderScheduler::request_render(const RenderRequest& request, int priority)
 }
 
 void RenderScheduler::run_worker() {
+    WorkerPdfContext context;
     while (true) {
         const std::optional<PendingJob> next_job = take_next_job();
         if (!next_job) {
@@ -132,7 +132,6 @@ void RenderScheduler::run_worker() {
 
         QString error_message;
         QImage image;
-        WorkerPdfContext& context = worker_pdf_context();
         bool backend_reused = false;
         QElapsedTimer backend_timer;
         backend_timer.start();

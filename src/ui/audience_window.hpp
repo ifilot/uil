@@ -1,5 +1,7 @@
 #pragma once
 
+#include "molecule/molecule_geometry.hpp"
+
 #include <QColor>
 #include <QHash>
 #include <QImage>
@@ -10,6 +12,7 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <memory>
 #include <vector>
 
 class QCloseEvent;
@@ -18,12 +21,17 @@ class QEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QPaintEvent;
+class QResizeEvent;
 class QWheelEvent;
+class MoleculeWidget;
 
 class AudienceWindow : public QWidget {
     Q_OBJECT
 
 public:
+    /** @brief PowerPoint-compatible delay before an idle laser pointer disappears. */
+    static constexpr int kPointerInactivityTimeoutMs = 3000;
+
     /** @brief Constructs the audience presentation window. */
     explicit AudienceWindow();
     /** @brief Destroys the audience presentation window. */
@@ -43,6 +51,10 @@ public:
     void set_video_frame(const QImage& image, QRectF slide_rect);
     /** @brief Clears the active video overlay. */
     void clear_video_overlay();
+    /** @brief Displays an interactive molecule over a normalized slide rectangle. */
+    void set_molecule_overlay(const MoleculeGeometry& geometry, QRectF slide_rect);
+    /** @brief Clears the active interactive molecule. */
+    void clear_molecule_overlay();
     /** @brief Selects the screen on which the audience window appears. */
     void set_audience_screen(QScreen* screen);
     /** @brief Enters full-screen presentation mode. */
@@ -67,6 +79,8 @@ public:
     void set_eraser_tool();
     /** @brief Sets the pointer color. */
     void set_pointer_color(const QColor& color);
+    /** @brief Sets the pointer size in logical pixels. */
+    void set_pointer_size(int size);
     /** @brief Sets the annotation pen color. */
     void set_annotation_color(const QColor& color);
     /** @brief Sets the annotation pen thickness. */
@@ -91,6 +105,14 @@ public:
     QSize render_logical_size() const;
     /** @brief Returns the device pixel ratio used for slide rendering. */
     qreal render_device_pixel_ratio() const;
+    /** @brief Returns the configured laser-pointer diameter. */
+    int pointer_size() const;
+    /** @brief Returns whether the laser pointer is currently painted. */
+    bool is_pointer_visible() const;
+    /** @brief Returns whether the laser pointer is the active interaction tool. */
+    bool is_pointer_tool_selected() const;
+    /** @brief Returns whether the audience slide grid is currently open. */
+    bool is_deck_overview_visible() const;
 
 signals:
     /** @brief Emitted when the user requests the next slide. */
@@ -125,6 +147,8 @@ protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
     /** @brief Paints the audience slide, media, and annotations. */
     void paintEvent(QPaintEvent* event) override;
+    /** @brief Repositions interactive content after an audience-window resize. */
+    void resizeEvent(QResizeEvent* event) override;
     /** @brief Handles Qt keyboard events for presentation controls. */
     void keyPressEvent(QKeyEvent* event) override;
     /** @brief Handles Qt pointer-leave events. */
@@ -181,6 +205,10 @@ private:
     void draw_annotation_segment(QPointF from_window_point, QPointF to_window_point);
     /** @brief Draws the presentation pointer. */
     void draw_pointer(QPainter& painter) const;
+    /** @brief Shows the pointer at @p position and restarts its idle timeout. */
+    void show_pointer_at(const QPointF& position);
+    /** @brief Hides the pointer and stops its idle timeout. */
+    void hide_pointer();
     /** @brief Draws the annotation eraser cursor. */
     void draw_eraser_cursor(QPainter& painter) const;
     /** @brief Returns the eraser diameter in logical pixels. */
@@ -211,12 +239,16 @@ private:
     void scroll_deck_overview_by(int delta_y);
     /** @brief Saves the current annotated slide as an image. */
     void save_annotated_slide_image();
+    /** @brief Repositions and shows or hides the active molecular rendering surface. */
+    void update_molecule_overlay_geometry();
 
     QString current_texture_key_;
     QImage current_slide_image_;
     std::vector<CachedSlide> slide_cache_;
     QImage video_frame_;
     QRectF video_rect_;
+    std::unique_ptr<MoleculeWidget> molecule_widget_;
+    QRectF molecule_rect_;
     QHash<int, QImage> deck_overview_images_;
     QSize deck_overview_image_size_;
     QHash<QString, QImage> annotation_images_;
@@ -233,10 +265,12 @@ private:
     bool deck_overview_visible_ = false;
     QPointer<QScreen> screen_;
     QTimer cursor_hide_timer_;
+    QTimer pointer_hide_timer_;
     BlankMode blank_mode_ = BlankMode::None;
     bool is_fullscreen_ = false;
     int annotation_thickness_ = 6;
     int eraser_thickness_ = 24;
+    int pointer_size_ = 25;
     int page_count_ = 0;
     int current_page_index_ = -1;
     int deck_overview_scroll_y_ = 0;

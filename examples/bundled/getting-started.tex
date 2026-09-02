@@ -1,0 +1,70 @@
+\documentclass[aspectratio=169]{beamer}
+
+\definecolor{UilTeal}{HTML}{00A6A6}
+\definecolor{UilNavy}{HTML}{17253A}
+\definecolor{UilGold}{HTML}{F2B134}
+\setbeamercolor{structure}{fg=UilTeal}
+\setbeamercolor{frametitle}{fg=white,bg=UilNavy}
+\setbeamercolor{title}{fg=white}
+\setbeamercolor{subtitle}{fg=UilGold}
+\setbeamercolor{normal text}{fg=UilNavy,bg=white}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{\begin{beamercolorbox}[wd=\paperwidth,ht=2.7ex,dp=1.2ex,rightskip=1em]{frametitle}%
+    uil example \hfill \insertframenumber/\inserttotalframenumber
+  \end{beamercolorbox}}}
+
+\begin{document}
+
+\begin{frame}[plain]
+  \begin{beamercolorbox}[wd=\paperwidth,ht=\paperheight,dp=0pt,center]{frametitle}
+    \vfill
+    {\usebeamerfont{title}\Huge Getting Started with uil\par}
+    \vspace{0.7cm}
+    {\usebeamerfont{subtitle}\Large A short tour of presentation mode\par}
+    \vfill
+    {\color{white}Press \textbf{F5} to begin}
+    \vfill
+  \end{beamercolorbox}
+\end{frame}
+
+\begin{frame}{Navigate confidently}
+  \Large
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \begin{block}{Move through slides}
+        \textbf{Next:} Right, Page Down, Space\\[0.35cm]
+        \textbf{Previous:} Left, Page Up, Backspace
+      \end{block}
+    \column{0.48\textwidth}
+      \begin{alertblock}{Jump around}
+        \textbf{First / last:} Home / End\\[0.35cm]
+        \textbf{Slide grid:} G
+      \end{alertblock}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Audience controls}
+  \Large
+  Right-click anywhere on the audience screen to open presentation tools.
+  \vspace{0.6cm}
+  \begin{itemize}
+    \item Press \textbf{L} for the laser pointer.
+    \item Press \textbf{B} or \textbf{W} for a black or white screen.
+    \item Choose pencil or eraser to work with annotations.
+    \item Adjust pointer size and color in the tool panel.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Keep your work}
+  \Large
+  \begin{block}{Save as a uil presentation}
+    Use \textbf{File $>$ Save As} to package the PDF and your annotations together in a \texttt{.uil} file.
+  \end{block}
+  \vspace{0.4cm}
+  \begin{block}{Share an annotated PDF}
+    Use \textbf{File $>$ Export as PDF} to bake visible annotations into a new PDF.
+  \end{block}
+\end{frame}
+
+\end{document}

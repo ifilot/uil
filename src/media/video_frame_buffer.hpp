@@ -4,15 +4,29 @@
 
 #include <QObject>
 
+#include <functional>
 #include <memory>
 #include <optional>
+
+/** @brief Sequential source used by the asynchronous video buffer. */
+class VideoFrameSource {
+public:
+    virtual ~VideoFrameSource() = default;
+    virtual bool open(const QString& path, QString* error_message) = 0;
+    virtual std::optional<DecodedVideoFrame> read_next_frame(
+        QString* error_message) = 0;
+};
 
 class VideoFrameBuffer : public QObject {
     Q_OBJECT
 
 public:
+    using FrameSourceFactory = std::function<std::unique_ptr<VideoFrameSource>()>;
+
     /** @brief Constructs an empty asynchronous frame buffer. */
     explicit VideoFrameBuffer(QObject* parent = nullptr);
+    /** @brief Constructs a buffer using an injectable decoder source factory. */
+    VideoFrameBuffer(FrameSourceFactory source_factory, QObject* parent = nullptr);
     /** @brief Stops decoding and releases the buffer. */
     ~VideoFrameBuffer() override;
 

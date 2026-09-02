@@ -38,6 +38,8 @@ public:
 
     /** @brief Cancels the current generation of render work. */
     void clear();
+    /** @brief Cancels queued work and waits for active workers to finish. */
+    void stop_and_wait();
     /** @brief Returns the current render generation. */
     int generation() const;
     /** @brief Queues @p request on the bounded render pool with @p priority. */

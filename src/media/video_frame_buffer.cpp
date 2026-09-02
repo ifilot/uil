@@ -8,6 +8,7 @@
 #include <QWaitCondition>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 constexpr int kMaximumBufferedFrames = 180;
@@ -17,12 +18,28 @@ constexpr qint64 kMaximumBufferedBytes = 256LL * 1024LL * 1024LL;
 qint64 frame_bytes(const DecodedVideoFrame& frame) {
     return qint64(frame.image.sizeInBytes());
 }
+
+class VideoFrameReaderSource final : public VideoFrameSource {
+public:
+    bool open(const QString& path, QString* error_message) override {
+        return reader_.open(path, error_message);
+    }
+
+    std::optional<DecodedVideoFrame> read_next_frame(
+        QString* error_message) override {
+        return reader_.read_next_frame(error_message);
+    }
+
+private:
+    VideoFrameReader reader_;
+};
 }  // namespace
 
 Q_LOGGING_CATEGORY(logVideoBuffer, "video.buffer")
 
 class VideoFrameBuffer::Impl {
 public:
+    FrameSourceFactory source_factory;
     mutable QMutex mutex;
     QWaitCondition buffer_changed;
     QQueue<DecodedVideoFrame> frames;
@@ -37,8 +54,17 @@ public:
 };
 
 VideoFrameBuffer::VideoFrameBuffer(QObject* parent)
+    : VideoFrameBuffer([] {
+          return std::make_unique<VideoFrameReaderSource>();
+      }, parent) {
+}
+
+VideoFrameBuffer::VideoFrameBuffer(
+    FrameSourceFactory source_factory,
+    QObject* parent)
     : QObject(parent),
       impl_(std::make_unique<Impl>()) {
+    impl_->source_factory = std::move(source_factory);
 }
 
 VideoFrameBuffer::~VideoFrameBuffer() {
@@ -129,9 +155,14 @@ QString VideoFrameBuffer::error_message() const {
 }
 
 void VideoFrameBuffer::decode_loop(QString path) {
-    VideoFrameReader reader;
+    std::unique_ptr<VideoFrameSource> reader = impl_->source_factory
+        ? impl_->source_factory()
+        : nullptr;
     QString error_message;
-    if (!reader.open(path, &error_message)) {
+    if (!reader) {
+        error_message = QStringLiteral("No video decoder is available");
+    }
+    if (!reader || !reader->open(path, &error_message)) {
         {
             QMutexLocker locker(&impl_->mutex);
             impl_->error_message = error_message;
@@ -161,7 +192,7 @@ void VideoFrameBuffer::decode_loop(QString path) {
         }
 
         QString frameError;
-        std::optional<DecodedVideoFrame> frame = reader.read_next_frame(&frameError);
+        std::optional<DecodedVideoFrame> frame = reader->read_next_frame(&frameError);
         if (!frame) {
             {
                 QMutexLocker locker(&impl_->mutex);

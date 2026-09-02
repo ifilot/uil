@@ -1,0 +1,69 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usepackage{tikz}
+\definecolor{Ink}{HTML}{202124}
+\definecolor{LaserRed}{HTML}{FF3347}
+\definecolor{LaserGreen}{HTML}{35E06F}
+\definecolor{LaserPurple}{HTML}{B957F0}
+\definecolor{Panel}{HTML}{2D2D30}
+\setbeamercolor{structure}{fg=LaserRed}
+\setbeamercolor{frametitle}{fg=white,bg=Panel}
+\setbeamercolor{normal text}{fg=Ink,bg=white}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{\begin{beamercolorbox}[wd=\paperwidth,ht=2.7ex,dp=1.2ex,rightskip=1em]{frametitle}%
+    pointer and annotation tools \hfill \insertframenumber/\inserttotalframenumber
+  \end{beamercolorbox}}}
+
+\newcommand{\colorcircle}[1]{\tikz\fill[#1] (0,0) circle (0.23cm);}
+
+\begin{document}
+
+\begin{frame}{Pointer and annotation tools}
+  \Large
+  Open the presentation tools with a \textbf{right-click} on the audience screen.
+  \vspace{0.7cm}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.31\textwidth}\centering
+      {\color{LaserRed}\Huge $\odot$}\\Laser pointer
+    \column{0.31\textwidth}\centering
+      {\color{Ink}\Huge $\nearrow$}\\Pencil
+    \column{0.31\textwidth}\centering
+      {\color{Panel}\Huge $\blacklozenge$}\\Eraser
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Tune the laser pointer}
+  \Large
+  Press \textbf{L} to select the laser immediately.
+  \vspace{0.7cm}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.45\textwidth}
+      \begin{itemize}
+        \item Pick red, green, or purple.
+        \item Set the diameter with the slider.
+        \item Enter an exact pixel size when precision matters.
+      \end{itemize}
+    \column{0.45\textwidth}\centering
+      \colorcircle{LaserRed}\hspace{0.5cm}
+      \colorcircle{LaserGreen}\hspace{0.5cm}
+      \colorcircle{LaserPurple}\\[0.7cm]
+      \textbf{Your settings persist between sessions.}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Draw without changing the PDF}
+  \Large
+  \begin{enumerate}
+    \item Select \textbf{Pencil} and draw on the current slide.
+    \item Use \textbf{Eraser} for local corrections, or Clear for the slide.
+    \item Hide overlays temporarily from the presenter window.
+    \item Save a \texttt{.uil} package to preserve editable annotations.
+  \end{enumerate}
+  \vspace{0.5cm}
+  \begin{alertblock}{Tip}
+    The slide grid is always one key away: press \textbf{G}.
+  \end{alertblock}
+\end{frame}
+
+\end{document}

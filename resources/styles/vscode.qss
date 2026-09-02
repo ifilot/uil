@@ -265,6 +265,25 @@ QToolButton#statusIconButton:checked {
     border-color: #00b3b3;
 }
 
+QToolButton#pointerDeviceStatus {
+    background-color: #252526;
+    border: 1px solid #3c3c3c;
+    color: #8a8a8a;
+    padding: 0 8px;
+}
+
+QToolButton#pointerDeviceStatus[connected="true"] {
+    background-color: #183a2a;
+    border-color: #31875a;
+    color: #b8f2d0;
+}
+
+QLabel#buildIdLabel {
+    background-color: transparent;
+    color: #858585;
+    padding: 0 6px;
+}
+
 QLabel#fieldLabel {
     color: #8a8a8a;
     background-color: transparent;
@@ -407,6 +426,47 @@ QSpinBox {
 QLineEdit:focus,
 QSpinBox:focus {
     border-color: #00b3b3;
+}
+
+QSpinBox#pointerSizeInput {
+    padding: 0 22px 0 7px;
+    min-height: 36px;
+    max-height: 36px;
+}
+
+QSpinBox#pointerSizeInput::up-button,
+QSpinBox#pointerSizeInput::down-button {
+    subcontrol-origin: border;
+    width: 18px;
+    height: 18px;
+    background-color: #343434;
+    border-left: 1px solid #505050;
+}
+
+QSpinBox#pointerSizeInput::up-button {
+    subcontrol-position: top right;
+    border-bottom: 1px solid #505050;
+}
+
+QSpinBox#pointerSizeInput::down-button {
+    subcontrol-position: bottom right;
+}
+
+QSpinBox#pointerSizeInput::up-button:hover,
+QSpinBox#pointerSizeInput::down-button:hover {
+    background-color: #008c8c;
+}
+
+QSpinBox#pointerSizeInput::up-arrow {
+    image: url(:/icons/spinbox-chevron-up.svg);
+    width: 8px;
+    height: 8px;
+}
+
+QSpinBox#pointerSizeInput::down-arrow {
+    image: url(:/icons/spinbox-chevron-down.svg);
+    width: 8px;
+    height: 8px;
 }
 
 QPushButton {
