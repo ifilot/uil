@@ -1,0 +1,4 @@
+# Qt 6.4.2 leaves its FPDFAvail object allocated when QPdfDocument::load()
+# rejects a malformed or password-protected document. Keep leak detection enabled
+# for the rest of the process while ignoring allocations on that dependency path.
+leak:QPdfDocumentPrivate::initiateAsyncLoadWithTotalSizeKnown
