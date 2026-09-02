@@ -21,9 +21,9 @@
 \begin{filecontents*}{water-inline.xyz}
 3
 Water bend; columns 5--7 are normal-mode displacements
-O   0.0000   0.0000   0.0000    0.0000  -0.1000   0.0000
-H   0.9572   0.0000   0.0000    0.0000   0.2400   0.0000
-H  -0.2390   0.9270   0.0000    0.2200  -0.0600   0.0000
+O   0.0000   0.0000   0.0000    0.0000   0.0000  -0.1000
+H   0.0000   0.9572   0.0000    0.0000   0.0000   0.2400
+H   0.0000  -0.2390   0.9270    0.0000   0.2200  -0.0600
 \end{filecontents*}
 
 \begin{filecontents*}{methane-inline.xyz}
@@ -34,6 +34,23 @@ H   0.6291   0.6291   0.6291
 H  -0.6291  -0.6291   0.6291
 H  -0.6291   0.6291  -0.6291
 H   0.6291  -0.6291  -0.6291
+\end{filecontents*}
+
+\begin{filecontents*}{benzene-inline.xyz}
+12
+Benzene in the YZ plane
+C   0.0000   1.3970   0.0000
+C   0.0000   0.6985   1.2098
+C   0.0000  -0.6985   1.2098
+C   0.0000  -1.3970   0.0000
+C   0.0000  -0.6985  -1.2098
+C   0.0000   0.6985  -1.2098
+H   0.0000   2.4870   0.0000
+H   0.0000   1.2435   2.1537
+H   0.0000  -1.2435   2.1537
+H   0.0000  -2.4870   0.0000
+H   0.0000  -1.2435  -2.1537
+H   0.0000   1.2435  -2.1537
 \end{filecontents*}
 
 \begin{filecontents*}{carbon-dioxide-inline.xyz}
@@ -62,8 +79,9 @@ O   1.1600   0.0000   0.0000    0.1000   0.0000   0.0000
   \molecule[width=10.8cm,height=4.2cm]
     {\moleculeposter{methane-still.png}}
     {methane-inline.xyz}\\[0.25cm]
-  \small Drag to rotate, scroll to zoom, and double-click to reset. Collapse the
-  toolbar with its teal close button and unfold it again with the sliders button.
+  \small Drag to rotate, scroll to zoom, and double-click to reset. Use the rotate
+  button for a continuous spin around molecular Z. Collapse the toolbar with its
+  teal close button and unfold it again with the sliders button.
 \end{frame}
 
 \begin{frame}{Stereoscopic rendering}{Toggle red/cyan anaglyph rendering with the glasses button}
@@ -91,6 +109,16 @@ O   1.1600   0.0000   0.0000    0.1000   0.0000   0.0000
     {carbon-dioxide-inline.xyz}\\[0.25cm]
   \small Rotate the molecule and watch the corner gizmo follow it: X is red,
   Y is green, and Z is blue. This molecule also contains an asymmetric stretch.
+\end{frame}
+
+\begin{frame}{Planar molecules}{Benzene starts face-on in the YZ plane}
+  \centering
+  \molecule[width=10.8cm,height=4.2cm]
+    {\moleculeposter{benzene-still.png}}
+    {benzene-inline.xyz}\\[0.25cm]
+  \small The default camera looks along $-X$ with $+Z$ upward, so the aromatic
+  ring is immediately visible. Toggle continuous Z-axis rotation to inspect its
+  planar geometry from different angles.
 \end{frame}
 
 \end{document}

@@ -13,6 +13,7 @@
 #include <QPainter>
 #include <QPen>
 #include <QResizeEvent>
+#include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSurfaceFormat>
 #include <QTimer>
@@ -35,8 +36,9 @@ constexpr int kSphereSlices = 32;
 constexpr int kCylinderSlices = 24;
 constexpr int kToolbarButtonSize = 34;
 constexpr int kToolbarMargin = 8;
-constexpr int kVibrationIntervalMs = 16;
+constexpr int kAnimationIntervalMs = 16;
 constexpr float kVibrationCyclesPerSecond = 1.25f;
+constexpr float kAutoRotationDegreesPerSecond = 24.0f;
 
 struct MeshVertex {
   float position[3];
@@ -231,6 +233,9 @@ MoleculeWidget::~MoleculeWidget() {
   if (vibration_timer_) {
     vibration_timer_->stop();
   }
+  if (auto_rotation_timer_) {
+    auto_rotation_timer_->stop();
+  }
   if (context() && context()->isValid()) {
     makeCurrent();
     destroy_renderer();
@@ -299,6 +304,25 @@ void MoleculeWidget::set_vibration_playing(bool playing) {
 bool MoleculeWidget::vibration_playing() const {
   return vibration_timer_ && vibration_timer_->isActive();
 }
+
+void MoleculeWidget::set_auto_rotation_enabled(bool enabled) {
+  if (auto_rotation_enabled_ == enabled) {
+    return;
+  }
+
+  auto_rotation_enabled_ = enabled;
+  if (auto_rotation_timer_) {
+    if (enabled && isVisible()) {
+      auto_rotation_timer_->start();
+    } else {
+      auto_rotation_timer_->stop();
+    }
+  }
+  update_toolbar_state();
+  update();
+}
+
+bool MoleculeWidget::auto_rotation_enabled() const { return auto_rotation_enabled_; }
 
 void MoleculeWidget::set_toolbar_expanded(bool expanded) {
   if (toolbar_expanded_ == expanded) {
@@ -479,9 +503,10 @@ void MoleculeWidget::draw_eye(const QRect& pixel_viewport, float eye_offset,
   QMatrix4x4 projection;
   projection.perspective(molecule_camera::kVerticalFieldOfViewDegrees, aspect, near_plane,
                          far_plane);
+  const molecule_camera::ViewFrame camera =
+      molecule_camera::default_view(camera_distance, eye_offset);
   QMatrix4x4 view;
-  view.lookAt(QVector3D(eye_offset, 0.0f, camera_distance), QVector3D(0.0f, 0.0f, 0.0f),
-              QVector3D(0.0f, 1.0f, 0.0f));
+  view.lookAt(camera.eye, camera.center, camera.up);
   QMatrix4x4 scene_model;
   scene_model.rotate(rotation_);
 
@@ -536,12 +561,15 @@ void MoleculeWidget::draw_axis_gizmo(QPainter* painter) {
     QString label;
   };
   QVector<AxisMarker> axes{
-      {rotation_.rotatedVector(QVector3D(1.0f, 0.0f, 0.0f)), QColor(224, 70, 70),
-       QStringLiteral("X")},
-      {rotation_.rotatedVector(QVector3D(0.0f, 1.0f, 0.0f)), QColor(72, 178, 96),
-       QStringLiteral("Y")},
-      {rotation_.rotatedVector(QVector3D(0.0f, 0.0f, 1.0f)), QColor(72, 126, 224),
-       QStringLiteral("Z")},
+      {molecule_camera::camera_space_direction(
+           rotation_.rotatedVector(QVector3D(1.0f, 0.0f, 0.0f))),
+       QColor(224, 70, 70), QStringLiteral("X")},
+      {molecule_camera::camera_space_direction(
+           rotation_.rotatedVector(QVector3D(0.0f, 1.0f, 0.0f))),
+       QColor(72, 178, 96), QStringLiteral("Y")},
+      {molecule_camera::camera_space_direction(
+           rotation_.rotatedVector(QVector3D(0.0f, 0.0f, 1.0f))),
+       QColor(72, 126, 224), QStringLiteral("Z")},
   };
   std::sort(axes.begin(), axes.end(), [](const AxisMarker& first, const AxisMarker& second) {
     return first.direction.z() < second.direction.z();
@@ -641,6 +669,12 @@ void MoleculeWidget::create_toolbar() {
   connect(vibration_button_, &QToolButton::toggled, this,
           [this](bool checked) { set_vibration_playing(checked); });
 
+  auto_rotation_button_ = make_button(QStringLiteral("moleculeAutoRotationButton"),
+                                      QStringLiteral("Rotate continuously around the Z axis"));
+  auto_rotation_button_->setCheckable(true);
+  connect(auto_rotation_button_, &QToolButton::toggled, this,
+          [this](bool checked) { set_auto_rotation_enabled(checked); });
+
   axes_button_ =
       make_button(QStringLiteral("moleculeAxesButton"), QStringLiteral("Show orientation axes"));
   axes_button_->setCheckable(true);
@@ -674,11 +708,24 @@ void MoleculeWidget::create_toolbar() {
 
   vibration_timer_ = new QTimer(this);
   vibration_timer_->setTimerType(Qt::PreciseTimer);
-  vibration_timer_->setInterval(kVibrationIntervalMs);
+  vibration_timer_->setInterval(kAnimationIntervalMs);
   connect(vibration_timer_, &QTimer::timeout, this, [this] {
     constexpr float phase_step =
-        2.0f * kPi * kVibrationCyclesPerSecond * (float(kVibrationIntervalMs) / 1000.0f);
+        2.0f * kPi * kVibrationCyclesPerSecond * (float(kAnimationIntervalMs) / 1000.0f);
     vibration_phase_ = std::fmod(vibration_phase_ + phase_step, 2.0f * kPi);
+    update();
+  });
+
+  auto_rotation_timer_ = new QTimer(this);
+  auto_rotation_timer_->setObjectName(QStringLiteral("moleculeAutoRotationTimer"));
+  auto_rotation_timer_->setTimerType(Qt::PreciseTimer);
+  auto_rotation_timer_->setInterval(kAnimationIntervalMs);
+  connect(auto_rotation_timer_, &QTimer::timeout, this, [this] {
+    constexpr float rotation_step =
+        kAutoRotationDegreesPerSecond * (float(kAnimationIntervalMs) / 1000.0f);
+    const QQuaternion z_rotation =
+        QQuaternion::fromAxisAndAngle(QVector3D(0.0f, 0.0f, 1.0f), rotation_step);
+    rotation_ = (rotation_ * z_rotation).normalized();
     update();
   });
 
@@ -741,6 +788,15 @@ void MoleculeWidget::update_toolbar_state() {
                                              : QStringLiteral("Play molecular vibration"))
                       : QStringLiteral("This molecule has no vibration vectors"));
   }
+  if (auto_rotation_button_) {
+    const QSignalBlocker blocker(auto_rotation_button_);
+    auto_rotation_button_->setChecked(auto_rotation_enabled_);
+    auto_rotation_button_->setIcon(font_awesome::icon(
+        font_awesome::Style::Solid, QStringLiteral("rotate"), icon_color, QSize(20, 20)));
+    auto_rotation_button_->setToolTip(
+        auto_rotation_enabled_ ? QStringLiteral("Stop continuous Z-axis rotation")
+                               : QStringLiteral("Rotate continuously around the Z axis"));
+  }
   if (axes_button_) {
     const QSignalBlocker blocker(axes_button_);
     axes_button_->setChecked(axes_visible_);
@@ -763,7 +819,17 @@ void MoleculeWidget::resizeEvent(QResizeEvent* event) {
 
 void MoleculeWidget::hideEvent(QHideEvent* event) {
   set_vibration_playing(false);
+  if (auto_rotation_timer_) {
+    auto_rotation_timer_->stop();
+  }
   QOpenGLWidget::hideEvent(event);
+}
+
+void MoleculeWidget::showEvent(QShowEvent* event) {
+  QOpenGLWidget::showEvent(event);
+  if (auto_rotation_enabled_ && auto_rotation_timer_) {
+    auto_rotation_timer_->start();
+  }
 }
 
 void MoleculeWidget::contextMenuEvent(QContextMenuEvent* event) {
@@ -793,9 +859,9 @@ void MoleculeWidget::mouseMoveEvent(QMouseEvent* event) {
     const QPointF delta = event->position() - last_mouse_position_;
     last_mouse_position_ = event->position();
     const QQuaternion yaw =
-        QQuaternion::fromAxisAndAngle(0.0f, 1.0f, 0.0f, float(delta.x()) * 0.65f);
+        QQuaternion::fromAxisAndAngle(0.0f, 0.0f, 1.0f, float(delta.x()) * 0.65f);
     const QQuaternion pitch =
-        QQuaternion::fromAxisAndAngle(1.0f, 0.0f, 0.0f, float(delta.y()) * 0.65f);
+        QQuaternion::fromAxisAndAngle(0.0f, 1.0f, 0.0f, float(delta.y()) * 0.65f);
     rotation_ = (yaw * pitch * rotation_).normalized();
     update();
     event->accept();

@@ -53,7 +53,8 @@ The molecule visualizer accepts XYZ geometry referenced by the dedicated
 poster rectangle with a ball-and-stick view: drag with the left mouse button to
 rotate, use the mouse wheel to zoom, and double-click to reset. Its floating
 toolbar can collapse to a single button and provides a one-click red/cyan
-anaglyph toggle, vibration playback, and an orientation-axis gizmo.
+anaglyph toggle, vibration playback, continuous local Z-axis rotation, and an
+orientation-axis gizmo.
 
 Normal-mode animation uses an extended but backwards-compatible XYZ atom row:
 `element x y z dx dy dz`. The final three values are displacement components;

@@ -21,6 +21,7 @@ class QHideEvent;
 class QOpenGLShaderProgram;
 class QPainter;
 class QResizeEvent;
+class QShowEvent;
 class QTimer;
 class QToolButton;
 class QWheelEvent;
@@ -49,6 +50,10 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions {
   void set_vibration_playing(bool playing);
   /** @brief Returns whether normal-mode animation is running. */
   bool vibration_playing() const;
+  /** @brief Enables or disables continuous rotation around the molecule's Z axis. */
+  void set_auto_rotation_enabled(bool enabled);
+  /** @brief Returns whether continuous Z-axis rotation is enabled. */
+  bool auto_rotation_enabled() const;
   /** @brief Expands or collapses the floating molecule toolbar. */
   void set_toolbar_expanded(bool expanded);
   /** @brief Returns whether the floating molecule toolbar is expanded. */
@@ -65,6 +70,8 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions {
   void resizeEvent(QResizeEvent* event) override;
   /** @brief Stops animation while the molecule overlay is not visible. */
   void hideEvent(QHideEvent* event) override;
+  /** @brief Resumes enabled automatic rotation when the molecule becomes visible. */
+  void showEvent(QShowEvent* event) override;
   /** @brief Suppresses duplicate native context-menu handling after right-click delegation. */
   void contextMenuEvent(QContextMenuEvent* event) override;
   /** @brief Starts arcball-style rotation. */
@@ -112,6 +119,7 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions {
   bool renderer_ready_ = false;
   bool axes_visible_ = true;
   bool toolbar_expanded_ = true;
+  bool auto_rotation_enabled_ = false;
   StereoMode stereo_mode_ = StereoMode::Mono;
   QString renderer_error_;
   std::unique_ptr<QOpenGLShaderProgram> shader_program_;
@@ -121,8 +129,10 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions {
   QToolButton* toolbar_toggle_button_ = nullptr;
   QToolButton* stereo_button_ = nullptr;
   QToolButton* vibration_button_ = nullptr;
+  QToolButton* auto_rotation_button_ = nullptr;
   QToolButton* axes_button_ = nullptr;
   QToolButton* reset_button_ = nullptr;
   QTimer* vibration_timer_ = nullptr;
+  QTimer* auto_rotation_timer_ = nullptr;
   std::function<void(const QPoint&)> context_menu_handler_;
 };

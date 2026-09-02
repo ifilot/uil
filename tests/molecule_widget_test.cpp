@@ -3,6 +3,7 @@
 #include <QFrame>
 #include <QGuiApplication>
 #include <QTest>
+#include <QTimer>
 #include <QToolButton>
 
 class MoleculeWidgetTest final : public QObject {
@@ -24,6 +25,7 @@ void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
   QVERIFY(widget.toolbar_expanded());
   QVERIFY(widget.findChild<QToolButton*>(QStringLiteral("moleculeStereoButton")));
   QVERIFY(widget.findChild<QToolButton*>(QStringLiteral("moleculeAxesButton")));
+  QVERIFY(widget.findChild<QToolButton*>(QStringLiteral("moleculeAutoRotationButton")));
   QVERIFY(widget.findChild<QToolButton*>(QStringLiteral("moleculeResetButton")));
 
   QPoint context_menu_position;
@@ -42,6 +44,27 @@ void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
   stereo_button->click();
   QCOMPARE(widget.stereo_mode(), MoleculeWidget::StereoMode::Mono);
   QVERIFY(!stereo_button->isChecked());
+
+  QToolButton* rotation_button =
+      widget.findChild<QToolButton*>(QStringLiteral("moleculeAutoRotationButton"));
+  QTimer* rotation_timer =
+      widget.findChild<QTimer*>(QStringLiteral("moleculeAutoRotationTimer"));
+  QVERIFY(rotation_button);
+  QVERIFY(rotation_timer);
+  QVERIFY(!widget.auto_rotation_enabled());
+  rotation_button->click();
+  QVERIFY(widget.auto_rotation_enabled());
+  QVERIFY(rotation_button->isChecked());
+  widget.show();
+  QTRY_VERIFY(rotation_timer->isActive());
+  widget.hide();
+  QVERIFY(widget.auto_rotation_enabled());
+  QVERIFY(!rotation_timer->isActive());
+  widget.show();
+  QTRY_VERIFY(rotation_timer->isActive());
+  rotation_button->click();
+  QVERIFY(!widget.auto_rotation_enabled());
+  QVERIFY(!rotation_timer->isActive());
 
   widget.set_axes_visible(false);
   QVERIFY(!widget.axes_visible());
@@ -108,6 +131,15 @@ void MoleculeWidgetTest::renders_supported_modes_when_opengl_is_available() {
   const QImage anaglyph = widget.grabFramebuffer();
   QVERIFY(!anaglyph.isNull());
   QVERIFY(anaglyph != mono);
+
+  widget.set_stereo_mode(MoleculeWidget::StereoMode::Mono);
+  const QImage before_rotation = widget.grabFramebuffer();
+  widget.set_auto_rotation_enabled(true);
+  QTest::qWait(180);
+  const QImage after_rotation = widget.grabFramebuffer();
+  QVERIFY(!after_rotation.isNull());
+  QVERIFY(after_rotation != before_rotation);
+  widget.set_auto_rotation_enabled(false);
 }
 
 QTEST_MAIN(MoleculeWidgetTest)

@@ -111,6 +111,7 @@ set(FONT_AWESOME_SVG_FILES
     resources/fontawesome/svgs/solid/pause.svg
     resources/fontawesome/svgs/solid/pencil.svg
     resources/fontawesome/svgs/solid/play.svg
+    resources/fontawesome/svgs/solid/rotate.svg
     resources/fontawesome/svgs/solid/satellite-dish.svg
     resources/fontawesome/svgs/solid/sliders.svg
     resources/fontawesome/svgs/solid/table-cells-large.svg

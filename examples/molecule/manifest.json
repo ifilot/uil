@@ -6,7 +6,8 @@
   "molecule_assets": [
     { "path": "water-inline.xyz" },
     { "path": "methane-inline.xyz" },
-    { "path": "carbon-dioxide-inline.xyz" }
+    { "path": "carbon-dioxide-inline.xyz" },
+    { "path": "benzene-inline.xyz" }
   ],
   "overlays": [],
   "hidden_overlay_pages": [],

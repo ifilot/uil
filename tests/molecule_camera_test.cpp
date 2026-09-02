@@ -11,6 +11,7 @@ class MoleculeCameraTest final : public QObject {
   void perspective_makes_nearer_geometry_larger();
   void trackpad_zoom_and_limits_are_supported();
   void stereo_eye_separation_tracks_camera_distance();
+  void default_view_uses_negative_x_with_positive_z_up();
 };
 
 void MoleculeCameraTest::fit_distance_contains_centered_sphere() {
@@ -60,6 +61,21 @@ void MoleculeCameraTest::stereo_eye_separation_tracks_camera_distance() {
   QCOMPARE(molecule_camera::stereo_eye_separation(-1.0f), 0.0f);
   QCOMPARE(molecule_camera::stereo_eye_separation(9.0f),
            9.0f / molecule_camera::kStereoSeparationDivisor);
+}
+
+void MoleculeCameraTest::default_view_uses_negative_x_with_positive_z_up() {
+  const molecule_camera::ViewFrame mono = molecule_camera::default_view(8.0f);
+  QCOMPARE(mono.eye, QVector3D(8.0f, 0.0f, 0.0f));
+  QCOMPARE(mono.center, QVector3D(0.0f, 0.0f, 0.0f));
+  QCOMPARE(mono.up, QVector3D(0.0f, 0.0f, 1.0f));
+  QCOMPARE((mono.center - mono.eye).normalized(), QVector3D(-1.0f, 0.0f, 0.0f));
+
+  const molecule_camera::ViewFrame stereo_eye = molecule_camera::default_view(8.0f, 0.2f);
+  QCOMPARE((stereo_eye.center - stereo_eye.eye).normalized(), QVector3D(-1.0f, 0.0f, 0.0f));
+  QCOMPARE(molecule_camera::camera_space_direction(QVector3D(0.0f, 1.0f, 0.0f)),
+           QVector3D(1.0f, 0.0f, 0.0f));
+  QCOMPARE(molecule_camera::camera_space_direction(QVector3D(0.0f, 0.0f, 1.0f)),
+           QVector3D(0.0f, 1.0f, 0.0f));
 }
 
 QTEST_APPLESS_MAIN(MoleculeCameraTest)

@@ -103,9 +103,9 @@ void AppControllerTest::opens_bundled_molecule_presentation() {
 
     const QString path = example_path(QStringLiteral("molecule-visualizer.uil"));
     QVERIFY(controller.open_pdf(path));
-    QCOMPARE(controller.page_count(), 4);
+    QCOMPARE(controller.page_count(), 5);
     QCOMPARE(controller.current_package_path(), QFileInfo(path).absoluteFilePath());
-    QTRY_COMPARE_WITH_TIMEOUT(scan_result.molecule_annotations.size(), 4, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(scan_result.molecule_annotations.size(), 5, 5000);
 
     for (int index = 0; index < scan_result.molecule_annotations.size(); ++index) {
         const PdfMoleculeAnnotation& molecule = scan_result.molecule_annotations.at(index);
@@ -116,6 +116,20 @@ void AppControllerTest::opens_bundled_molecule_presentation() {
     QVERIFY(!scan_result.molecule_annotations.at(1).geometry.has_vibration());
     QVERIFY(scan_result.molecule_annotations.at(2).geometry.has_vibration());
     QVERIFY(scan_result.molecule_annotations.at(3).geometry.has_vibration());
+    QVERIFY(!scan_result.molecule_annotations.at(4).geometry.has_vibration());
+
+    const MoleculeGeometry& water = scan_result.molecule_annotations.at(2).geometry;
+    for (const MoleculeAtom& atom : water.atoms) {
+        QCOMPARE(atom.position.x(), 0.0f);
+        QCOMPARE(atom.vibration.x(), 0.0f);
+    }
+
+    const MoleculeGeometry& benzene = scan_result.molecule_annotations.at(4).geometry;
+    QCOMPARE(benzene.atoms.size(), 12);
+    QCOMPARE(benzene.bonds.size(), 12);
+    for (const MoleculeAtom& atom : benzene.atoms) {
+        QCOMPARE(atom.position.x(), 0.0f);
+    }
 }
 
 void AppControllerTest::failed_open_preserves_current_document() {

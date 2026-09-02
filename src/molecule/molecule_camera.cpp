@@ -32,6 +32,18 @@ float stereo_eye_separation(float camera_distance) {
   return std::max(camera_distance, 0.0f) / kStereoSeparationDivisor;
 }
 
+ViewFrame default_view(float camera_distance, float horizontal_eye_offset) {
+  return {
+      QVector3D(camera_distance, horizontal_eye_offset, 0.0f),
+      QVector3D(0.0f, horizontal_eye_offset, 0.0f),
+      QVector3D(0.0f, 0.0f, 1.0f),
+  };
+}
+
+QVector3D camera_space_direction(const QVector3D& world_direction) {
+  return QVector3D(world_direction.y(), world_direction.z(), world_direction.x());
+}
+
 float zoomed_distance_factor(float current_factor, int angle_delta_y, int pixel_delta_y) {
   const float delta_steps =
       angle_delta_y != 0 ? float(angle_delta_y) / 120.0f : float(pixel_delta_y) / 80.0f;

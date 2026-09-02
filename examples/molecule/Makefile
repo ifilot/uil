@@ -5,9 +5,10 @@ SOURCE := molecule-example.tex
 PDF := $(BUILD_DIR)/molecule-example.pdf
 PACKAGE := ../bundled/molecule-visualizer.uil
 PACKAGE_DIR := $(BUILD_DIR)/package
-GENERATED_ASSETS := water-inline.xyz methane-inline.xyz carbon-dioxide-inline.xyz
+GENERATED_ASSETS := water-inline.xyz methane-inline.xyz carbon-dioxide-inline.xyz \
+	benzene-inline.xyz
 POSTER_ASSETS := methane-still.png methane-anaglyph-still.png \
-	water-still.png carbon-dioxide-still.png
+	water-still.png carbon-dioxide-still.png benzene-still.png
 
 # Override this when the CHC theme is checked out elsewhere:
 #   make CHC_THEME_DIR=/path/to/lecture-slides-chemical-bonding/chctheme
@@ -54,6 +55,7 @@ $(PACKAGE): $(PDF) manifest.json
 	@cmake -E copy "$(BUILD_DIR)/water-inline.xyz" "$(PACKAGE_DIR)/water-inline.xyz"
 	@cmake -E copy "$(BUILD_DIR)/carbon-dioxide-inline.xyz" "$(PACKAGE_DIR)/carbon-dioxide-inline.xyz"
 	@cmake -E copy "$(BUILD_DIR)/methane-inline.xyz" "$(PACKAGE_DIR)/methane-inline.xyz"
+	@cmake -E copy "$(BUILD_DIR)/benzene-inline.xyz" "$(PACKAGE_DIR)/benzene-inline.xyz"
 	@cmake -E rm -f "$(abspath $(PACKAGE))"
 	@cd "$(PACKAGE_DIR)" && zip -q -X "$(abspath $(PACKAGE))" \
 		molecule-example.pdf manifest.json $(GENERATED_ASSETS)

@@ -13,6 +13,9 @@ Notable user-facing changes to `uil` are documented here.
 - Added a bundled interactive molecule presentation that demonstrates every visualizer control.
 - Added rendered molecule stills as fallbacks when the example deck is opened in a PDF reader.
 - Added a subtle gray outline that distinguishes a live interactive molecule from its PDF poster.
+- Added a toolbar toggle for continuous rotation around the molecule's local Z axis.
+- Changed the default molecule camera to look along the negative X axis with positive Z upward.
+- Placed the example water molecule in the YZ plane and added benzene to the bundled tour.
 
 ### Fixed
 
