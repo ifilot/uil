@@ -2,6 +2,18 @@
 
 Notable user-facing changes to `uil` are documented here.
 
+## 0.2.0 - 2026-09-02
+
+### Added
+
+- Added a presenter start button, Logitech Spotlight presence status, and build identifier.
+- Added persistent slider and numeric controls for laser-pointer size.
+- Added `G` and `L` presentation shortcuts for the slide grid and laser pointer.
+
+### Changed
+
+- Updated the presentation controls and pointer-size input styling.
+
 ## 0.1.1 - 2026-08-27
 
 ### Changed

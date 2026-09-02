@@ -29,7 +29,9 @@
 #include <QResizeEvent>
 #include <QSizePolicy>
 #include <QSlider>
+#include <QSpinBox>
 #include <QStandardPaths>
+#include <QSettings>
 #include <QStringList>
 #include <QTimer>
 #include <QToolButton>
@@ -51,7 +53,10 @@ constexpr int kDeckOverviewColumns = 6;
 constexpr int kDeckOverviewFooterHeight = 28;
 constexpr int kDeckOverviewScrollTrackWidth = 5;
 constexpr int kDeckOverviewScrollbarGutter = 22;
-constexpr qreal kPointerLogicalSize = 46.0;
+constexpr int kDefaultPointerSize = 25;
+constexpr int kMinimumPointerSize = 12;
+constexpr int kMaximumPointerSize = 120;
+constexpr auto kPointerSizeSettingsKey = "audience/pointerSize";
 const QColor kMenuIconColor(0xcc, 0xcc, 0xcc);
 
 /** @brief Returns the usable source rectangle of an image. */
@@ -192,6 +197,7 @@ private:
         toolRow->setSpacing(14);
         cursor_button_ = create_tool_button(QStringLiteral("Classic\npointer"), QStringLiteral("arrow-pointer"), InteractionTool::Cursor);
         pointer_button_ = create_tool_button(QStringLiteral("Laser\npointer"), QStringLiteral("location-crosshairs"), InteractionTool::Pointer);
+        pointer_button_->setToolTip(QStringLiteral("Laser pointer (L)"));
         pen_button_ = create_tool_button(QStringLiteral("Pencil"), QStringLiteral("pencil"), InteractionTool::Pen);
         eraser_button_ = create_tool_button(QStringLiteral("Eraser"), QStringLiteral("eraser"), InteractionTool::Eraser);
         toolRow->addStretch(1);
@@ -218,7 +224,7 @@ private:
         QToolButton* closeButton = create_bottom_button(QStringLiteral("Close slideshow"), QStringLiteral("stock-quit"), QStringLiteral("featureCloseButton"), 148);
         QToolButton* firstButton = create_icon_bottom_button(QStringLiteral("First slide"), QStringLiteral("stock-goto-first"), QStringLiteral("featureNavButton"));
         QToolButton* previousButton = create_icon_bottom_button(QStringLiteral("Previous slide"), QStringLiteral("stock-go-back"), QStringLiteral("featureNavButton"));
-        grid_button_ = create_icon_bottom_button(QStringLiteral("Show slide grid"), QStringLiteral("stock_display-grid"), QStringLiteral("featureNavButton"));
+        grid_button_ = create_icon_bottom_button(QStringLiteral("Show slide grid (G)"), QStringLiteral("stock_display-grid"), QStringLiteral("featureNavButton"));
         grid_button_->installEventFilter(this);
         QToolButton* nextButton = create_icon_bottom_button(QStringLiteral("Next slide"), QStringLiteral("stock-go-forward"), QStringLiteral("featureNavButton"));
         QToolButton* lastButton = create_icon_bottom_button(QStringLiteral("Last slide"), QStringLiteral("stock-goto-last"), QStringLiteral("featureNavButton"));
@@ -260,6 +266,20 @@ private:
 
     /** @brief Handles clicks outside the feature menu and relevant window events. */
     bool eventFilter(QObject* watched, QEvent* event) override {
+        if (event->type() == QEvent::KeyPress) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent->key() == Qt::Key_G) {
+                open_deck_overview();
+                event->accept();
+                return true;
+            }
+            if (keyEvent->key() == Qt::Key_L) {
+                select_tool(InteractionTool::Pointer);
+                event->accept();
+                return true;
+            }
+        }
+
         if (event->type() == QEvent::MouseButtonPress && grid_button_) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton
@@ -425,8 +445,8 @@ private:
 
     /** @brief Adds pointer-specific controls to the settings panel. */
     void add_pointer_settings() {
-        auto* row = create_settings_row();
-        row->addWidget(create_settings_label(QStringLiteral("Pointer color")), 0, Qt::AlignVCenter);
+        auto* colorRow = create_settings_row();
+        colorRow->addWidget(create_settings_label(QStringLiteral("Pointer color")), 0, Qt::AlignVCenter);
         const std::array<QPair<QString, QColor>, 3> colors{{
             {QStringLiteral("Bright red"), QColor(255, 36, 36)},
             {QStringLiteral("Bright green"), QColor(28, 255, 83)},
@@ -438,10 +458,35 @@ private:
                 audience_->set_pointer_color(color);
                 rebuild_settings();
             });
-            row->addWidget(button, 0, Qt::AlignVCenter);
+            colorRow->addWidget(button, 0, Qt::AlignVCenter);
         }
-        row->addStretch(1);
-        settings_layout_->addLayout(row);
+        colorRow->addStretch(1);
+        settings_layout_->addLayout(colorRow);
+
+        auto* sizeRow = create_settings_row();
+        sizeRow->addWidget(create_settings_label(QStringLiteral("Pointer size")), 0, Qt::AlignVCenter);
+        auto* slider = new QSlider(Qt::Horizontal, this);
+        slider->setObjectName(QStringLiteral("featureSizeSlider"));
+        slider->setMinimumWidth(280);
+        slider->setRange(kMinimumPointerSize, kMaximumPointerSize);
+        slider->setSingleStep(1);
+        slider->setPageStep(10);
+        slider->setValue(audience_->pointer_size_);
+
+        auto* sizeInput = new QSpinBox(this);
+        sizeInput->setObjectName(QStringLiteral("pointerSizeInput"));
+        sizeInput->setRange(kMinimumPointerSize, kMaximumPointerSize);
+        sizeInput->setSuffix(QStringLiteral(" px"));
+        sizeInput->setValue(audience_->pointer_size_);
+        sizeInput->setFixedSize(90, 38);
+
+        connect(slider, &QSlider::valueChanged, sizeInput, &QSpinBox::setValue);
+        connect(sizeInput, qOverload<int>(&QSpinBox::valueChanged), slider, &QSlider::setValue);
+        connect(slider, &QSlider::valueChanged, audience_, &AudienceWindow::set_pointer_size);
+
+        sizeRow->addWidget(slider, 1, Qt::AlignVCenter);
+        sizeRow->addWidget(sizeInput, 0, Qt::AlignVCenter);
+        settings_layout_->addLayout(sizeRow);
     }
 
     /** @brief Adds pen-specific controls to the settings panel. */
@@ -676,6 +721,11 @@ private:
 
 AudienceWindow::AudienceWindow()
     : QWidget(nullptr, Qt::Window) {
+    QSettings settings;
+    pointer_size_ = std::clamp(
+        settings.value(QString::fromLatin1(kPointerSizeSettingsKey), kDefaultPointerSize).toInt(),
+        kMinimumPointerSize,
+        kMaximumPointerSize);
     setWindowTitle(QStringLiteral("uil Audience"));
     setWindowIcon(QIcon(QStringLiteral(":/icons/uil.png")));
     resize(960, 540);
@@ -957,6 +1007,18 @@ void AudienceWindow::set_pointer_color(const QColor& color) {
     }
 }
 
+void AudienceWindow::set_pointer_size(int size) {
+    const int clampedSize = std::clamp(size, kMinimumPointerSize, kMaximumPointerSize);
+    if (pointer_size_ == clampedSize) {
+        return;
+    }
+
+    pointer_size_ = clampedSize;
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kPointerSizeSettingsKey), pointer_size_);
+    update();
+}
+
 void AudienceWindow::set_annotation_color(const QColor& color) {
     if (color.isValid()) {
         annotation_color_ = color;
@@ -1160,6 +1222,10 @@ void AudienceWindow::keyPressEvent(QKeyEvent* event) {
             exit_deck_overview();
             event->accept();
             return;
+        case Qt::Key_G:
+            exit_deck_overview();
+            event->accept();
+            return;
         case Qt::Key_Up:
             scroll_deck_overview_by(-80);
             event->accept();
@@ -1225,6 +1291,17 @@ void AudienceWindow::keyPressEvent(QKeyEvent* event) {
         return;
     case Qt::Key_W:
         toggle_white_screen();
+        event->accept();
+        return;
+    case Qt::Key_G:
+        enter_deck_overview();
+        event->accept();
+        return;
+    case Qt::Key_L:
+        if (deck_overview_visible_) {
+            exit_deck_overview();
+        }
+        set_pointer_tool();
         event->accept();
         return;
     case Qt::Key_F11:
@@ -1630,12 +1707,12 @@ void AudienceWindow::draw_pointer(QPainter& painter) const {
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(Qt::NoPen);
     painter.setBrush(glow);
-    painter.drawEllipse(pointer_position_, kPointerLogicalSize * 0.68, kPointerLogicalSize * 0.68);
+    painter.drawEllipse(pointer_position_, pointer_size_ * 0.68, pointer_size_ * 0.68);
     painter.setBrush(fill);
-    painter.drawEllipse(pointer_position_, kPointerLogicalSize * 0.35, kPointerLogicalSize * 0.35);
+    painter.drawEllipse(pointer_position_, pointer_size_ * 0.35, pointer_size_ * 0.35);
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(pointer_color_, 4.0));
-    painter.drawEllipse(pointer_position_, kPointerLogicalSize * 0.48, kPointerLogicalSize * 0.48);
+    painter.setPen(QPen(pointer_color_, std::max(2.0, pointer_size_ * 0.087)));
+    painter.drawEllipse(pointer_position_, pointer_size_ * 0.48, pointer_size_ * 0.48);
     painter.restore();
 }
 

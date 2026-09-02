@@ -2,7 +2,7 @@
 
 Pronounced `/œyl/`.
 
-[![Version](https://img.shields.io/badge/version-v0.1.1-blue.svg)](https://github.com/ifilot/uil/releases)
+[![Version](https://img.shields.io/badge/version-v0.2.0-blue.svg)](https://github.com/ifilot/uil/releases)
 [![License: LGPL v3](https://img.shields.io/badge/license-LGPL--3.0--only-blue.svg)](LICENSE)
 [![Sanitizers](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml)
 
@@ -31,6 +31,8 @@ tool settings; browse all slides; or close the presentation.
 | First / last slide | `Home` / `End` |
 | Play or pause video | `Enter` |
 | Black / white screen | `B` / `W` |
+| Show slide grid | `G` |
+| Select laser pointer | `L` |
 | Toggle full screen | `F11` |
 | Leave full screen | `Esc` |
 

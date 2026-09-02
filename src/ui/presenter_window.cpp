@@ -8,6 +8,7 @@
 #include "util/image_util.hpp"
 #include "util/launcher_readiness.hpp"
 #include "util/performance_log.hpp"
+#include "util/spotlight_detector.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -706,6 +707,7 @@ PresenterWindow::PresenterWindow(AppController* controller, QWidget* parent)
     span.checkpoint(QStringLiteral("configure_window"));
     create_actions();
     span.checkpoint(QStringLiteral("create_actions"));
+    spotlight_detector_ = new SpotlightDetector(this);
     create_layout();
     span.checkpoint(QStringLiteral("create_layout"));
     create_connections();
@@ -1031,20 +1033,26 @@ void PresenterWindow::show_about() {
 #else
     ffmpegLine = QStringLiteral("<li><b>FFmpeg libraries</b>: optional media support dependency; not linked in this build.</li>");
 #endif
+    QString hidapiLine;
+#ifdef UIL_HAVE_HIDAPI
+    hidapiLine = QStringLiteral("<li><b>HIDAPI</b>: read-only USB HID enumeration for Logitech Spotlight receiver presence; BSD/GPL/custom licensing.</li>");
+#else
+    hidapiLine = QStringLiteral("<li><b>HIDAPI</b>: optional Logitech Spotlight presence-detection dependency; not linked in this build.</li>");
+#endif
     QString informative_text = QStringLiteral(
         "<p>A Windows-focused Qt PDF presentation app for Beamer-style slide decks.</p>"
         "<p><b>Compilation details:</b></p>"
         "<ul>"
         "<li><b>Compiled</b>: %1.</li>"
         "<li><b>Compiler</b>: %2; C++ value %3.</li>"
-        "<li><b>Build configuration</b>: %4; CMake %5.</li>"
-        "<li><b>Qt runtime</b>: %6; Qt build: %7.</li>"
+        "<li><b>Build configuration</b>: %4; commit %5; CMake %6.</li>"
+        "<li><b>Qt runtime</b>: %7; Qt build: %8.</li>"
         "</ul>"
         "<p><b>External packages and assets used by this build:</b></p>"
         "<ul>"
-        "<li><b>Qt %6</b>: Core, Gui, Widgets, Pdf, and Svg modules for the application framework, PDF rendering, audience output, and SVG rendering. The Windows deployment also includes Qt plugins such as the platform and SVG icon plugins. Qt is available under LGPL/GPL/commercial licensing depending on distribution; Qt Pdf includes PDFium and its third-party components.</li>"
+        "<li><b>Qt %7</b>: Core, Gui, Widgets, Pdf, and Svg modules for the application framework, PDF rendering, audience output, and SVG rendering. The Windows deployment also includes Qt plugins such as the platform and SVG icon plugins. Qt is available under LGPL/GPL/commercial licensing depending on distribution; Qt Pdf includes PDFium and its third-party components.</li>"
         "<li><b>zlib</b>: compression library used through ZLIB::ZLIB for PDF media stream handling and .uil package extraction; zlib License.</li>"
-        "%8"
+        "%9"
         "<li><b>Font Awesome Free 7.2.0</b>: vendored SVG icon assets under resources/fontawesome. The SVG icons are licensed under CC BY 4.0. The upstream package also includes MIT-licensed code and SIL OFL 1.1 fonts; this app uses the SVG assets. Copyright Fonticons, Inc.</li>"
         "<li><b>Red Hat Bluecurve icons</b>: a focused set of original size-specific action SVGs from the Bluecurve restoration project, licensed under GNU GPL v3.0.</li>"
         "<li><b>MSYS2/GCC runtime libraries</b>: deployed on Windows as needed by the toolchain and audited by the installer staging script.</li>"
@@ -1056,10 +1064,11 @@ void PresenterWindow::show_about() {
             compiler,
             cppStandard,
             buildConfig,
+            QStringLiteral(UIL_GIT_COMMIT),
             QStringLiteral(UIL_CMAKE_VERSION),
             QString::fromLatin1(qVersion()),
             QLibraryInfo::build(),
-            ffmpegLine);
+            ffmpegLine + hidapiLine);
     aboutBox.setInformativeText(informative_text);
     aboutBox.setStandardButtons(QMessageBox::Ok);
     aboutBox.exec();
@@ -1223,7 +1232,7 @@ void PresenterWindow::create_actions() {
     last_action_->setShortcut(Qt::Key_End);
 
     start_presentation_action_ = new QAction(QStringLiteral("Start Presentation"), this);
-    start_presentation_action_->setIcon(bluecurve::icon(QStringLiteral("stock-media-play")));
+    start_presentation_action_->setIcon(bluecurve::icon(QStringLiteral("icon-resize-screen")));
     start_presentation_action_->setShortcut(Qt::Key_F5);
 
     play_pause_media_action_ = new QAction(QStringLiteral("Play/Pause Media"), this);
@@ -1462,6 +1471,17 @@ void PresenterWindow::create_layout() {
         label->setObjectName(QStringLiteral("statusPill"));
     }
     screenLabel->setObjectName(QStringLiteral("fieldLabel"));
+    auto* startPresentationButton = new QToolButton(central);
+    startPresentationButton->setObjectName(QStringLiteral("statusIconButton"));
+    startPresentationButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    startPresentationButton->setAutoRaise(true);
+    startPresentationButton->setFocusPolicy(Qt::NoFocus);
+    startPresentationButton->setFixedSize(31, 30);
+    startPresentationButton->setDefaultAction(start_presentation_action_);
+    startPresentationButton->setIconSize(QSize(16, 16));
+    startPresentationButton->setToolTip(QStringLiteral("Start presentation (F5)"));
+    startPresentationButton->setAccessibleName(QStringLiteral("Start presentation"));
+
     clear_all_overlays_button_ = new QToolButton(central);
     clear_all_overlays_button_->setObjectName(QStringLiteral("statusIconButton"));
     clear_all_overlays_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -1481,10 +1501,22 @@ void PresenterWindow::create_layout() {
     overlay_visibility_button_->setDefaultAction(show_audience_overlay_action_);
     update_overlay_visibility_button(show_audience_overlay_action_->isChecked());
 
+    pointer_device_status_ = new QToolButton(central);
+    pointer_device_status_->setObjectName(QStringLiteral("pointerDeviceStatus"));
+    pointer_device_status_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    pointer_device_status_->setAutoRaise(true);
+    pointer_device_status_->setFocusPolicy(Qt::NoFocus);
+    pointer_device_status_->setFixedHeight(30);
+    pointer_device_status_->setIconSize(QSize(16, 16));
+    pointer_device_status_->setAccessibleName(QStringLiteral("Logitech Spotlight status"));
+    update_pointer_device_status(spotlight_detector_->is_present());
+
+    statusLayout->addWidget(startPresentationButton);
     statusLayout->addWidget(clear_all_overlays_button_);
     statusLayout->addWidget(page_label_);
     statusLayout->addWidget(overlay_visibility_button_);
     statusLayout->addWidget(media_label_);
+    statusLayout->addWidget(pointer_device_status_);
     statusLayout->addStretch(1);
     statusLayout->addWidget(screenLabel);
     statusLayout->addWidget(screen_combo_);
@@ -1494,6 +1526,16 @@ void PresenterWindow::create_layout() {
     setCentralWidget(central);
     statusBar()->setSizeGripEnabled(false);
     statusBar()->showMessage(QStringLiteral("Ready"));
+    auto* buildIdLabel = new QLabel(
+        QStringLiteral("%1 · %2").arg(
+            QStringLiteral(UIL_VERSION_DISPLAY),
+            QStringLiteral(UIL_GIT_COMMIT)),
+        statusBar());
+    buildIdLabel->setObjectName(QStringLiteral("buildIdLabel"));
+    buildIdLabel->setToolTip(QStringLiteral("uil %1, commit %2").arg(
+        QStringLiteral(UIL_VERSION),
+        QStringLiteral(UIL_GIT_COMMIT)));
+    statusBar()->addPermanentWidget(buildIdLabel);
 }
 
 bool PresenterWindow::is_title_drag_area_at(const QPoint& global_position) const {
@@ -1654,6 +1696,30 @@ void PresenterWindow::update_overlay_visibility_button(bool visible) {
     if (overlay_visibility_button_) {
         overlay_visibility_button_->setChecked(visible);
     }
+}
+
+void PresenterWindow::update_pointer_device_status(bool present) {
+    if (!pointer_device_status_) {
+        return;
+    }
+
+    const bool available = spotlight_detector_ && spotlight_detector_->detection_available();
+    pointer_device_status_->setProperty("connected", available && present);
+    pointer_device_status_->setText(
+        !available ? QStringLiteral("Pointer: unavailable")
+                   : present ? QStringLiteral("Pointer: connected")
+                             : QStringLiteral("Pointer: absent"));
+    pointer_device_status_->setIcon(font_awesome::icon(
+        font_awesome::Style::Solid,
+        QStringLiteral("satellite-dish"),
+        available && present ? QColor(0x48, 0xd5, 0x88) : QColor(0x85, 0x85, 0x85),
+        QSize(16, 16)));
+    pointer_device_status_->setToolTip(
+        !available ? QStringLiteral("Pointer-device detection is unavailable in this build")
+                   : present ? QStringLiteral("Logitech Spotlight receiver connected")
+                             : QStringLiteral("Logitech Spotlight receiver not detected"));
+    pointer_device_status_->style()->unpolish(pointer_device_status_);
+    pointer_device_status_->style()->polish(pointer_device_status_);
 }
 
 void PresenterWindow::update_current_preview_overlay_visibility() {
@@ -1832,6 +1898,7 @@ void PresenterWindow::create_connections() {
     connect(show_audience_overlay_action_, &QAction::toggled, this, &PresenterWindow::update_deck_overlay_visibility);
     connect(clear_all_overlays_button_, &QToolButton::clicked, this, &PresenterWindow::confirm_clear_all_overlays);
     connect(screen_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this, &PresenterWindow::select_screen_from_combo);
+    connect(spotlight_detector_, &SpotlightDetector::presence_changed, this, &PresenterWindow::update_pointer_device_status);
 
     connect(controller_, &AppController::page_changed, this, &PresenterWindow::update_page_label);
     connect(controller_, &AppController::document_changed, this, &PresenterWindow::update_document_overview);

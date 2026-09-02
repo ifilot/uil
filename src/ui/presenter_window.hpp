@@ -23,6 +23,7 @@ class QTimer;
 class QToolButton;
 class QWidget;
 class SlideDeckOverview;
+class SpotlightDetector;
 
 class SlidePreview final : public QLabel {
     Q_OBJECT
@@ -133,6 +134,8 @@ private:
     void update_maximize_button();
     /** @brief Updates the global overlay-visibility action. */
     void update_overlay_visibility_button(bool visible);
+    /** @brief Updates the Logitech Spotlight presence indicator. */
+    void update_pointer_device_status(bool present);
     /** @brief Refreshes overlay visibility for the current preview. */
     void update_current_preview_overlay_visibility();
     /** @brief Stores and displays the current page's annotation overlay. */
@@ -187,6 +190,7 @@ private:
     QToolButton* close_button_ = nullptr;
     QToolButton* clear_all_overlays_button_ = nullptr;
     QToolButton* overlay_visibility_button_ = nullptr;
+    QToolButton* pointer_device_status_ = nullptr;
     QAction* open_action_ = nullptr;
     QAction* save_action_ = nullptr;
     QAction* save_as_action_ = nullptr;
@@ -207,6 +211,7 @@ private:
     QAction* quit_action_ = nullptr;
     QAction* about_action_ = nullptr;
     QTimer* window_mask_timer_ = nullptr;
+    SpotlightDetector* spotlight_detector_ = nullptr;
     Qt::Edges resize_edges_;
     QRect resize_start_geometry_;
     QPoint resize_start_global_position_;

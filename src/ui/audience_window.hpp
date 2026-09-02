@@ -76,6 +76,8 @@ public:
     void set_eraser_tool();
     /** @brief Sets the pointer color. */
     void set_pointer_color(const QColor& color);
+    /** @brief Sets the pointer size in logical pixels. */
+    void set_pointer_size(int size);
     /** @brief Sets the annotation pen color. */
     void set_annotation_color(const QColor& color);
     /** @brief Sets the annotation pen thickness. */
@@ -252,6 +254,7 @@ private:
     bool is_fullscreen_ = false;
     int annotation_thickness_ = 6;
     int eraser_thickness_ = 24;
+    int pointer_size_ = 25;
     int page_count_ = 0;
     int current_page_index_ = -1;
     int deck_overview_scroll_y_ = 0;
