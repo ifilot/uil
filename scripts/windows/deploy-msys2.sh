@@ -741,6 +741,7 @@ copy_example_presentations() {
     local -a example_files=(
         getting-started.pdf
         pointer-and-annotations.pdf
+        molecule-visualizer.uil
     )
     local example_file
 

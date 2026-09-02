@@ -11,9 +11,10 @@ struct ExampleDefinition {
     const char* file_name;
 };
 
-constexpr std::array<ExampleDefinition, 2> kExamples{{
+constexpr std::array<ExampleDefinition, 3> kExamples{{
     {"Getting Started with uil", "getting-started.pdf"},
     {"Pointer and Annotation Tools", "pointer-and-annotations.pdf"},
+    {"Interactive Molecule Visualizer", "molecule-visualizer.uil"},
 }};
 }  // namespace
 

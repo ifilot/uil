@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(uil VERSION 0.2.0 LANGUAGES C CXX)
+project(uil VERSION 0.2.1 LANGUAGES C CXX)
 
 include(CTest)
 
@@ -99,14 +99,20 @@ set(FONT_AWESOME_SVG_FILES
     resources/fontawesome/svgs/regular/eye-slash.svg
     resources/fontawesome/svgs/solid/angles-left.svg
     resources/fontawesome/svgs/solid/angles-right.svg
+    resources/fontawesome/svgs/solid/arrows-rotate.svg
     resources/fontawesome/svgs/solid/arrow-pointer.svg
     resources/fontawesome/svgs/solid/chevron-left.svg
     resources/fontawesome/svgs/solid/chevron-right.svg
+    resources/fontawesome/svgs/solid/compass.svg
     resources/fontawesome/svgs/solid/door-open.svg
     resources/fontawesome/svgs/solid/eraser.svg
+    resources/fontawesome/svgs/solid/glasses.svg
     resources/fontawesome/svgs/solid/location-crosshairs.svg
+    resources/fontawesome/svgs/solid/pause.svg
     resources/fontawesome/svgs/solid/pencil.svg
+    resources/fontawesome/svgs/solid/play.svg
     resources/fontawesome/svgs/solid/satellite-dish.svg
+    resources/fontawesome/svgs/solid/sliders.svg
     resources/fontawesome/svgs/solid/table-cells-large.svg
     resources/fontawesome/svgs/solid/trash-can.svg
     resources/fontawesome/svgs/solid/window-maximize.svg

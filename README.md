@@ -2,7 +2,7 @@
 
 Pronounced `/œyl/`.
 
-[![Version](https://img.shields.io/badge/version-v0.2.0-blue.svg)](https://github.com/ifilot/uil/releases)
+[![Version](https://img.shields.io/badge/version-v0.2.1-blue.svg)](https://github.com/ifilot/uil/releases)
 [![License: LGPL v3](https://img.shields.io/badge/license-LGPL--3.0--only-blue.svg)](LICENSE)
 [![Sanitizers](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml)
 
@@ -26,9 +26,9 @@ tool settings; browse all slides; or close the presentation. The laser pointer
 automatically disappears after three seconds without movement and reappears as
 soon as it moves again.
 
-Two sample decks are included with the Windows distribution. Open them from
-**File > Examples** for a quick tour of navigation, pointer, and annotation
-features.
+Three sample decks are included with the Windows distribution. Open them from
+**File > Examples** for tours of navigation, pointer and annotation features,
+and the interactive molecule visualizer.
 
 | Action | Key |
 |---|---|
@@ -48,15 +48,25 @@ page. Use **File > Save** to preserve the presentation and annotations as a
 
 ## Interactive molecules (experimental)
 
-The first experimental molecule implementation accepts XYZ geometry referenced
-by the dedicated `\molecule` command in `latex/uilmolecule.sty`. UIL replaces
-the command's poster rectangle with a ball-and-stick view: drag with the left
-mouse button to rotate, use the mouse wheel to zoom, and double-click to reset.
+The molecule visualizer accepts XYZ geometry referenced by the dedicated
+`\molecule` command in `latex/uilmolecule.sty`. UIL replaces the command's
+poster rectangle with a ball-and-stick view: drag with the left mouse button to
+rotate, use the mouse wheel to zoom, and double-click to reset. Its floating
+toolbar can collapse to a single button and provides a one-click red/cyan
+anaglyph toggle, vibration playback, and an orientation-axis gizmo.
 
-See `examples/molecule/molecule-example.tex` for a Beamer example whose geometry
-is defined in the `.tex` file with `filecontents*`. pdfLaTeX and LuaLaTeX are
-supported. The generated XYZ file must remain beside a raw PDF; saving as a
+Normal-mode animation uses an extended but backwards-compatible XYZ atom row:
+`element x y z dx dy dz`. The final three values are displacement components;
+ordinary four-column XYZ files remain static.
+
+See `examples/molecule/molecule-example.tex` and the bundled **Interactive
+Molecule Visualizer** presentation for a complete tour. pdfLaTeX and LuaLaTeX
+are supported. The generated XYZ file must remain beside a raw PDF; saving as a
 `.uil` package bundles the molecule asset.
+
+The poster argument remains visible in ordinary PDF readers. Pass a rendered
+still with `\includegraphics`, as demonstrated by the example deck, and UIL
+will replace that image with the interactive molecule while presenting.
 
 ## Troubleshooting
 

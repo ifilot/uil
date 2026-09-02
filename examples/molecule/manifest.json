@@ -1,0 +1,14 @@
+{
+  "format": "uil.presentation-package",
+  "format_version": 2,
+  "entry_pdf": "molecule-example.pdf",
+  "movie_assets": [],
+  "molecule_assets": [
+    { "path": "water-inline.xyz" },
+    { "path": "methane-inline.xyz" },
+    { "path": "carbon-dioxide-inline.xyz" }
+  ],
+  "overlays": [],
+  "hidden_overlay_pages": [],
+  "overlays_visible": true
+}

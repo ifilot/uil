@@ -13,6 +13,8 @@ synthetic fixtures, so they do not depend on developer-specific files or network
   resolution, and rejection of missing, unknown, or non-file entries.
 - `qt_pdf_backend_test`: opening both bundled PDF decks, page counts and aspect ratios, rendering
   dimensions, invalid requests, and missing, malformed, or password-protected document errors.
+- `molecule_geometry_test`: XYZ parsing, bond inference, and normal-mode displacement playback.
+- `molecule_widget_test`: molecule toolbar state and visualizer mode controls.
 - `slide_cache_test`: hit/miss statistics, replacement accounting, LRU refresh and eviction,
   oversized entries, null images, reset behavior, and adaptive-budget bounds.
 - `spotlight_detector_test`: unavailable detection, initial receiver presence, connect/disconnect
