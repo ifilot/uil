@@ -735,6 +735,23 @@ copy_app_license_files() {
     fi
 }
 
+copy_example_presentations() {
+    local source_dir="examples/bundled"
+    local destination_dir="$STAGE_DIR/examples"
+    local -a example_files=(
+        getting-started.pdf
+        pointer-and-annotations.pdf
+    )
+    local example_file
+
+    mkdir -p "$destination_dir"
+    for example_file in "${example_files[@]}"; do
+        [[ -f "$source_dir/$example_file" ]] \
+            || die "missing bundled example presentation: $source_dir/$example_file"
+        cp -f "$source_dir/$example_file" "$destination_dir/$example_file"
+    done
+}
+
 write_manifest() {
     local manifest="$STAGE_DIR/deployment-manifest.txt"
     local summary="$STAGE_DIR/deployment-summary.md"
@@ -916,6 +933,9 @@ fi
 
 log "Copying application license files"
 copy_app_license_files
+
+log "Copying example presentations"
+copy_example_presentations
 
 if (( GENERATE_THIRD_PARTY_NOTICES )); then
     log "Writing exhaustive third-party notices"

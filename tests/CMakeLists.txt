@@ -21,15 +21,86 @@ add_uil_unit_test(document_hash_test
     ${PROJECT_SOURCE_DIR}/src/util/document_hash.cpp
 )
 
+add_uil_unit_test(example_presentations_test
+    example_presentations_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/util/example_presentations.cpp
+)
+
+add_uil_unit_test(qt_pdf_backend_test
+    qt_pdf_backend_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/pdf/qt_pdf_backend.cpp
+)
+target_compile_definitions(qt_pdf_backend_test PRIVATE
+    UIL_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+)
+target_link_libraries(qt_pdf_backend_test PRIVATE Qt6::Pdf)
+
 add_uil_unit_test(slide_cache_test
     slide_cache_test.cpp
     ${PROJECT_SOURCE_DIR}/src/cache/slide_cache.cpp
+)
+
+add_uil_unit_test(spotlight_detector_test
+    spotlight_detector_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/util/spotlight_detector.cpp
 )
 
 add_uil_unit_test(deck_overview_visibility_test
     deck_overview_visibility_test.cpp
 )
 target_link_libraries(deck_overview_visibility_test PRIVATE Qt6::Widgets)
+
+add_uil_unit_test(audience_window_test
+    audience_window_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/audience_window.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/bluecurve.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+)
+target_link_libraries(audience_window_test PRIVATE
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+    Qt6::Svg
+)
+
+add_uil_unit_test(app_controller_test
+    app_controller_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/app_controller.cpp
+    ${PROJECT_SOURCE_DIR}/src/pdf/qt_pdf_backend.cpp
+    ${PROJECT_SOURCE_DIR}/src/cache/slide_cache.cpp
+    ${PROJECT_SOURCE_DIR}/src/render/render_scheduler.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/audience_window.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/bluecurve.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/util/document_hash.cpp
+    ${PROJECT_SOURCE_DIR}/src/util/image_util.cpp
+    ${PROJECT_SOURCE_DIR}/src/util/pdf_media_detector.cpp
+    ${PROJECT_SOURCE_DIR}/src/media/video_frame_extractor.cpp
+    ${PROJECT_SOURCE_DIR}/src/media/video_frame_buffer.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/package/uil_package.cpp
+)
+target_compile_definitions(app_controller_test PRIVATE
+    UIL_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+)
+target_link_libraries(app_controller_test PRIVATE
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+    Qt6::Pdf
+    Qt6::Svg
+    ZLIB::ZLIB
+)
+if(FFMPEG_FOUND)
+    target_compile_definitions(app_controller_test PRIVATE UIL_HAVE_FFMPEG=1)
+    target_include_directories(app_controller_test PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_compile_options(app_controller_test PRIVATE ${FFMPEG_CFLAGS_OTHER})
+endif()
 
 add_uil_unit_test(molecule_camera_test
     molecule_camera_test.cpp
@@ -65,6 +136,17 @@ if(FFMPEG_FOUND)
     target_compile_definitions(pdf_media_detector_test PRIVATE UIL_HAVE_FFMPEG=1)
     target_include_directories(pdf_media_detector_test PRIVATE ${FFMPEG_INCLUDE_DIRS})
     target_compile_options(pdf_media_detector_test PRIVATE ${FFMPEG_CFLAGS_OTHER})
+endif()
+
+add_uil_unit_test(video_frame_buffer_test
+    video_frame_buffer_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/media/video_frame_buffer.cpp
+    ${PROJECT_SOURCE_DIR}/src/media/video_frame_extractor.cpp
+)
+if(FFMPEG_FOUND)
+    target_compile_definitions(video_frame_buffer_test PRIVATE UIL_HAVE_FFMPEG=1)
+    target_include_directories(video_frame_buffer_test PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_compile_options(video_frame_buffer_test PRIVATE ${FFMPEG_CFLAGS_OTHER})
 endif()
 
 if(WIN32)

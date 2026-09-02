@@ -22,7 +22,13 @@ Windows 10 or newer is required.
 
 Open a `.pdf` or `.uil` file, select the audience display, and press `F5`.
 Right-click the audience view to choose the pointer, pencil, or eraser; change
-tool settings; browse all slides; or close the presentation.
+tool settings; browse all slides; or close the presentation. The laser pointer
+automatically disappears after three seconds without movement and reappears as
+soon as it moves again.
+
+Two sample decks are included with the Windows distribution. Open them from
+**File > Examples** for a quick tour of navigation, pointer, and annotation
+features.
 
 | Action | Key |
 |---|---|

@@ -213,6 +213,8 @@ qt_add_executable(${UIL_VIEWER_TARGET}
     src/ui/presenter_window.cpp
     src/util/document_hash.hpp
     src/util/document_hash.cpp
+    src/util/example_presentations.hpp
+    src/util/example_presentations.cpp
     src/util/image_util.hpp
     src/util/image_util.cpp
     src/util/performance_log.hpp

@@ -6,6 +6,7 @@
 #include "ui/bluecurve.hpp"
 #include "ui/font_awesome.hpp"
 #include "util/image_util.hpp"
+#include "util/example_presentations.hpp"
 #include "util/launcher_readiness.hpp"
 #include "util/performance_log.hpp"
 #include "util/spotlight_detector.hpp"
@@ -14,6 +15,7 @@
 #include <QApplication>
 #include <QBitmap>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QCloseEvent>
 #include <QCursor>
 #include <QDialog>
@@ -1270,6 +1272,22 @@ void PresenterWindow::create_actions() {
 
     QMenu* fileMenu = menu_bar_->addMenu(QStringLiteral("&File"));
     fileMenu->addAction(open_action_);
+    QMenu* examples_menu = fileMenu->addMenu(QStringLiteral("&Examples"));
+    examples_menu->setIcon(bluecurve::icon(QStringLiteral("stock-open")));
+    const QVector<ExamplePresentation> examples = installed_example_presentations(
+        QCoreApplication::applicationDirPath());
+    for (const ExamplePresentation& example : examples) {
+        QAction* action = examples_menu->addAction(example.title);
+        action->setData(example.absolute_path);
+        connect(action, &QAction::triggered, this, [this, action] {
+            open_pdf_path(action->data().toString());
+        });
+    }
+    if (examples.isEmpty()) {
+        QAction* unavailable_action = examples_menu->addAction(
+            QStringLiteral("No examples installed"));
+        unavailable_action->setEnabled(false);
+    }
     fileMenu->addAction(save_action_);
     fileMenu->addAction(save_as_action_);
     fileMenu->addAction(export_pdf_action_);

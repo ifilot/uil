@@ -29,6 +29,9 @@ class AudienceWindow : public QWidget {
     Q_OBJECT
 
 public:
+    /** @brief PowerPoint-compatible delay before an idle laser pointer disappears. */
+    static constexpr int kPointerInactivityTimeoutMs = 3000;
+
     /** @brief Constructs the audience presentation window. */
     explicit AudienceWindow();
     /** @brief Destroys the audience presentation window. */
@@ -102,6 +105,14 @@ public:
     QSize render_logical_size() const;
     /** @brief Returns the device pixel ratio used for slide rendering. */
     qreal render_device_pixel_ratio() const;
+    /** @brief Returns the configured laser-pointer diameter. */
+    int pointer_size() const;
+    /** @brief Returns whether the laser pointer is currently painted. */
+    bool is_pointer_visible() const;
+    /** @brief Returns whether the laser pointer is the active interaction tool. */
+    bool is_pointer_tool_selected() const;
+    /** @brief Returns whether the audience slide grid is currently open. */
+    bool is_deck_overview_visible() const;
 
 signals:
     /** @brief Emitted when the user requests the next slide. */
@@ -194,6 +205,10 @@ private:
     void draw_annotation_segment(QPointF from_window_point, QPointF to_window_point);
     /** @brief Draws the presentation pointer. */
     void draw_pointer(QPainter& painter) const;
+    /** @brief Shows the pointer at @p position and restarts its idle timeout. */
+    void show_pointer_at(const QPointF& position);
+    /** @brief Hides the pointer and stops its idle timeout. */
+    void hide_pointer();
     /** @brief Draws the annotation eraser cursor. */
     void draw_eraser_cursor(QPainter& painter) const;
     /** @brief Returns the eraser diameter in logical pixels. */
@@ -250,6 +265,7 @@ private:
     bool deck_overview_visible_ = false;
     QPointer<QScreen> screen_;
     QTimer cursor_hide_timer_;
+    QTimer pointer_hide_timer_;
     BlankMode blank_mode_ = BlankMode::None;
     bool is_fullscreen_ = false;
     int annotation_thickness_ = 6;

@@ -738,6 +738,10 @@ AudienceWindow::AudienceWindow()
     cursor_hide_timer_.setSingleShot(true);
     cursor_hide_timer_.setInterval(2000);
     connect(&cursor_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_cursor);
+
+    pointer_hide_timer_.setSingleShot(true);
+    pointer_hide_timer_.setInterval(kPointerInactivityTimeoutMs);
+    connect(&pointer_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_pointer);
 }
 
 AudienceWindow::~AudienceWindow() = default;
@@ -933,7 +937,7 @@ void AudienceWindow::exit_fullscreen() {
 
     is_fullscreen_ = false;
     is_annotating_ = false;
-    pointer_visible_ = false;
+    hide_pointer();
     deck_overview_visible_ = false;
     showNormal();
     hide();
@@ -963,7 +967,7 @@ void AudienceWindow::clear_blank_screen() {
 
 void AudienceWindow::set_cursor_tool() {
     interaction_tool_ = InteractionTool::Cursor;
-    pointer_visible_ = false;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
@@ -973,6 +977,7 @@ void AudienceWindow::set_cursor_tool() {
 
 void AudienceWindow::set_pointer_tool() {
     interaction_tool_ = InteractionTool::Pointer;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
@@ -982,7 +987,7 @@ void AudienceWindow::set_pointer_tool() {
 
 void AudienceWindow::set_pen_tool() {
     interaction_tool_ = InteractionTool::Pen;
-    pointer_visible_ = false;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
@@ -992,7 +997,7 @@ void AudienceWindow::set_pen_tool() {
 
 void AudienceWindow::set_eraser_tool() {
     interaction_tool_ = InteractionTool::Eraser;
-    pointer_visible_ = false;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
@@ -1148,10 +1153,26 @@ qreal AudienceWindow::render_device_pixel_ratio() const {
     return devicePixelRatioF();
 }
 
+int AudienceWindow::pointer_size() const {
+    return pointer_size_;
+}
+
+bool AudienceWindow::is_pointer_visible() const {
+    return pointer_visible_;
+}
+
+bool AudienceWindow::is_pointer_tool_selected() const {
+    return interaction_tool_ == InteractionTool::Pointer;
+}
+
+bool AudienceWindow::is_deck_overview_visible() const {
+    return deck_overview_visible_;
+}
+
 void AudienceWindow::closeEvent(QCloseEvent* event) {
     is_fullscreen_ = false;
     is_annotating_ = false;
-    pointer_visible_ = false;
+    hide_pointer();
     deck_overview_visible_ = false;
     clear_blank_screen();
     unsetCursor();
@@ -1328,7 +1349,7 @@ void AudienceWindow::keyPressEvent(QKeyEvent* event) {
 }
 
 void AudienceWindow::leaveEvent(QEvent* event) {
-    pointer_visible_ = false;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update();
@@ -1344,9 +1365,7 @@ void AudienceWindow::mouseMoveEvent(QMouseEvent* event) {
     }
 
     if (interaction_tool_ == InteractionTool::Pointer) {
-        pointer_position_ = event->position();
-        pointer_visible_ = true;
-        update();
+        show_pointer_at(event->position());
         event->accept();
         return;
     }
@@ -1405,9 +1424,7 @@ void AudienceWindow::mousePressEvent(QMouseEvent* event) {
     }
 
     if (event->button() == Qt::LeftButton && interaction_tool_ == InteractionTool::Pointer) {
-        pointer_position_ = event->position();
-        pointer_visible_ = true;
-        update();
+        show_pointer_at(event->position());
         event->accept();
         return;
     }
@@ -1716,6 +1733,23 @@ void AudienceWindow::draw_pointer(QPainter& painter) const {
     painter.restore();
 }
 
+void AudienceWindow::show_pointer_at(const QPointF& position) {
+    pointer_position_ = position;
+    pointer_visible_ = true;
+    pointer_hide_timer_.start();
+    update();
+}
+
+void AudienceWindow::hide_pointer() {
+    pointer_hide_timer_.stop();
+    if (!pointer_visible_) {
+        return;
+    }
+
+    pointer_visible_ = false;
+    update();
+}
+
 void AudienceWindow::draw_eraser_cursor(QPainter& painter) const {
     if (!eraser_cursor_visible_ || interaction_tool_ != InteractionTool::Eraser || current_slide_image_.isNull()) {
         return;
@@ -1768,7 +1802,7 @@ void AudienceWindow::enter_deck_overview() {
     deck_overview_visible_ = true;
     blank_mode_ = BlankMode::None;
     is_annotating_ = false;
-    pointer_visible_ = false;
+    hide_pointer();
     eraser_cursor_visible_ = false;
     cursor_hide_timer_.stop();
     setCursor(QCursor(Qt::ArrowCursor));

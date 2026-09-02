@@ -67,6 +67,9 @@ AppController::~AppController() {
     ++media_scan_generation_;
     media_scan_pool_.clear();
     media_scan_pool_.waitForDone();
+    render_scheduler_.stop_and_wait();
+    backend_.reset();
+    package_temp_dir_.reset();
 }
 
 void AppController::set_audience_window(AudienceWindow* audience_window) {
