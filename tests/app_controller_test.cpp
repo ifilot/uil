@@ -101,10 +101,10 @@ void AppControllerTest::opens_bundled_molecule_presentation() {
                 scan_result = result;
             });
 
-    const QString path = example_path(QStringLiteral("molecule-visualizer.uil"));
+    const QString path = example_path(QStringLiteral("molecule-visualizer.pdf"));
     QVERIFY(controller.open_pdf(path));
     QCOMPARE(controller.page_count(), 5);
-    QCOMPARE(controller.current_package_path(), QFileInfo(path).absoluteFilePath());
+    QVERIFY(controller.current_package_path().isEmpty());
     QTRY_COMPARE_WITH_TIMEOUT(scan_result.molecule_annotations.size(), 5, 5000);
 
     for (int index = 0; index < scan_result.molecule_annotations.size(); ++index) {

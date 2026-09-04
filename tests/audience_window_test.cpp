@@ -1,18 +1,23 @@
 #include "ui/audience_window.hpp"
+#include "ui/interactive_figure_widget.hpp"
 #include "ui/molecule_widget.hpp"
 
 #include <QApplication>
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QGuiApplication>
+#include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPointer>
 #include <QSettings>
+#include <QSlider>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QToolButton>
+
+#include <algorithm>
 
 namespace {
 void send_mouse_move(AudienceWindow* window, const QPointF& position) {
@@ -42,6 +47,9 @@ private slots:
     void blank_screen_shortcuts_change_painted_output();
     void molecule_right_click_suspends_surface_while_menu_is_open();
     void molecule_tool_switch_restores_interaction_without_extra_click();
+    void interactive_figure_controls_and_tool_switching();
+    void harmonic_wavepacket_controls_update_status();
+    void harmonic_basis_controls_update_phase_status();
 
 private:
     QTemporaryDir settings_directory_;
@@ -323,6 +331,115 @@ void AudienceWindowTest::molecule_tool_switch_restores_interaction_without_extra
     QCOMPARE(molecule->cursor().shape(), Qt::ClosedHandCursor);
     QTest::mouseRelease(molecule, Qt::LeftButton, Qt::NoModifier, molecule->rect().center());
     QCOMPARE(molecule->cursor().shape(), Qt::OpenHandCursor);
+}
+
+void AudienceWindowTest::interactive_figure_controls_and_tool_switching() {
+    AudienceWindow window;
+    window.resize(800, 450);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(QColor(235, 240, 245));
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    InteractiveFigureDefinition definition;
+    definition.title = QStringLiteral("A moving sine wave");
+    definition.background_svg = QByteArrayLiteral(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 500'>"
+        "<rect width='800' height='500' fill='#ffffff'/></svg>");
+    window.set_interactive_figure_overlay(definition, QRectF(0.15, 0.15, 0.7, 0.7));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* figure = window.findChild<InteractiveFigureWidget*>(
+        QStringLiteral("interactiveFigureWidget"));
+    QVERIFY(figure);
+    QVERIFY(figure->isVisible());
+    auto* amplitude = figure->findChild<QSlider*>(QStringLiteral("figureAmplitudeSlider"));
+    QVERIFY(amplitude);
+    QVERIFY(!figure->findChild<QWidget*>(QStringLiteral("figureColorButton")));
+    const int initial_value = amplitude->value();
+    amplitude->setValue(std::min(amplitude->maximum(), initial_value + 100));
+    QVERIFY(amplitude->value() != initial_value);
+
+    window.set_pen_tool();
+    QVERIFY(figure->isHidden());
+    window.set_cursor_tool();
+    QVERIFY(figure->isVisible());
+}
+
+void AudienceWindowTest::harmonic_wavepacket_controls_update_status() {
+    AudienceWindow window;
+    window.resize(1100, 700);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    InteractiveFigureDefinition definition;
+    definition.kind = InteractiveFigureDefinition::Kind::HarmonicBondWavepacket;
+    definition.title = QStringLiteral("A displaced harmonic-bond wavepacket");
+    definition.background_svg = QByteArrayLiteral(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600'>"
+        "<rect width='800' height='600' fill='#f8fafc'/></svg>");
+    definition.x_min = -5.0;
+    definition.x_max = 5.0;
+    definition.animate_initially = false;
+    window.set_interactive_figure_overlay(definition, QRectF(0.08, 0.08, 0.84, 0.84));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* figure = window.findChild<InteractiveFigureWidget*>(
+        QStringLiteral("interactiveFigureWidget"));
+    QVERIFY(figure);
+    auto* status = figure->findChild<QLabel*>(QStringLiteral("figureStatusLabel"));
+    auto* phase = figure->findChild<QSlider*>(QStringLiteral("figureFrequencySlider"));
+    auto* stretch = figure->findChild<QSlider*>(QStringLiteral("figureAmplitudeSlider"));
+    QVERIFY(status);
+    QVERIFY(phase);
+    QVERIFY(stretch);
+    QVERIFY(!figure->findChild<QWidget*>(QStringLiteral("figureColorButton")));
+    QVERIFY(status->isVisible());
+    QVERIFY(status->text().contains(QStringLiteral("maximum stretch")));
+
+    phase->setValue(250);
+    QVERIFY(status->text().contains(QStringLiteral("crossing equilibrium inward")));
+    QVERIFY(status->text().contains(QStringLiteral("P = -3.00")));
+    stretch->setValue(0);
+    QVERIFY(status->text().contains(QStringLiteral("P = -0.50")));
+}
+
+void AudienceWindowTest::harmonic_basis_controls_update_phase_status() {
+    AudienceWindow window;
+    window.resize(1100, 700);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    InteractiveFigureDefinition definition;
+    definition.kind = InteractiveFigureDefinition::Kind::HarmonicBasisStates;
+    definition.title = QStringLiteral("A coherent packet and its real basis components");
+    definition.background_svg = QByteArrayLiteral(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600'>"
+        "<rect width='800' height='600' fill='#f8fafc'/></svg>");
+    definition.x_min = -5.0;
+    definition.x_max = 5.0;
+    definition.phase_initial = 0.5;
+    definition.animate_initially = false;
+    window.set_interactive_figure_overlay(definition, QRectF(0.08, 0.08, 0.84, 0.84));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* figure = window.findChild<InteractiveFigureWidget*>(
+        QStringLiteral("interactiveFigureWidget"));
+    QVERIFY(figure);
+    auto* status = figure->findChild<QLabel*>(QStringLiteral("figureStatusLabel"));
+    auto* phase = figure->findChild<QSlider*>(QStringLiteral("figureFrequencySlider"));
+    QVERIFY(status);
+    QVERIFY(phase);
+    QVERIFY(!figure->findChild<QWidget*>(QStringLiteral("figureColorButton")));
+    QVERIFY(status->text().contains(QStringLiteral("coherent density moves")));
+    QVERIFY(status->text().contains(QStringLiteral("τ = 0.500")));
+    phase->setValue(750);
+    QVERIFY(status->text().contains(QStringLiteral("τ = 0.750")));
+    QVERIFY(status->text().contains(QStringLiteral("real components evolve")));
 }
 
 QTEST_MAIN(AudienceWindowTest)

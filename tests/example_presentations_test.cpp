@@ -43,11 +43,13 @@ void ExamplePresentationsTest::discovers_known_examples_in_menu_order() {
     QVERIFY(write_fixture(
         examples_directory.filePath(QStringLiteral("getting-started.pdf"))));
     QVERIFY(write_fixture(
-        examples_directory.filePath(QStringLiteral("molecule-visualizer.uil"))));
+        examples_directory.filePath(QStringLiteral("molecule-visualizer.pdf"))));
+    QVERIFY(write_fixture(
+        examples_directory.filePath(QStringLiteral("interactive-figure.pdf"))));
 
     const QVector<ExamplePresentation> examples =
         installed_example_presentations(application_directory.absolutePath());
-    QCOMPARE(examples.size(), 3);
+    QCOMPARE(examples.size(), 4);
     QCOMPARE(examples.at(0).title, QStringLiteral("Getting Started with uil"));
     QCOMPARE(examples.at(0).file_name, QStringLiteral("getting-started.pdf"));
     QCOMPARE(
@@ -61,7 +63,11 @@ void ExamplePresentationsTest::discovers_known_examples_in_menu_order() {
     QCOMPARE(examples.at(2).title, QStringLiteral("Interactive Molecule Visualizer"));
     QCOMPARE(
         examples.at(2).file_name,
-        QStringLiteral("molecule-visualizer.uil"));
+        QStringLiteral("molecule-visualizer.pdf"));
+    QCOMPARE(examples.at(3).title, QStringLiteral("Interactive Figure Prototype"));
+    QCOMPARE(
+        examples.at(3).file_name,
+        QStringLiteral("interactive-figure.pdf"));
 }
 
 void ExamplePresentationsTest::ignores_unknown_files_and_directories() {

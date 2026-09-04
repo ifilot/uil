@@ -147,6 +147,8 @@ private:
     QRectF normalized_pdf_rect(int page_index, const QRectF& rect) const;
     /** @brief Shows the first ready molecule attached to the current page. */
     void update_active_molecule();
+    /** @brief Shows the first ready embedded interactive figure on the current page. */
+    void update_active_interactive_figure();
     /** @brief Starts playback of the current slide's media. */
     void start_media_playback();
     /** @brief Stops active media playback and clears its frame overlay. */

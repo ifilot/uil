@@ -56,6 +56,9 @@ add_uil_unit_test(audience_window_test
     ${PROJECT_SOURCE_DIR}/src/ui/bluecurve.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/interactive_figure_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
 )
@@ -76,6 +79,7 @@ add_uil_unit_test(app_controller_test
     ${PROJECT_SOURCE_DIR}/src/ui/bluecurve.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/interactive_figure_widget.cpp
     ${PROJECT_SOURCE_DIR}/src/util/document_hash.cpp
     ${PROJECT_SOURCE_DIR}/src/util/image_util.cpp
     ${PROJECT_SOURCE_DIR}/src/util/pdf_media_detector.cpp
@@ -83,6 +87,8 @@ add_uil_unit_test(app_controller_test
     ${PROJECT_SOURCE_DIR}/src/media/video_frame_buffer.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
     ${PROJECT_SOURCE_DIR}/src/package/uil_package.cpp
 )
 target_compile_definitions(app_controller_test PRIVATE
@@ -110,6 +116,11 @@ add_uil_unit_test(molecule_camera_test
 add_uil_unit_test(molecule_geometry_test
     molecule_geometry_test.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+)
+
+add_uil_unit_test(harmonic_wavepacket_test
+    harmonic_wavepacket_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
 )
 
 add_uil_unit_test(molecule_widget_test
@@ -149,6 +160,10 @@ add_uil_unit_test(pdf_media_detector_test
     ${PROJECT_SOURCE_DIR}/src/util/pdf_media_detector.cpp
     ${PROJECT_SOURCE_DIR}/src/media/video_frame_extractor.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
+)
+target_compile_definitions(pdf_media_detector_test PRIVATE
+    UIL_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
 )
 target_link_libraries(pdf_media_detector_test PRIVATE ZLIB::ZLIB)
 if(FFMPEG_FOUND)

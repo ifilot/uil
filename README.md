@@ -26,9 +26,12 @@ tool settings; browse all slides; or close the presentation. The laser pointer
 automatically disappears after three seconds without movement and reappears as
 soon as it moves again.
 
-Three sample decks are included with the Windows distribution. Open them from
+Four sample decks are included with the Windows distribution. They are all
+ordinary `.pdf` files, so the same files can also be opened in a regular PDF
+reader. Open them from
 **File > Examples** for tours of navigation, pointer and annotation features,
-and the interactive molecule visualizer.
+the interactive molecule visualizer, and the embedded interactive-figure
+examples, including a displaced harmonic-bond wavepacket.
 
 | Action | Key |
 |---|---|
@@ -61,13 +64,45 @@ Normal-mode animation uses an extended but backwards-compatible XYZ atom row:
 ordinary four-column XYZ files remain static.
 
 See `examples/molecule/molecule-example.tex` and the bundled **Interactive
-Molecule Visualizer** presentation for a complete tour. pdfLaTeX and LuaLaTeX
-are supported. The generated XYZ file must remain beside a raw PDF; saving as a
-`.uil` package bundles the molecule asset.
+Molecule Visualizer** PDF for a complete tour. pdfLaTeX and LuaLaTeX are
+supported. Its small generated XYZ sidecars must remain beside the PDF for UIL
+interaction; an ordinary PDF reader needs only the PDF and displays its still
+images. Saving as a `.uil` package remains available when a single portable
+file containing those molecule assets is preferred.
 
 The poster argument remains visible in ordinary PDF readers. Pass a rendered
 still with `\includegraphics`, as demonstrated by the example deck, and UIL
 will replace that image with the interactive molecule while presenting.
+
+## Interactive figures (prototype)
+
+UIL can also replace a static PDF poster with a self-contained interactive
+figure. Version one includes an animated sine curve, a displaced harmonic-bond
+wavepacket with synchronized potential and probability-density plots, and a
+six-component basis view showing a moving coherent density above the evolving
+real parts of its weighted number-state components. The plots, sliders, and
+playback actions use
+native Qt painting and controls; no browser engine or JavaScript runtime is
+involved.
+
+The `\interactivefigure` command in `latex/uilfigure.sty` embeds the complete
+`.uilfig` JSON payload into the PDF as an EmbeddedFile stream. Ordinary PDF
+readers continue to show the supplied poster, while UIL detects the custom
+annotation and activates the figure in the audience view. The finished PDF has
+no external runtime asset dependency.
+
+The embedded runtime document is defined by
+`docs/interactive-figure-v1.schema.json`. Titles, axis labels and ranges, SVG
+artwork, curve styling, controls, and initial values all come from that one JSON
+document, including all figure colors and whether harmonic playback loops.
+Surrounding slide content, the static PDF poster, and the annotation
+rectangle are authored by LaTeX, because a conventional PDF reader does not
+interpret the UIL JSON.
+
+See `examples/interactive-figure` for the single three-slide deck containing
+the sine-wave, coherent wavepacket, and basis-state examples. The set of
+supported plot kinds remains deliberately narrow while the embedding and
+interaction model is evaluated.
 
 ## Troubleshooting
 

@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <optional>
 #include <unordered_set>
 #include <utility>
@@ -26,6 +27,7 @@ using ObjectMap = QHash<int, QByteArray>;
 constexpr qint64 kMaximumPdfScanBytes = 512LL * 1024LL * 1024LL;
 constexpr qsizetype kMaximumInflatedObjectStreamBytes = 64 * 1024 * 1024;
 constexpr qsizetype kMaximumTotalInflatedObjectStreamBytes = 256 * 1024 * 1024;
+constexpr qsizetype kMaximumEmbeddedFigureBytes = 4 * 1024 * 1024;
 
 /** @brief Inflates PDF stream data encoded with the Flate filter. */
 QByteArray inflate_flate_data(const QByteArray& input) {
@@ -132,31 +134,96 @@ QString bracketed_value(const QByteArray& bytes, const QString& key) {
     return text.mid(begin + 1, end - begin - 1);
 }
 
+/** @brief Decodes a PDF byte string, including UTF-16 byte-order marks. */
+QString decoded_pdf_string_bytes(const QByteArray& decoded) {
+    if (decoded.size() >= 2
+        && ((uchar(decoded.at(0)) == 0xfe && uchar(decoded.at(1)) == 0xff)
+            || (uchar(decoded.at(0)) == 0xff && uchar(decoded.at(1)) == 0xfe))) {
+        const bool big_endian = uchar(decoded.at(0)) == 0xfe;
+        QString result;
+        result.reserve((decoded.size() - 2) / 2);
+        for (int i = 2; i + 1 < decoded.size(); i += 2) {
+            const ushort first = uchar(decoded.at(i));
+            const ushort second = uchar(decoded.at(i + 1));
+            result.append(QChar(big_endian ? ushort((first << 8) | second)
+                                           : ushort(first | (second << 8))));
+        }
+        return result;
+    }
+    return QString::fromLatin1(decoded);
+}
+
 /** @brief Reads and decodes a PDF string associated with a dictionary key. */
 QString pdf_string_value(const QByteArray& bytes, const QString& key) {
     const QString text = QString::fromLatin1(bytes);
-    const int keyIndex = text.indexOf(QStringLiteral("/") + key);
-    if (keyIndex < 0) {
+    const QRegularExpression key_expression(
+        QStringLiteral(R"(/%1\b)").arg(QRegularExpression::escape(key)));
+    const QRegularExpressionMatch key_match = key_expression.match(text);
+    if (!key_match.hasMatch()) {
         return {};
     }
 
-    const int begin = text.indexOf(QLatin1Char('('), keyIndex);
-    if (begin < 0) {
+    int begin = key_match.capturedEnd();
+    while (begin < text.size() && text.at(begin).isSpace()) {
+        ++begin;
+    }
+    if (begin >= text.size()) {
         return {};
     }
 
-    QString result;
+    if (text.at(begin) == QLatin1Char('<')
+        && begin + 1 < text.size()
+        && text.at(begin + 1) != QLatin1Char('<')) {
+        const int end = text.indexOf(QLatin1Char('>'), begin + 1);
+        if (end < 0) {
+            return {};
+        }
+        QByteArray hex = text.mid(begin + 1, end - begin - 1).toLatin1();
+        hex.removeIf([](char ch) { return std::isspace(static_cast<unsigned char>(ch)); });
+        return decoded_pdf_string_bytes(QByteArray::fromHex(hex));
+    }
+
+    if (text.at(begin) != QLatin1Char('(')) {
+        return {};
+    }
+
+    QByteArray decoded;
     int depth = 1;
-    bool escaped = false;
     for (int i = begin + 1; i < text.size(); ++i) {
         const QChar ch = text.at(i);
-        if (escaped) {
-            result.append(ch);
-            escaped = false;
-            continue;
-        }
         if (ch == QLatin1Char('\\')) {
-            escaped = true;
+            if (++i >= text.size()) {
+                break;
+            }
+            const QChar escaped = text.at(i);
+            if (escaped >= QLatin1Char('0') && escaped <= QLatin1Char('7')) {
+                int value = escaped.unicode() - '0';
+                int digits = 1;
+                while (digits < 3 && i + 1 < text.size()
+                       && text.at(i + 1) >= QLatin1Char('0')
+                       && text.at(i + 1) <= QLatin1Char('7')) {
+                    value = value * 8 + text.at(++i).unicode() - '0';
+                    ++digits;
+                }
+                decoded.append(char(value & 0xff));
+            } else if (escaped == QLatin1Char('n')) {
+                decoded.append('\n');
+            } else if (escaped == QLatin1Char('r')) {
+                decoded.append('\r');
+            } else if (escaped == QLatin1Char('t')) {
+                decoded.append('\t');
+            } else if (escaped == QLatin1Char('b')) {
+                decoded.append('\b');
+            } else if (escaped == QLatin1Char('f')) {
+                decoded.append('\f');
+            } else if (escaped == QLatin1Char('\r') || escaped == QLatin1Char('\n')) {
+                if (escaped == QLatin1Char('\r') && i + 1 < text.size()
+                    && text.at(i + 1) == QLatin1Char('\n')) {
+                    ++i;
+                }
+            } else {
+                decoded.append(escaped.toLatin1());
+            }
             continue;
         }
         if (ch == QLatin1Char('(')) {
@@ -167,9 +234,9 @@ QString pdf_string_value(const QByteArray& bytes, const QString& key) {
                 break;
             }
         }
-        result.append(ch);
+        decoded.append(ch.toLatin1());
     }
-    return result;
+    return decoded_pdf_string_bytes(decoded);
 }
 
 /** @brief Returns the subtype declared by a PDF annotation dictionary. */
@@ -212,6 +279,9 @@ QString media_file_name(const QByteArray& bytes) {
 
 /** @brief Returns whether a PDF annotation can contain playable media. */
 bool is_media_annotation(const QByteArray& bytes) {
+    if (has_type(dictionary_part(bytes), QStringLiteral("EmbeddedFile"))) {
+        return false;
+    }
     return has_name(bytes, QStringLiteral("Movie"))
         || has_name(bytes, QStringLiteral("RichMedia"))
         || has_name(bytes, QStringLiteral("Rendition"))
@@ -228,6 +298,11 @@ bool is_molecule_annotation(const QByteArray& bytes) {
     return has_name(bytes, QStringLiteral("UILMolecule"));
 }
 
+/** @brief Returns whether a PDF annotation describes an embedded UIL interactive figure. */
+bool is_interactive_figure_annotation(const QByteArray& bytes) {
+    return has_name(bytes, QStringLiteral("UILInteractiveFigure"));
+}
+
 /** @brief Cheaply detects whether object bytes could contain a supported media annotation. */
 bool contains_media_marker(const QByteArray& bytes) {
     return bytes.contains("/Movie")
@@ -235,7 +310,8 @@ bool contains_media_marker(const QByteArray& bytes) {
         || bytes.contains("/Rendition")
         || bytes.contains("/EmbeddedFile")
         || bytes.contains("/Sound")
-        || bytes.contains("/UILMolecule");
+        || bytes.contains("/UILMolecule")
+        || bytes.contains("/UILInteractiveFigure");
 }
 
 /** @brief Extracts directly represented indirect objects from PDF bytes. */
@@ -415,6 +491,78 @@ PdfMoleculeAnnotation molecule_annotation_from_object(
     };
 }
 
+/** @brief Returns the decoded payload of a directly represented PDF stream object. */
+QByteArray decoded_stream_payload(const QByteArray& object_body, QString* error_message) {
+    const QByteArray dictionary = dictionary_part(object_body);
+    const int stream_index = object_body.indexOf("stream");
+    const int end_stream_index = object_body.lastIndexOf("endstream");
+    if (stream_index < 0 || end_stream_index <= stream_index) {
+        if (error_message) {
+            *error_message = QStringLiteral("Embedded figure does not reference a valid PDF stream");
+        }
+        return {};
+    }
+
+    const int data_start = stream_data_start(object_body, stream_index);
+    QByteArray payload = object_body.mid(data_start, end_stream_index - data_start);
+    if (has_name(dictionary, QStringLiteral("FlateDecode"))) {
+        payload = inflate_flate_data(payload);
+    } else if (dictionary.contains("/Filter")) {
+        if (error_message) {
+            *error_message = QStringLiteral("Embedded figure uses an unsupported PDF stream filter");
+        }
+        return {};
+    }
+    if (payload.isEmpty() || payload.size() > kMaximumEmbeddedFigureBytes) {
+        if (error_message) {
+            *error_message = QStringLiteral("Embedded figure is empty, invalid, or exceeds 4 MiB");
+        }
+        return {};
+    }
+    return payload;
+}
+
+/** @brief Builds and decodes an interactive figure referenced by a custom annotation. */
+PdfInteractiveFigureAnnotation interactive_figure_annotation_from_object(
+    const ObjectMap& objects,
+    int page_index,
+    int object_number,
+    const QByteArray& body) {
+    PdfInteractiveFigureAnnotation annotation;
+    annotation.page_index = page_index;
+    annotation.object_number = object_number;
+    annotation.rect = rect_for_annotation(body);
+
+    const std::optional<int> asset_ref = referenced_object(body, QStringLiteral("Asset"));
+    if (!asset_ref || !objects.contains(*asset_ref)) {
+        annotation.error_message = QStringLiteral("Interactive figure has no embedded file specification");
+        return annotation;
+    }
+
+    const QByteArray file_spec = objects.value(*asset_ref);
+    annotation.file_name = pdf_string_value(file_spec, QStringLiteral("UF"));
+    if (annotation.file_name.isEmpty()) {
+        annotation.file_name = pdf_string_value(file_spec, QStringLiteral("F"));
+    }
+    const std::optional<int> stream_ref = referenced_object(file_spec, QStringLiteral("F"));
+    if (!stream_ref || !objects.contains(*stream_ref)) {
+        annotation.error_message = QStringLiteral("Interactive figure embedded stream is missing");
+        return annotation;
+    }
+
+    const QByteArray stream_object = objects.value(*stream_ref);
+    if (!has_type(dictionary_part(stream_object), QStringLiteral("EmbeddedFile"))) {
+        annotation.error_message = QStringLiteral("Interactive figure asset is not an embedded file");
+        return annotation;
+    }
+    const QByteArray payload = decoded_stream_payload(stream_object, &annotation.error_message);
+    if (payload.isEmpty()) {
+        return annotation;
+    }
+    parse_interactive_figure(payload, &annotation.definition, &annotation.error_message);
+    return annotation;
+}
+
 /** @brief Normalizes a package-relative asset path. */
 QString normalized_package_path(QString path) {
     path.replace(QLatin1Char('\\'), QLatin1Char('/'));
@@ -551,12 +699,18 @@ bool PdfMoleculeAnnotation::is_ready() const {
     return rect.isValid() && geometry.is_valid() && error_message.isEmpty();
 }
 
+bool PdfInteractiveFigureAnnotation::is_ready() const {
+    return error_message.isEmpty() && definition.is_valid() && rect.isValid();
+}
+
 bool PdfMediaScanResult::has_media() const {
-    return !annotations.isEmpty() || !molecule_annotations.isEmpty();
+    return !annotations.isEmpty() || !molecule_annotations.isEmpty()
+        || !interactive_figure_annotations.isEmpty();
 }
 
 QString PdfMediaScanResult::summary() const {
-    if (annotations.isEmpty() && molecule_annotations.isEmpty()) {
+    if (annotations.isEmpty() && molecule_annotations.isEmpty()
+        && interactive_figure_annotations.isEmpty()) {
         return QStringLiteral("No PDF media annotations detected");
     }
 
@@ -585,8 +739,21 @@ QString PdfMediaScanResult::summary() const {
                                       : QStringLiteral(" [unavailable]");
         parts.push_back(part);
     }
+
+    for (const PdfInteractiveFigureAnnotation& annotation : interactive_figure_annotations) {
+        QString part = annotation.page_index >= 0
+            ? QStringLiteral("page %1 interactive figure").arg(annotation.page_index + 1)
+            : QStringLiteral("unknown page interactive figure");
+        if (!annotation.file_name.isEmpty()) {
+            part += QStringLiteral(" (%1)").arg(annotation.file_name);
+        }
+        part += annotation.is_ready() ? QStringLiteral(" [embedded figure ready]")
+                                      : QStringLiteral(" [figure unavailable]");
+        parts.push_back(part);
+    }
     return QStringLiteral("%1 interactive annotation(s): %2")
-        .arg(annotations.size() + molecule_annotations.size())
+        .arg(annotations.size() + molecule_annotations.size()
+             + interactive_figure_annotations.size())
         .arg(parts.join(QStringLiteral("; ")));
 }
 
@@ -673,7 +840,12 @@ PdfMediaScanResult scan_pdf_media_annotations(
         const QByteArray page_body = objects.value(pages.at(page_index));
         for (int annotation_object : annotation_objects_for_page(objects, page_body)) {
             const QByteArray annotation_body = objects.value(annotation_object);
-            if (!annotation_body.isEmpty() && is_molecule_annotation(annotation_body)) {
+            if (!annotation_body.isEmpty() && is_interactive_figure_annotation(annotation_body)) {
+                result.interactive_figure_annotations.push_back(
+                    interactive_figure_annotation_from_object(
+                        objects, page_index, annotation_object, annotation_body));
+                seen_interactive_objects.insert(annotation_object);
+            } else if (!annotation_body.isEmpty() && is_molecule_annotation(annotation_body)) {
                 result.molecule_annotations.push_back(
                     molecule_annotation_from_object(
                         page_index,
@@ -690,6 +862,7 @@ PdfMediaScanResult scan_pdf_media_annotations(
     scan_span.checkpoint(QStringLiteral("scan_page_annotations"), {
         {QStringLiteral("annotation_count"), result.annotations.size()},
         {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
+        {QStringLiteral("interactive_figure_annotation_count"), result.interactive_figure_annotations.size()},
         {QStringLiteral("page_count"), pages.size()}
     });
 
@@ -697,7 +870,10 @@ PdfMediaScanResult scan_pdf_media_annotations(
         if (seen_interactive_objects.contains(it.key())) {
             continue;
         }
-        if (is_molecule_annotation(it.value())) {
+        if (is_interactive_figure_annotation(it.value())) {
+            result.interactive_figure_annotations.push_back(
+                interactive_figure_annotation_from_object(objects, -1, it.key(), it.value()));
+        } else if (is_molecule_annotation(it.value())) {
             result.molecule_annotations.push_back(
                 molecule_annotation_from_object(-1, it.key(), it.value()));
         } else if (is_media_annotation(it.value())) {
@@ -709,6 +885,7 @@ PdfMediaScanResult scan_pdf_media_annotations(
         {
             {QStringLiteral("annotation_count"), result.annotations.size()},
             {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
+            {QStringLiteral("interactive_figure_annotation_count"), result.interactive_figure_annotations.size()},
         });
 
     resolve_and_extract_media_frames(result, path, package_root_path, package_movie_asset_paths);
@@ -726,11 +903,13 @@ PdfMediaScanResult scan_pdf_media_annotations(
     scan_span.checkpoint(QStringLiteral("resolve_media_and_extract_frames"), {
         {QStringLiteral("annotation_count"), result.annotations.size()},
         {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
+        {QStringLiteral("interactive_figure_annotation_count"), result.interactive_figure_annotations.size()},
         {QStringLiteral("frames_ready"), frames_ready}
     });
     scan_span.add_field(
         QStringLiteral("annotation_count"),
-        result.annotations.size() + result.molecule_annotations.size());
+        result.annotations.size() + result.molecule_annotations.size()
+            + result.interactive_figure_annotations.size());
     scan_span.add_field(QStringLiteral("page_count"), pages.size());
     scan_span.set_outcome(QStringLiteral("scanned"));
     qCInfo(logMedia) << result.summary();

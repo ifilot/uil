@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ivofilot.nl/uil/schemas/interactive-figure-v1.schema.json",
+  "title": "UIL interactive figure version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "title", "background_svg", "plot", "controls"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "plot": { "properties": { "kind": { "const": "sine-wave" } } }
+        }
+      },
+      "then": { "properties": { "controls": { "$ref": "#/$defs/sineControls" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "plot": { "properties": { "kind": { "const": "harmonic-bond-wavepacket" } } }
+        }
+      },
+      "then": {
+        "properties": {
+          "controls": { "$ref": "#/$defs/harmonicWavepacketControls" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "plot": { "properties": { "kind": { "const": "harmonic-basis-states" } } }
+        }
+      },
+      "then": {
+        "properties": {
+          "controls": { "$ref": "#/$defs/harmonicWavepacketControls" }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "format": { "const": "uil.interactive-figure" },
+    "version": { "const": 1 },
+    "title": { "type": "string", "maxLength": 200 },
+    "background_svg": {
+      "type": "string",
+      "contentMediaType": "image/svg+xml",
+      "description": "Self-contained SVG; external resources are not allowed by the format."
+    },
+    "plot": {
+      "oneOf": [
+        { "$ref": "#/$defs/sinePlot" },
+        { "$ref": "#/$defs/harmonicWavepacketPlot" },
+        { "$ref": "#/$defs/harmonicBasisStatesPlot" }
+      ]
+    },
+    "controls": {
+      "oneOf": [
+        { "$ref": "#/$defs/sineControls" },
+        { "$ref": "#/$defs/harmonicWavepacketControls" }
+      ]
+    }
+  },
+  "$defs": {
+    "finiteNumber": { "type": "number" },
+    "rangeControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max", "value"],
+      "properties": {
+        "min": { "$ref": "#/$defs/finiteNumber" },
+        "max": { "$ref": "#/$defs/finiteNumber" },
+        "value": { "$ref": "#/$defs/finiteNumber" }
+      }
+    },
+    "phaseControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max", "value"],
+      "properties": {
+        "min": { "const": 0 },
+        "max": { "const": 1 },
+        "value": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "sinePlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "x_min", "x_max", "y_min", "y_max"],
+      "properties": {
+        "kind": { "const": "sine-wave" },
+        "color": {
+          "type": "string",
+          "default": "#2563eb",
+          "description": "Any color accepted by QColor."
+        },
+        "x_min": { "$ref": "#/$defs/finiteNumber" },
+        "x_max": { "$ref": "#/$defs/finiteNumber" },
+        "y_min": { "$ref": "#/$defs/finiteNumber" },
+        "y_max": { "$ref": "#/$defs/finiteNumber" },
+        "x_label": { "type": "string", "maxLength": 100, "default": "x" },
+        "y_label": { "type": "string", "maxLength": 100, "default": "y" }
+      }
+    },
+    "sineControls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amplitude", "frequency"],
+      "properties": {
+        "amplitude": { "$ref": "#/$defs/rangeControl" },
+        "frequency": { "$ref": "#/$defs/rangeControl" },
+        "animate": { "type": "boolean", "default": true }
+      }
+    },
+    "harmonicWavepacketPlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind", "x_min", "x_max", "potential_y_max", "density_y_max",
+        "x_label", "potential_label", "density_label"
+      ],
+      "properties": {
+        "kind": { "const": "harmonic-bond-wavepacket" },
+        "x_min": { "$ref": "#/$defs/finiteNumber" },
+        "x_max": { "$ref": "#/$defs/finiteNumber" },
+        "potential_y_max": { "type": "number", "exclusiveMinimum": 0 },
+        "density_y_max": { "type": "number", "exclusiveMinimum": 0 },
+        "x_label": { "type": "string", "maxLength": 100 },
+        "potential_label": { "type": "string", "maxLength": 100 },
+        "density_label": { "type": "string", "maxLength": 100 },
+        "potential_color": { "type": "string", "default": "#475569" },
+        "density_color": { "type": "string", "default": "#0f766e" },
+        "marker_color": { "type": "string", "default": "#dc2626" },
+        "show_energy_reference": { "type": "boolean", "default": true }
+      }
+    },
+    "harmonicWavepacketControls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "initial_stretch", "period_seconds"],
+      "properties": {
+        "phase": { "$ref": "#/$defs/phaseControl" },
+        "initial_stretch": { "$ref": "#/$defs/rangeControl" },
+        "period_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "loop": { "type": "boolean", "default": false },
+        "animate": { "type": "boolean", "default": true }
+      }
+    },
+    "harmonicBasisStatesPlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "x_min", "x_max", "density_y_max", "x_label", "basis_colors"],
+      "properties": {
+        "kind": { "const": "harmonic-basis-states" },
+        "x_min": { "$ref": "#/$defs/finiteNumber" },
+        "x_max": { "$ref": "#/$defs/finiteNumber" },
+        "density_y_max": { "type": "number", "exclusiveMinimum": 0 },
+        "x_label": { "type": "string", "maxLength": 100 },
+        "density_color": { "type": "string", "default": "#0f766e" },
+        "basis_colors": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

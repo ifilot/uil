@@ -236,12 +236,18 @@ qt_add_executable(${UIL_VIEWER_TARGET}
     src/media/video_frame_extractor.cpp
     src/media/video_frame_buffer.hpp
     src/media/video_frame_buffer.cpp
+    src/figure/interactive_figure.hpp
+    src/figure/interactive_figure.cpp
+    src/figure/harmonic_wavepacket.hpp
+    src/figure/harmonic_wavepacket.cpp
     src/molecule/molecule_geometry.hpp
     src/molecule/molecule_geometry.cpp
     src/molecule/molecule_camera.hpp
     src/molecule/molecule_camera.cpp
     src/ui/molecule_widget.hpp
     src/ui/molecule_widget.cpp
+    src/ui/interactive_figure_widget.hpp
+    src/ui/interactive_figure_widget.cpp
     src/package/uil_package.hpp
     src/package/uil_package.cpp
     ${UIL_VIEWER_WINDOWS_RESOURCES}

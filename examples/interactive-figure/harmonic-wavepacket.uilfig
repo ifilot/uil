@@ -1,0 +1,27 @@
+{
+  "format": "uil.interactive-figure",
+  "version": 1,
+  "title": "A displaced harmonic-bond wavepacket",
+  "background_svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600'><rect width='800' height='600' fill='#f8fafc'/></svg>",
+  "plot": {
+    "kind": "harmonic-bond-wavepacket",
+    "x_min": -5.0,
+    "x_max": 5.0,
+    "potential_y_max": 12.5,
+    "density_y_max": 0.65,
+    "x_label": "x = q / ℓ",
+    "potential_label": "U / (ħω)",
+    "density_label": "ℓ|ψ|²",
+    "potential_color": "#475569",
+    "density_color": "#0f766e",
+    "marker_color": "#dc2626",
+    "show_energy_reference": true
+  },
+  "controls": {
+    "phase": { "min": 0.0, "max": 1.0, "value": 0.0 },
+    "initial_stretch": { "min": 0.5, "max": 4.0, "value": 3.0 },
+    "period_seconds": 8.0,
+    "loop": true,
+    "animate": true
+  }
+}

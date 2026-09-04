@@ -86,6 +86,7 @@ void AppController::set_audience_window(AudienceWindow* audience_window) {
             audience_window_->set_audience_screen(audience_screen_);
         }
         update_active_molecule();
+        update_active_interactive_figure();
     }
 }
 
@@ -307,6 +308,7 @@ void AppController::schedule_media_scan(
                 self->package_molecule_asset_paths_.removeDuplicates();
             }
             self->update_active_molecule();
+            self->update_active_interactive_figure();
             emit self->media_scan_changed(self->media_scan_result_);
             if (self->media_scan_result_.has_media()) {
                 emit self->status_message_changed(self->media_scan_result_.summary());
@@ -314,7 +316,8 @@ void AppController::schedule_media_scan(
             performance_log::record_event(QStringLiteral("pdf.media_scan_applied"), {
                 {QStringLiteral("annotation_count"),
                  self->media_scan_result_.annotations.size()
-                     + self->media_scan_result_.molecule_annotations.size()},
+                     + self->media_scan_result_.molecule_annotations.size()
+                     + self->media_scan_result_.interactive_figure_annotations.size()},
                 {QStringLiteral("generation"), generation}
             });
         }, Qt::QueuedConnection);
@@ -349,6 +352,7 @@ void AppController::go_to_page(int page_index) {
     stop_media_playback();
     current_page_index_ = clampedPage;
     update_active_molecule();
+    update_active_interactive_figure();
     request_page_render(current_page_index_, 1000);
     update_visible_slides();
     schedule_predictive_renders();
@@ -958,6 +962,22 @@ void AppController::update_active_molecule() {
         }
     }
     audience_window_->clear_molecule_overlay();
+}
+
+void AppController::update_active_interactive_figure() {
+    if (!audience_window_) {
+        return;
+    }
+    for (const PdfInteractiveFigureAnnotation& annotation
+         : media_scan_result_.interactive_figure_annotations) {
+        if (annotation.page_index == current_page_index_ && annotation.is_ready()) {
+            audience_window_->set_interactive_figure_overlay(
+                annotation.definition,
+                normalized_pdf_rect(annotation.page_index, annotation.rect));
+            return;
+        }
+    }
+    audience_window_->clear_interactive_figure_overlay();
 }
 
 void AppController::start_media_playback() {

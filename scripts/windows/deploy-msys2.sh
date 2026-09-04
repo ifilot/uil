@@ -741,7 +741,12 @@ copy_example_presentations() {
     local -a example_files=(
         getting-started.pdf
         pointer-and-annotations.pdf
-        molecule-visualizer.uil
+        molecule-visualizer.pdf
+        water-inline.xyz
+        methane-inline.xyz
+        carbon-dioxide-inline.xyz
+        benzene-inline.xyz
+        interactive-figure.pdf
     )
     local example_file
 

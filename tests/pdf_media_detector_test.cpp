@@ -54,6 +54,35 @@ QByteArray molecule_pdf_fixture() {
         "/UIL << /Version 1 /F (molecules/water.xyz) >> >>\nendobj\n"
         "%%EOF\n");
 }
+
+/** @brief Returns a PDF containing a complete interactive figure in an embedded-file stream. */
+QByteArray interactive_figure_pdf_fixture() {
+    const QByteArray payload = QByteArrayLiteral(
+        "{\"format\":\"uil.interactive-figure\",\"version\":1,"
+        "\"title\":\"Embedded wave\","
+        "\"background_svg\":\"<svg xmlns='http://www.w3.org/2000/svg' "
+        "viewBox='0 0 800 500'><rect width='800' height='500' fill='#f8fafc'/></svg>\","
+        "\"plot\":{\"kind\":\"sine-wave\",\"color\":\"#2563eb\","
+        "\"x_min\":-6.28,\"x_max\":6.28,\"y_min\":-2.5,\"y_max\":2.5,"
+        "\"x_label\":\"time\",\"y_label\":\"signal\"},"
+        "\"controls\":{\"amplitude\":{\"min\":0,\"max\":2,\"value\":1},"
+        "\"frequency\":{\"min\":0.25,\"max\":3,\"value\":1},\"animate\":true}}\n");
+    return QByteArrayLiteral(
+        "%PDF-1.7\n"
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>\nendobj\n"
+        "4 0 obj\n<< /Type /Annot /Subtype /UILInteractiveFigure "
+        "/Rect [10 20 410 320] /UIL << /Version 1 /Asset 5 0 R >> >>\nendobj\n"
+        "5 0 obj\n<< /Type /Filespec /F (wave.uilfig) /UF (wave.uilfig) "
+        "/EF << /F 6 0 R >> >>\nendobj\n"
+        "6 0 obj\n<< /Type /EmbeddedFile /Subtype /application#2Fvnd.uil.figure "
+        "/Length ")
+        + QByteArray::number(payload.size())
+        + QByteArrayLiteral(" >>\nstream\n")
+        + payload
+        + QByteArrayLiteral("endstream\nendobj\n%%EOF\n");
+}
 }
 
 class PdfMediaDetectorTest final : public QObject {
@@ -80,6 +109,12 @@ private slots:
 
     /** @brief Verifies dedicated molecule annotation detection and XYZ loading. */
     void molecule_annotation_loads_xyz_geometry();
+
+    /** @brief Verifies extraction and validation of a self-contained embedded figure. */
+    void embedded_interactive_figure_loads();
+
+    /** @brief Verifies the bundled LaTeX-produced example end to end. */
+    void bundled_interactive_figure_example_loads();
 
 #if defined(UIL_HAVE_FFMPEG)
     /** @brief Verifies that the optional FFmpeg runtime can be loaded on first use. */
@@ -198,6 +233,77 @@ void PdfMediaDetectorTest::molecule_annotation_loads_xyz_geometry() {
     QVERIFY(result.summary().contains(QStringLiteral("page 1 molecule")));
 }
 
+void PdfMediaDetectorTest::embedded_interactive_figure_loads() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString pdf_path = directory.filePath(QStringLiteral("embedded-figure.pdf"));
+    QVERIFY(write_pdf_fixture(pdf_path, interactive_figure_pdf_fixture()));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.annotations.size(), 0);
+    QCOMPARE(result.molecule_annotations.size(), 0);
+    QCOMPARE(result.interactive_figure_annotations.size(), 1);
+    const PdfInteractiveFigureAnnotation& figure =
+        result.interactive_figure_annotations.constFirst();
+    QCOMPARE(figure.page_index, 0);
+    QCOMPARE(figure.object_number, 4);
+    QCOMPARE(figure.file_name, QStringLiteral("wave.uilfig"));
+    QCOMPARE(figure.rect, QRectF(10, 20, 400, 300));
+    QVERIFY2(figure.is_ready(), qPrintable(figure.error_message));
+    QCOMPARE(figure.definition.title, QStringLiteral("Embedded wave"));
+    QCOMPARE(figure.definition.x_label, QStringLiteral("time"));
+    QCOMPARE(figure.definition.y_label, QStringLiteral("signal"));
+    QCOMPARE(figure.definition.amplitude_initial, 1.0);
+    QVERIFY(result.summary().contains(QStringLiteral("embedded figure ready")));
+}
+
+void PdfMediaDetectorTest::bundled_interactive_figure_example_loads() {
+    const QString pdf_path = QStringLiteral(
+        UIL_TEST_SOURCE_DIR "/examples/bundled/interactive-figure.pdf");
+    QVERIFY2(QFileInfo::exists(pdf_path), qPrintable(pdf_path));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.annotations.size(), 0);
+    QCOMPARE(result.molecule_annotations.size(), 0);
+    QCOMPARE(result.interactive_figure_annotations.size(), 3);
+
+    const PdfInteractiveFigureAnnotation& sine =
+        result.interactive_figure_annotations.at(0);
+    QCOMPARE(sine.page_index, 0);
+    QCOMPARE(sine.file_name, QStringLiteral("moving-wave.uilfig"));
+    QVERIFY2(sine.is_ready(), qPrintable(sine.error_message));
+    QCOMPARE(sine.definition.title, QStringLiteral("A moving sine wave"));
+    QCOMPARE(sine.definition.x_label, QStringLiteral("x (radians)"));
+    QCOMPARE(sine.definition.y_label, QStringLiteral("amplitude"));
+
+    const PdfInteractiveFigureAnnotation& figure =
+        result.interactive_figure_annotations.at(1);
+    QCOMPARE(figure.page_index, 1);
+    QCOMPARE(figure.file_name, QStringLiteral("harmonic-wavepacket.uilfig"));
+    QVERIFY2(figure.is_ready(), qPrintable(figure.error_message));
+    QCOMPARE(
+        figure.definition.kind,
+        InteractiveFigureDefinition::Kind::HarmonicBondWavepacket);
+    QCOMPARE(figure.definition.stretch_initial, 3.0);
+    QCOMPARE(figure.definition.period_seconds, 8.0);
+    QVERIFY(figure.definition.loop);
+    QCOMPARE(figure.definition.x_label, QStringLiteral("x = q / ℓ"));
+
+    const PdfInteractiveFigureAnnotation& basis =
+        result.interactive_figure_annotations.at(2);
+    QCOMPARE(basis.page_index, 2);
+    QCOMPARE(basis.file_name, QStringLiteral("harmonic-basis-states.uilfig"));
+    QVERIFY2(basis.is_ready(), qPrintable(basis.error_message));
+    QCOMPARE(
+        basis.definition.kind,
+        InteractiveFigureDefinition::Kind::HarmonicBasisStates);
+    QCOMPARE(basis.definition.basis_colors.size(), 6);
+    QVERIFY(basis.definition.loop);
+    QCOMPARE(
+        basis.definition.title,
+        QStringLiteral("A coherent packet and its real basis components"));
+}
+
 void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -207,6 +313,7 @@ void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {
     QVERIFY(!result.has_media());
     QVERIFY(result.annotations.isEmpty());
     QVERIFY(result.molecule_annotations.isEmpty());
+    QVERIFY(result.interactive_figure_annotations.isEmpty());
 }
 
 #if defined(UIL_HAVE_FFMPEG)

@@ -2,6 +2,7 @@
 
 #include "ui/bluecurve.hpp"
 #include "ui/font_awesome.hpp"
+#include "ui/interactive_figure_widget.hpp"
 #include "ui/molecule_widget.hpp"
 
 #include <QApplication>
@@ -767,12 +768,14 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
 
     if (texture_key != current_texture_key_) {
         molecule_snapshot_frame_ = {};
+        interactive_figure_snapshot_frame_ = {};
     }
     current_texture_key_ = texture_key;
     current_slide_image_ = image;
     cache_slide_image(texture_key, image);
     emit annotation_overlay_changed(current_annotation_overlay_image());
     update_molecule_overlay_geometry();
+    update_interactive_figure_overlay_geometry();
     update();
 }
 
@@ -784,6 +787,8 @@ void AudienceWindow::clear_slide_image() {
     has_video_overlay_ = false;
     molecule_snapshot_frame_ = {};
     clear_molecule_overlay();
+    interactive_figure_snapshot_frame_ = {};
+    clear_interactive_figure_overlay();
     emit annotation_overlay_changed({});
     update();
 }
@@ -911,6 +916,32 @@ void AudienceWindow::clear_molecule_overlay() {
     }
 }
 
+void AudienceWindow::set_interactive_figure_overlay(
+    const InteractiveFigureDefinition& definition,
+    QRectF slide_rect) {
+    if (!definition.is_valid() || !slide_rect.isValid()) {
+        clear_interactive_figure_overlay();
+        return;
+    }
+    if (!interactive_figure_widget_) {
+        interactive_figure_widget_ = std::make_unique<InteractiveFigureWidget>(this);
+        interactive_figure_widget_->set_context_menu_handler(
+            [this](const QPoint& global_position) { show_feature_menu(global_position); });
+    }
+    interactive_figure_snapshot_frame_ = {};
+    interactive_figure_rect_ = slide_rect;
+    interactive_figure_widget_->set_definition(definition);
+    update_interactive_figure_overlay_geometry();
+}
+
+void AudienceWindow::clear_interactive_figure_overlay() {
+    interactive_figure_rect_ = {};
+    interactive_figure_snapshot_frame_ = {};
+    if (interactive_figure_widget_) {
+        interactive_figure_widget_->hide();
+    }
+}
+
 void AudienceWindow::set_audience_screen(QScreen* screen) {
     if (!screen) {
         return;
@@ -996,39 +1027,46 @@ void AudienceWindow::set_cursor_tool() {
     is_annotating_ = false;
     update_cursor_appearance();
     update_molecule_overlay_geometry();
+    update_interactive_figure_overlay_geometry();
     update();
 }
 
 void AudienceWindow::set_pointer_tool() {
     capture_molecule_frame();
+    capture_interactive_figure_frame();
     interaction_tool_ = InteractionTool::Pointer;
     hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
     update_molecule_overlay_geometry();
+    update_interactive_figure_overlay_geometry();
     update();
 }
 
 void AudienceWindow::set_pen_tool() {
     capture_molecule_frame();
+    capture_interactive_figure_frame();
     interaction_tool_ = InteractionTool::Pen;
     hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
     update_molecule_overlay_geometry();
+    update_interactive_figure_overlay_geometry();
     update();
 }
 
 void AudienceWindow::set_eraser_tool() {
     capture_molecule_frame();
+    capture_interactive_figure_frame();
     interaction_tool_ = InteractionTool::Eraser;
     hide_pointer();
     eraser_cursor_visible_ = false;
     is_annotating_ = false;
     update_cursor_appearance();
     update_molecule_overlay_geometry();
+    update_interactive_figure_overlay_geometry();
     update();
 }
 
@@ -1219,6 +1257,7 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.fillRect(rect(), blank_mode_ == BlankMode::White ? Qt::white : Qt::black);
     update_molecule_overlay_geometry();
+    update_interactive_figure_overlay_geometry();
 
     if (blank_mode_ != BlankMode::None) {
         return;
@@ -1268,6 +1307,21 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
             image_source_rect(molecule_snapshot_frame_));
     }
 
+    const bool figure_is_interactive = interactive_figure_widget_
+        && interactive_figure_widget_->isVisible()
+        && interaction_tool_ == InteractionTool::Cursor
+        && !interactive_figure_suspended_for_feature_menu_;
+    if (!figure_is_interactive && !interactive_figure_snapshot_frame_.isNull()
+        && interactive_figure_rect_.isValid()) {
+        const QRectF target(
+            slide_rect.left() + interactive_figure_rect_.left() * slide_rect.width(),
+            slide_rect.top() + interactive_figure_rect_.top() * slide_rect.height(),
+            interactive_figure_rect_.width() * slide_rect.width(),
+            interactive_figure_rect_.height() * slide_rect.height());
+        painter.drawImage(target, interactive_figure_snapshot_frame_,
+            image_source_rect(interactive_figure_snapshot_frame_));
+    }
+
     if (molecule_is_interactive && molecule_rect_.isValid()) {
         const QRectF target(
             slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
@@ -1289,6 +1343,7 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
 void AudienceWindow::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     update_molecule_overlay_geometry();
+    update_interactive_figure_overlay_geometry();
 }
 
 void AudienceWindow::keyPressEvent(QKeyEvent* event) {
@@ -1690,6 +1745,50 @@ void AudienceWindow::capture_molecule_frame() {
     const QImage frame = molecule_widget_->grabFramebuffer();
     if (!frame.isNull()) {
         molecule_snapshot_frame_ = frame;
+    }
+}
+
+void AudienceWindow::update_interactive_figure_overlay_geometry() {
+    if (!interactive_figure_widget_) {
+        return;
+    }
+    if (interactive_figure_suspended_for_feature_menu_
+        || !interactive_figure_rect_.isValid()
+        || current_slide_image_.isNull()
+        || blank_mode_ != BlankMode::None
+        || deck_overview_visible_
+        || interaction_tool_ != InteractionTool::Cursor) {
+        interactive_figure_widget_->hide();
+        return;
+    }
+
+    const QRectF slide_rect = slide_logical_rect(current_slide_image_.size());
+    if (!slide_rect.isValid()) {
+        interactive_figure_widget_->hide();
+        return;
+    }
+    const QRect target = QRectF(
+        slide_rect.left() + interactive_figure_rect_.left() * slide_rect.width(),
+        slide_rect.top() + interactive_figure_rect_.top() * slide_rect.height(),
+        interactive_figure_rect_.width() * slide_rect.width(),
+        interactive_figure_rect_.height() * slide_rect.height()).toAlignedRect();
+    if (target.width() < 2 || target.height() < 2) {
+        interactive_figure_widget_->hide();
+        return;
+    }
+    interactive_figure_widget_->setGeometry(target);
+    interactive_figure_widget_->show();
+    interactive_figure_widget_->raise();
+    interactive_figure_snapshot_frame_ = {};
+}
+
+void AudienceWindow::capture_interactive_figure_frame() {
+    if (!interactive_figure_widget_ || !interactive_figure_widget_->isVisible()) {
+        return;
+    }
+    const QPixmap snapshot = interactive_figure_widget_->grab();
+    if (!snapshot.isNull()) {
+        interactive_figure_snapshot_frame_ = snapshot.toImage();
     }
 }
 
@@ -2096,6 +2195,12 @@ void AudienceWindow::show_feature_menu(const QPoint& global_position) {
         molecule_widget_->hide();
         repaint();
     }
+    if (interactive_figure_widget_ && interactive_figure_widget_->isVisible()) {
+        capture_interactive_figure_frame();
+        interactive_figure_suspended_for_feature_menu_ = true;
+        interactive_figure_widget_->hide();
+        repaint();
+    }
 
     auto* menu = new FeatureMenuPanel(this);
     feature_menu_ = menu;
@@ -2112,7 +2217,9 @@ void AudienceWindow::show_feature_menu(const QPoint& global_position) {
             update_cursor_appearance();
         }
         molecule_suspended_for_feature_menu_ = false;
+        interactive_figure_suspended_for_feature_menu_ = false;
         update_molecule_overlay_geometry();
+        update_interactive_figure_overlay_geometry();
         if (resume_molecule_vibration_after_menu_ && molecule_widget_
             && molecule_widget_->isVisible()) {
             molecule_widget_->set_vibration_playing(true);

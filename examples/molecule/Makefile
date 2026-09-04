@@ -3,8 +3,8 @@ ENGINE_FLAGS := -interaction=nonstopmode -halt-on-error -file-line-error
 BUILD_DIR := build
 SOURCE := molecule-example.tex
 PDF := $(BUILD_DIR)/molecule-example.pdf
-PACKAGE := ../bundled/molecule-visualizer.uil
-PACKAGE_DIR := $(BUILD_DIR)/package
+BUNDLED_PDF := ../bundled/molecule-visualizer.pdf
+BUNDLED_DIR := ../bundled
 GENERATED_ASSETS := water-inline.xyz methane-inline.xyz carbon-dioxide-inline.xyz \
 	benzene-inline.xyz
 POSTER_ASSETS := methane-still.png methane-anaglyph-still.png \
@@ -22,20 +22,17 @@ export TEXINPUTS := .:$(UIL_LATEX_DIR)//:$(CHC_THEME_DIR_ABS)//:
 # Keep LuaTeX's generated font cache inside the example build directory.
 export TEXMFVAR
 
-.PHONY: all pdf package clean help check
+.PHONY: all pdf bundle clean help check
 
-all: package
+all: bundle
 
 pdf: $(PDF)
 
-package: $(PACKAGE)
+bundle: $(BUNDLED_PDF)
 
 check:
 	@command -v "$(ENGINE)" >/dev/null 2>&1 || { \
 		echo "error: $(ENGINE) was not found" >&2; exit 1; \
-	}
-	@command -v zip >/dev/null 2>&1 || { \
-		echo "error: zip was not found" >&2; exit 1; \
 	}
 	@test -f "$(CHC_THEME_DIR_ABS)/chctheme.sty" || { \
 		echo "error: CHC theme not found at $(CHC_THEME_DIR_ABS)" >&2; \
@@ -47,19 +44,13 @@ $(PDF): $(SOURCE) $(POSTER_ASSETS) $(UIL_LATEX_DIR)/uilmolecule.sty | check
 	$(ENGINE) $(ENGINE_FLAGS) -output-directory="$(BUILD_DIR)" "$(SOURCE)"
 	$(ENGINE) $(ENGINE_FLAGS) -output-directory="$(BUILD_DIR)" "$(SOURCE)"
 
-$(PACKAGE): $(PDF) manifest.json
-	@cmake -E remove_directory "$(PACKAGE_DIR)"
-	@cmake -E make_directory "$(PACKAGE_DIR)"
-	@cmake -E copy "$(PDF)" "$(PACKAGE_DIR)/molecule-example.pdf"
-	@cmake -E copy manifest.json "$(PACKAGE_DIR)/manifest.json"
-	@cmake -E copy "$(BUILD_DIR)/water-inline.xyz" "$(PACKAGE_DIR)/water-inline.xyz"
-	@cmake -E copy "$(BUILD_DIR)/carbon-dioxide-inline.xyz" "$(PACKAGE_DIR)/carbon-dioxide-inline.xyz"
-	@cmake -E copy "$(BUILD_DIR)/methane-inline.xyz" "$(PACKAGE_DIR)/methane-inline.xyz"
-	@cmake -E copy "$(BUILD_DIR)/benzene-inline.xyz" "$(PACKAGE_DIR)/benzene-inline.xyz"
-	@cmake -E rm -f "$(abspath $(PACKAGE))"
-	@cd "$(PACKAGE_DIR)" && zip -q -X "$(abspath $(PACKAGE))" \
-		molecule-example.pdf manifest.json $(GENERATED_ASSETS)
-	@echo "Built $(PACKAGE)"
+$(BUNDLED_PDF): $(PDF)
+	@cmake -E copy "$(PDF)" "$(BUNDLED_PDF)"
+	@cmake -E copy "$(BUILD_DIR)/water-inline.xyz" "$(BUNDLED_DIR)/water-inline.xyz"
+	@cmake -E copy "$(BUILD_DIR)/carbon-dioxide-inline.xyz" "$(BUNDLED_DIR)/carbon-dioxide-inline.xyz"
+	@cmake -E copy "$(BUILD_DIR)/methane-inline.xyz" "$(BUNDLED_DIR)/methane-inline.xyz"
+	@cmake -E copy "$(BUILD_DIR)/benzene-inline.xyz" "$(BUNDLED_DIR)/benzene-inline.xyz"
+	@echo "Built $(BUNDLED_PDF) with UIL molecule sidecars"
 
 clean:
 	rm -rf "$(BUILD_DIR)"
@@ -69,7 +60,7 @@ clean:
 
 help:
 	@echo "make              Build $(PDF) with LuaLaTeX"
-	@echo "make package      Build bundled $(PACKAGE)"
+	@echo "make bundle       Build bundled PDF and molecule sidecars"
 	@echo "make clean        Remove generated files"
 	@echo "make ENGINE=lualatex"
 	@echo "make CHC_THEME_DIR=/path/to/chctheme"

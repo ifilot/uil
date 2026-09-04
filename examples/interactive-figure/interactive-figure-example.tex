@@ -1,0 +1,133 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usepackage{pgfplots}
+\usepgfplotslibrary{groupplots}
+\usepackage{uilfigure}
+\pgfplotsset{compat=1.18}
+\setbeamertemplate{navigation symbols}{}
+\setbeamercolor{frametitle}{fg=white,bg=blue!65!black}
+
+\newcommand{\waveposter}{%
+  \begin{tikzpicture}
+    \begin{axis}[
+      width=11.8cm,
+      height=5.25cm,
+      xmin=-6.283,
+      xmax=6.283,
+      ymin=-2.5,
+      ymax=2.5,
+      axis lines=middle,
+      grid=both,
+      major grid style={draw=gray!25},
+      xlabel={$x$ (radians)},
+      ylabel={amplitude},
+      title={Static PDF fallback: $y=\sin(x)$},
+      samples=180,
+      domain=-6.283:6.283,
+      thick
+    ]
+      \addplot[blue!70!black] {sin(deg(x))};
+    \end{axis}
+  \end{tikzpicture}%
+}
+
+\newcommand{\wavepacketposter}{%
+  \begin{tikzpicture}
+    \begin{groupplot}[
+      group style={group size=1 by 2, vertical sep=0.75cm},
+      width=11.8cm,height=3.0cm,xmin=-5,xmax=5,
+      grid=major,major grid style={draw=gray!22},
+      axis line style={draw=gray!70},tick label style={font=\scriptsize},
+      label style={font=\small},domain=-5:5,samples=220
+    ]
+      \nextgroupplot[
+        ymin=0,ymax=12.5,ylabel={$U/(\hbar\omega)$},xticklabels={},
+        title={Displaced coherent state at maximum stretch ($A=3$, $\tau=0$)},
+        title style={font=\small}
+      ]
+        \addplot[thick,gray!75!black] {x^2/2};
+        \addplot[gray,dashed] coordinates {(-5,4.5) (5,4.5)};
+        \addplot[gray,dashed] coordinates {(3,0) (3,4.5)};
+        \addplot[only marks,mark=*,mark size=2.6pt,red!75!black]
+          coordinates {(3,4.5)};
+      \nextgroupplot[ymin=0,ymax=0.65,xlabel={$x=q/\ell$},ylabel={$\ell|\psi|^2$}]
+        \addplot[teal!70!black,thick,fill=teal!18]
+          {exp(-(x-3)^2)/sqrt(pi)} \closedcycle;
+        \addplot[red!75!black,dashed] coordinates {(3,0) (3,0.65)};
+    \end{groupplot}
+  \end{tikzpicture}%
+}
+
+\newcommand{\basisposter}{%
+  \begin{tikzpicture}
+    \begin{axis}[
+      at={(0,3.50cm)},anchor=south west,scale only axis,
+      width=11.15cm,height=1.55cm,xmin=-5,xmax=5,ymin=0,ymax=0.65,
+      grid=major,major grid style={draw=gray!20},
+      axis line style={draw=gray!65},tick label style={font=\tiny},
+      label style={font=\scriptsize},xticklabels={},ylabel={$\ell|\Psi|^2$},
+      title={Coherent-state density at $A=3$, $\tau=1/2$},title style={font=\scriptsize},
+      domain=-5:5,samples=220
+    ]
+      \addplot[teal!70!black,thick,fill=teal!12]
+        {exp(-(x+3)^2)/sqrt(pi)} \closedcycle;
+      \addplot[red!70!black,dashed] coordinates {(-3,0) (-3,0.65)};
+    \end{axis}
+    \pgfplotsset{component/.style={
+      scale only axis,width=3.15cm,height=1.05cm,
+      xmin=-5,xmax=5,ymin=-0.38,ymax=0.38,
+      axis lines=middle,grid=major,major grid style={draw=gray!18},
+      axis line style={draw=gray!60},tick label style={font=\tiny},
+      title style={font=\tiny},domain=-5:5,samples=180,yticklabels={}
+    }}
+    \begin{axis}[component,at={(0cm,1.50cm)},anchor=south west,title={$n=0$},xticklabels={}]
+      \addplot[blue!70!black,thick] {0.1054*exp(-x^2/2)/pi^(1/4)};
+    \end{axis}
+    \begin{axis}[component,at={(4.00cm,1.50cm)},anchor=south west,title={$n=1$},xticklabels={}]
+      \addplot[teal!70!black,thick] {-0.2236*sqrt(2)*x*exp(-x^2/2)/pi^(1/4)};
+    \end{axis}
+    \begin{axis}[component,at={(8.00cm,1.50cm)},anchor=south west,title={$n=2$},xticklabels={}]
+      \addplot[orange!80!black,thick] {0.3354*(2*x^2-1)/sqrt(2)*exp(-x^2/2)/pi^(1/4)};
+    \end{axis}
+    \begin{axis}[component,at={(0cm,0.10cm)},anchor=south west,title={$n=3$}]
+      \addplot[violet!80!black,thick] {-0.4108*(2*x^3-3*x)/sqrt(3)*exp(-x^2/2)/pi^(1/4)};
+    \end{axis}
+    \begin{axis}[component,at={(4.00cm,0.10cm)},anchor=south west,title={$n=4$}]
+      \addplot[pink!75!black,thick] {0.4357*(16*x^4-48*x^2+12)/sqrt(384)*exp(-x^2/2)/pi^(1/4)};
+    \end{axis}
+    \begin{axis}[component,at={(8.00cm,0.10cm)},anchor=south west,title={$n=5$}]
+      \addplot[cyan!65!black,thick] {-0.4133*(32*x^5-160*x^3+120*x)/sqrt(3840)*exp(-x^2/2)/pi^(1/4)};
+    \end{axis}
+    \node[font=\scriptsize] at (5.58cm,-0.45cm) {$x=q/\ell$};
+  \end{tikzpicture}%
+}
+
+\begin{document}
+
+\begin{frame}{A completely embedded interactive figure}
+  \centering
+  \interactivefigure[width=11.8cm,height=5.25cm]
+    {\waveposter}
+    {moving-wave.uilfig}
+
+  \vspace{0.05cm}
+  \[
+    y(x,t) = A\,\sin\!\bigl(fx - \varphi(t)\bigr)
+  \]
+\end{frame}
+
+\begin{frame}{A stretched bond released in the harmonic limit}
+  \centering
+  \interactivefigure[width=11.8cm,height=6.15cm]
+    {\wavepacketposter}
+    {harmonic-wavepacket.uilfig}
+\end{frame}
+
+\begin{frame}{A coherent packet resolved into basis components}
+  \centering
+  \interactivefigure[width=11.8cm,height=6.15cm]
+    {\basisposter}
+    {harmonic-basis-states.uilfig}
+\end{frame}
+
+\end{document}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "figure/interactive_figure.hpp"
 #include "molecule/molecule_geometry.hpp"
 
 #include <QImage>
@@ -36,9 +37,22 @@ struct PdfMoleculeAnnotation {
     bool is_ready() const;
 };
 
+struct PdfInteractiveFigureAnnotation {
+    int page_index = -1;
+    int object_number = -1;
+    QString file_name;
+    QRectF rect;
+    InteractiveFigureDefinition definition;
+    QString error_message;
+
+    /** @brief Returns whether an embedded interactive figure was decoded and validated. */
+    bool is_ready() const;
+};
+
 struct PdfMediaScanResult {
     QVector<PdfMediaAnnotation> annotations;
     QVector<PdfMoleculeAnnotation> molecule_annotations;
+    QVector<PdfInteractiveFigureAnnotation> interactive_figure_annotations;
 
     /** @brief Returns whether the scan found at least one interactive annotation. */
     bool has_media() const;

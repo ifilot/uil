@@ -1,0 +1,21 @@
+{
+  "format": "uil.interactive-figure",
+  "version": 1,
+  "title": "A moving sine wave",
+  "background_svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 500'><defs><linearGradient id='bg' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#f8fafc'/><stop offset='1' stop-color='#dbeafe'/></linearGradient></defs><rect width='800' height='500' rx='18' fill='url(#bg)'/></svg>",
+  "plot": {
+    "kind": "sine-wave",
+    "color": "#2563eb",
+    "x_min": -6.283185307,
+    "x_max": 6.283185307,
+    "y_min": -2.5,
+    "y_max": 2.5,
+    "x_label": "x (radians)",
+    "y_label": "amplitude"
+  },
+  "controls": {
+    "amplitude": { "min": 0.0, "max": 2.0, "value": 1.0 },
+    "frequency": { "min": 0.25, "max": 3.0, "value": 1.0 },
+    "animate": true
+  }
+}
