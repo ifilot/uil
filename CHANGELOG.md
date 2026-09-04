@@ -2,6 +2,30 @@
 
 Notable user-facing changes to `uil` are documented here.
 
+## 0.2.1 - Unreleased
+
+### Added
+
+- Added one-click red/cyan anaglyph molecule rendering.
+- Added sinusoidal normal-mode playback from optional XYZ displacement vectors.
+- Added a Blender-style X/Y/Z orientation gizmo to molecule views.
+- Added a compact, collapsible molecule toolbar for stereo, vibration, axes, and view reset.
+- Added a bundled interactive molecule presentation that demonstrates every visualizer control.
+- Added rendered molecule stills as fallbacks when the example deck is opened in a PDF reader.
+- Added a subtle gray outline that distinguishes a live interactive molecule from its PDF poster.
+- Added a toolbar toggle for continuous rotation around the molecule's local Z axis.
+- Changed the default molecule camera to look along the negative X axis with positive Z upward.
+- Placed the example water molecule in the YZ plane and added benzene to the bundled tour.
+
+### Fixed
+
+- Forward molecule right-clicks immediately to an audience-window overlay and suspend the OpenGL
+  surface while it is visible, preventing delayed menus and black fullscreen compositor frames.
+- Preserve the molecule's last rendered frame beneath the audience controls and while pointer or
+  annotation tools are active instead of reverting to its static PDF poster.
+- Close the audience controls immediately when returning to the classic cursor, allowing the next
+  click-and-drag to rotate the molecule without an extra activation click.
+
 ## 0.2.0 - 2026-09-02
 
 ### Added

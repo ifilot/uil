@@ -107,6 +107,25 @@ add_uil_unit_test(molecule_camera_test
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
 )
 
+add_uil_unit_test(molecule_geometry_test
+    molecule_geometry_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+)
+
+add_uil_unit_test(molecule_widget_test
+    molecule_widget_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+)
+target_link_libraries(molecule_widget_test PRIVATE
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+    Qt6::Svg
+)
+
 add_uil_unit_test(render_scheduler_test
     render_scheduler_test.cpp
     ${PROJECT_SOURCE_DIR}/src/render/render_scheduler.cpp

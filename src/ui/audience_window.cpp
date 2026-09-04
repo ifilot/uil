@@ -14,7 +14,6 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QGridLayout>
-#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QImageWriter>
@@ -157,10 +156,11 @@ class AudienceWindow::FeatureMenuPanel final : public QWidget {
 public:
     /** @brief Constructs the audience interaction feature menu. */
     explicit FeatureMenuPanel(AudienceWindow* audience)
-        : QWidget(nullptr, Qt::Popup | Qt::FramelessWindowHint),
+        : QWidget(audience),
           audience_(audience) {
-        setWindowFlag(Qt::WindowStaysOnTopHint, true);
         setAttribute(Qt::WA_DeleteOnClose, true);
+        setAttribute(Qt::WA_StyledBackground, true);
+        setFocusPolicy(Qt::StrongFocus);
         qApp->installEventFilter(this);
         build_ui();
     }
@@ -177,7 +177,7 @@ public:
         move(bounded_popup_position(global_position));
         show();
         raise();
-        activateWindow();
+        setFocus(Qt::PopupFocusReason);
     }
 
 private:
@@ -268,6 +268,11 @@ private:
     bool eventFilter(QObject* watched, QEvent* event) override {
         if (event->type() == QEvent::KeyPress) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent->key() == Qt::Key_Escape) {
+                close_menu();
+                event->accept();
+                return true;
+            }
             if (keyEvent->key() == Qt::Key_G) {
                 open_deck_overview();
                 event->accept();
@@ -282,6 +287,12 @@ private:
 
         if (event->type() == QEvent::MouseButtonPress && grid_button_) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            const QRect menuRect(mapToGlobal(QPoint(0, 0)), size());
+            if (!menuRect.contains(mouseEvent->globalPosition().toPoint())) {
+                close_menu();
+                event->accept();
+                return true;
+            }
             if (mouseEvent->button() == Qt::LeftButton
                 && grid_button_global_rect().contains(mouseEvent->globalPosition().toPoint())) {
                 open_deck_overview();
@@ -393,7 +404,8 @@ private:
         switch (tool) {
         case InteractionTool::Cursor:
             audience_->set_cursor_tool();
-            break;
+            close_menu();
+            return;
         case InteractionTool::Pointer:
             audience_->set_pointer_tool();
             break;
@@ -681,21 +693,15 @@ private:
         }
     }
 
-    /** @brief Clamps a requested menu position to the available screen geometry. */
+    /** @brief Clamps a requested global position to the audience child area. */
     QPoint bounded_popup_position(const QPoint& requestedPosition) const {
-        QRect availableGeometry;
-        if (QScreen* screenAtPosition = QGuiApplication::screenAt(requestedPosition)) {
-            availableGeometry = screenAtPosition->availableGeometry();
-        } else if (audience_ && audience_->windowHandle() && audience_->windowHandle()->screen()) {
-            availableGeometry = audience_->windowHandle()->screen()->availableGeometry();
+        if (!audience_) {
+            return {};
         }
 
-        if (!availableGeometry.isValid()) {
-            return requestedPosition;
-        }
-
+        const QRect availableGeometry = audience_->rect();
         const QSize panelSize = size().expandedTo(sizeHint()).expandedTo(minimumSizeHint());
-        QPoint position = requestedPosition;
+        QPoint position = audience_->mapFromGlobal(requestedPosition);
         if (position.x() + panelSize.width() > availableGeometry.right()) {
             position.setX(availableGeometry.right() - panelSize.width());
         }
@@ -744,7 +750,14 @@ AudienceWindow::AudienceWindow()
     connect(&pointer_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_pointer);
 }
 
-AudienceWindow::~AudienceWindow() = default;
+AudienceWindow::~AudienceWindow() {
+    if (feature_menu_) {
+        QWidget* menu = feature_menu_.data();
+        feature_menu_ = nullptr;
+        disconnect(menu, nullptr, this, nullptr);
+        delete menu;
+    }
+}
 
 void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& image) {
     if (texture_key.isEmpty() || image.isNull()) {
@@ -752,6 +765,9 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
         return;
     }
 
+    if (texture_key != current_texture_key_) {
+        molecule_snapshot_frame_ = {};
+    }
     current_texture_key_ = texture_key;
     current_slide_image_ = image;
     cache_slide_image(texture_key, image);
@@ -766,6 +782,7 @@ void AudienceWindow::clear_slide_image() {
     video_frame_ = {};
     video_rect_ = {};
     has_video_overlay_ = false;
+    molecule_snapshot_frame_ = {};
     clear_molecule_overlay();
     emit annotation_overlay_changed({});
     update();
@@ -873,6 +890,12 @@ void AudienceWindow::set_molecule_overlay(
 
     if (!molecule_widget_) {
         molecule_widget_ = std::make_unique<MoleculeWidget>(this);
+        molecule_widget_->set_context_menu_handler([this](const QPoint& global_position) {
+            show_feature_menu(global_position);
+        });
+    }
+    if (molecule_suspended_for_feature_menu_) {
+        molecule_snapshot_frame_ = {};
     }
     molecule_rect_ = slide_rect;
     molecule_widget_->set_geometry(geometry);
@@ -882,6 +905,7 @@ void AudienceWindow::set_molecule_overlay(
 
 void AudienceWindow::clear_molecule_overlay() {
     molecule_rect_ = {};
+    molecule_snapshot_frame_ = {};
     if (molecule_widget_) {
         molecule_widget_->hide();
     }
@@ -976,6 +1000,7 @@ void AudienceWindow::set_cursor_tool() {
 }
 
 void AudienceWindow::set_pointer_tool() {
+    capture_molecule_frame();
     interaction_tool_ = InteractionTool::Pointer;
     hide_pointer();
     eraser_cursor_visible_ = false;
@@ -986,6 +1011,7 @@ void AudienceWindow::set_pointer_tool() {
 }
 
 void AudienceWindow::set_pen_tool() {
+    capture_molecule_frame();
     interaction_tool_ = InteractionTool::Pen;
     hide_pointer();
     eraser_cursor_visible_ = false;
@@ -996,6 +1022,7 @@ void AudienceWindow::set_pen_tool() {
 }
 
 void AudienceWindow::set_eraser_tool() {
+    capture_molecule_frame();
     interaction_tool_ = InteractionTool::Eraser;
     hide_pointer();
     eraser_cursor_visible_ = false;
@@ -1225,6 +1252,34 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
     const QImage* annotation = current_annotation_image();
     if (annotation && !annotation->isNull()) {
         painter.drawImage(slide_rect, *annotation, image_source_rect(*annotation));
+    }
+
+    const bool molecule_is_interactive = molecule_widget_ && molecule_widget_->isVisible()
+        && interaction_tool_ == InteractionTool::Cursor
+        && !molecule_suspended_for_feature_menu_;
+    if (!molecule_is_interactive && !molecule_snapshot_frame_.isNull()
+        && molecule_rect_.isValid()) {
+        const QRectF target(
+            slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
+            slide_rect.top() + molecule_rect_.top() * slide_rect.height(),
+            molecule_rect_.width() * slide_rect.width(),
+            molecule_rect_.height() * slide_rect.height());
+        painter.drawImage(target, molecule_snapshot_frame_,
+            image_source_rect(molecule_snapshot_frame_));
+    }
+
+    if (molecule_is_interactive && molecule_rect_.isValid()) {
+        const QRectF target(
+            slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
+            slide_rect.top() + molecule_rect_.top() * slide_rect.height(),
+            molecule_rect_.width() * slide_rect.width(),
+            molecule_rect_.height() * slide_rect.height());
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(105, 110, 118, 180), 2.0));
+        painter.drawRect(target);
+        painter.restore();
     }
 
     draw_pointer(painter);
@@ -1596,7 +1651,8 @@ void AudienceWindow::update_molecule_overlay_geometry() {
     if (!molecule_widget_) {
         return;
     }
-    if (!molecule_rect_.isValid() || current_slide_image_.isNull()
+    if (molecule_suspended_for_feature_menu_ || !molecule_rect_.isValid()
+        || current_slide_image_.isNull()
         || blank_mode_ != BlankMode::None || deck_overview_visible_
         || interaction_tool_ != InteractionTool::Cursor) {
         molecule_widget_->hide();
@@ -1623,6 +1679,18 @@ void AudienceWindow::update_molecule_overlay_geometry() {
     molecule_widget_->setGeometry(target);
     molecule_widget_->show();
     molecule_widget_->raise();
+    molecule_snapshot_frame_ = {};
+}
+
+void AudienceWindow::capture_molecule_frame() {
+    if (!molecule_widget_ || !molecule_widget_->isVisible()) {
+        return;
+    }
+
+    const QImage frame = molecule_widget_->grabFramebuffer();
+    if (!frame.isNull()) {
+        molecule_snapshot_frame_ = frame;
+    }
 }
 
 QPointF AudienceWindow::slide_image_point(QPointF window_point, QSize texture_size, bool* inside) const {
@@ -2019,30 +2087,37 @@ void AudienceWindow::show_feature_menu(const QPoint& global_position) {
         feature_menu_ = nullptr;
     }
 
+    // Preserve the last completed OpenGL frame beneath the embedded menu,
+    // avoiding live OpenGL composition while keeping the visual state stable.
+    if (molecule_widget_ && molecule_widget_->isVisible()) {
+        resume_molecule_vibration_after_menu_ = molecule_widget_->vibration_playing();
+        capture_molecule_frame();
+        molecule_suspended_for_feature_menu_ = true;
+        molecule_widget_->hide();
+        repaint();
+    }
+
     auto* menu = new FeatureMenuPanel(this);
     feature_menu_ = menu;
-    menu->winId();
-    if (QWindow* menuWindow = menu->windowHandle()) {
-        if (QWindow* audience_window = windowHandle()) {
-            menuWindow->setScreen(audience_window->screen());
-        }
-    }
 
     connect(menu, &QObject::destroyed, this, [this, menu] {
         if (feature_menu_ == menu) {
             feature_menu_ = nullptr;
         }
-        activateWindow();
         setFocus(Qt::ActiveWindowFocusReason);
-        if (QWindow* handle = windowHandle()) {
-            handle->requestActivate();
-        }
         if (deck_overview_visible_) {
             cursor_hide_timer_.stop();
             setCursor(QCursor(Qt::ArrowCursor));
         } else {
             update_cursor_appearance();
         }
+        molecule_suspended_for_feature_menu_ = false;
+        update_molecule_overlay_geometry();
+        if (resume_molecule_vibration_after_menu_ && molecule_widget_
+            && molecule_widget_->isVisible()) {
+            molecule_widget_->set_vibration_playing(true);
+        }
+        resume_molecule_vibration_after_menu_ = false;
         update();
     });
 

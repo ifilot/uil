@@ -241,6 +241,8 @@ private:
     void save_annotated_slide_image();
     /** @brief Repositions and shows or hides the active molecular rendering surface. */
     void update_molecule_overlay_geometry();
+    /** @brief Saves the last completed molecule frame before disabling interaction. */
+    void capture_molecule_frame();
 
     QString current_texture_key_;
     QImage current_slide_image_;
@@ -249,6 +251,7 @@ private:
     QRectF video_rect_;
     std::unique_ptr<MoleculeWidget> molecule_widget_;
     QRectF molecule_rect_;
+    QImage molecule_snapshot_frame_;
     QHash<int, QImage> deck_overview_images_;
     QSize deck_overview_image_size_;
     QHash<QString, QImage> annotation_images_;
@@ -276,4 +279,6 @@ private:
     int deck_overview_scroll_y_ = 0;
     int slide_wheel_remainder_y_ = 0;
     QPointer<QWidget> feature_menu_;
+    bool molecule_suspended_for_feature_menu_ = false;
+    bool resume_molecule_vibration_after_menu_ = false;
 };

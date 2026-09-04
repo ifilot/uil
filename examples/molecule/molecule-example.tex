@@ -7,7 +7,7 @@
   palette = garnet,
   organization = {Chemical Bonding and Spectroscopy},
   institute = {Eindhoven University of Technology},
-  context = {UIL interactive molecule test deck},
+  context = {UIL v0.2.1 molecule visualizer tour},
   footer author = {Ivo Filot},
   footer logo height = 0.31cm,
   footer logo max width = 0.18\paperwidth,
@@ -20,10 +20,10 @@
 
 \begin{filecontents*}{water-inline.xyz}
 3
-Water
-O   0.0000   0.0000   0.0000
-H   0.9572   0.0000   0.0000
-H  -0.2390   0.9270   0.0000
+Water bend; columns 5--7 are normal-mode displacements
+O   0.0000   0.0000   0.0000    0.0000   0.0000  -0.1000
+H   0.0000   0.9572   0.0000    0.0000   0.0000   0.2400
+H   0.0000  -0.2390   0.9270    0.0000   0.2200  -0.0600
 \end{filecontents*}
 
 \begin{filecontents*}{methane-inline.xyz}
@@ -36,46 +36,89 @@ H  -0.6291   0.6291  -0.6291
 H   0.6291  -0.6291  -0.6291
 \end{filecontents*}
 
-\begin{filecontents*}{carbon-dioxide-inline.xyz}
-3
-Carbon dioxide
-O  -1.1600   0.0000   0.0000
-C   0.0000   0.0000   0.0000
-O   1.1600   0.0000   0.0000
+\begin{filecontents*}{benzene-inline.xyz}
+12
+Benzene in the YZ plane
+C   0.0000   1.3970   0.0000
+C   0.0000   0.6985   1.2098
+C   0.0000  -0.6985   1.2098
+C   0.0000  -1.3970   0.0000
+C   0.0000  -0.6985  -1.2098
+C   0.0000   0.6985  -1.2098
+H   0.0000   2.4870   0.0000
+H   0.0000   1.2435   2.1537
+H   0.0000  -1.2435   2.1537
+H   0.0000  -2.4870   0.0000
+H   0.0000  -1.2435  -2.1537
+H   0.0000   1.2435  -2.1537
 \end{filecontents*}
 
+\begin{filecontents*}{carbon-dioxide-inline.xyz}
+3
+Carbon dioxide asymmetric stretch
+O  -1.1600   0.0000   0.0000   -0.1800   0.0000   0.0000
+C   0.0000   0.0000   0.0000    0.0800   0.0000   0.0000
+O   1.1600   0.0000   0.0000    0.1000   0.0000   0.0000
+\end{filecontents*}
+
+% The poster remains visible in ordinary PDF readers. UIL places the live
+% OpenGL molecule over the same annotation rectangle during a presentation.
 \newcommand{\moleculeposter}[1]{%
-  \fcolorbox{chcPrimary}{white}{\parbox[c][4.2cm][c]{10.8cm}{\centering
-    {\Large\bfseries\color{chcPrimary} Interactive #1 molecule}\\[0.35cm]
-    {\color{chcMuted} Open this PDF in UIL and press F5}}}%
+  \includegraphics[width=10.8cm,height=4.2cm]{#1}%
 }
 
 \begin{document}
 
 % The CHC theme reserves physical page 1 for its title layout. This test deck
-% intentionally consists of three content slides, so start with the content
-% background while retaining frame numbers 1/3 through 3/3.
+% intentionally consists only of content slides, so start with the content
+% background while retaining conventional frame numbering.
 \setcounter{page}{2}
 
-\begin{frame}{Water}{Bent geometry: $r_{\mathrm{OH}}=0.9572$ \AA, $\angle\mathrm{HOH}=104.5^\circ$}
+\begin{frame}{Meet the molecule toolbar}{The controls unfold from the top-right corner of every molecule}
   \centering
   \molecule[width=10.8cm,height=4.2cm]
-    {\moleculeposter{water}}
-    {water-inline.xyz}
+    {\moleculeposter{methane-still.png}}
+    {methane-inline.xyz}\\[0.25cm]
+  \small Drag to rotate, scroll to zoom, and double-click to reset. Use the rotate
+  button for a continuous spin around molecular Z. Collapse the toolbar with its
+  teal close button and unfold it again with the sliders button.
 \end{frame}
 
-\begin{frame}{Methane}{Tetrahedral geometry: $r_{\mathrm{CH}}=1.0896$ \AA}
+\begin{frame}{Stereoscopic rendering}{Toggle red/cyan anaglyph rendering with the glasses button}
   \centering
   \molecule[width=10.8cm,height=4.2cm]
-    {\moleculeposter{methane}}
-    {methane-inline.xyz}
+    {\moleculeposter{methane-anaglyph-still.png}}
+    {methane-inline.xyz}\\[0.25cm]
+  \small The two stereo cameras converge on the molecule center. Press the
+  glasses button once to enable red/cyan and again to return to mono rendering.
 \end{frame}
 
-\begin{frame}{Carbon dioxide}{Linear geometry: $r_{\mathrm{CO}}=1.1600$ \AA}
+\begin{frame}{Normal-mode vibrations}{Use the play button to animate the water bending mode}
   \centering
   \molecule[width=10.8cm,height=4.2cm]
-    {\moleculeposter{carbon dioxide}}
-    {carbon-dioxide-inline.xyz}
+    {\moleculeposter{water-still.png}}
+    {water-inline.xyz}\\[0.25cm]
+  \small Vibration-enabled XYZ records append $d_x$, $d_y$, and $d_z$ to each
+  atom. UIL applies the displacement sinusoidally while retaining interactive rotation.
+\end{frame}
+
+\begin{frame}{Orientation axes}{Toggle the Blender-style X/Y/Z gizmo with the compass button}
+  \centering
+  \molecule[width=10.8cm,height=4.2cm]
+    {\moleculeposter{carbon-dioxide-still.png}}
+    {carbon-dioxide-inline.xyz}\\[0.25cm]
+  \small Rotate the molecule and watch the corner gizmo follow it: X is red,
+  Y is green, and Z is blue. This molecule also contains an asymmetric stretch.
+\end{frame}
+
+\begin{frame}{Planar molecules}{Benzene starts face-on in the YZ plane}
+  \centering
+  \molecule[width=10.8cm,height=4.2cm]
+    {\moleculeposter{benzene-still.png}}
+    {benzene-inline.xyz}\\[0.25cm]
+  \small The default camera looks along $-X$ with $+Z$ upward, so the aromatic
+  ring is immediately visible. Toggle continuous Z-axis rotation to inspect its
+  planar geometry from different angles.
 \end{frame}
 
 \end{document}

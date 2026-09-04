@@ -42,10 +42,12 @@ void ExamplePresentationsTest::discovers_known_examples_in_menu_order() {
         examples_directory.filePath(QStringLiteral("pointer-and-annotations.pdf"))));
     QVERIFY(write_fixture(
         examples_directory.filePath(QStringLiteral("getting-started.pdf"))));
+    QVERIFY(write_fixture(
+        examples_directory.filePath(QStringLiteral("molecule-visualizer.uil"))));
 
     const QVector<ExamplePresentation> examples =
         installed_example_presentations(application_directory.absolutePath());
-    QCOMPARE(examples.size(), 2);
+    QCOMPARE(examples.size(), 3);
     QCOMPARE(examples.at(0).title, QStringLiteral("Getting Started with uil"));
     QCOMPARE(examples.at(0).file_name, QStringLiteral("getting-started.pdf"));
     QCOMPARE(
@@ -56,6 +58,10 @@ void ExamplePresentationsTest::discovers_known_examples_in_menu_order() {
     QCOMPARE(
         examples.at(1).file_name,
         QStringLiteral("pointer-and-annotations.pdf"));
+    QCOMPARE(examples.at(2).title, QStringLiteral("Interactive Molecule Visualizer"));
+    QCOMPARE(
+        examples.at(2).file_name,
+        QStringLiteral("molecule-visualizer.uil"));
 }
 
 void ExamplePresentationsTest::ignores_unknown_files_and_directories() {
