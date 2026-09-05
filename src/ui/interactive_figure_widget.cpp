@@ -9,6 +9,7 @@
 #include <QFontMetricsF>
 #include <QGridLayout>
 #include <QHideEvent>
+#include <QImage>
 #include <QLabel>
 #include <QPainter>
 #include <QPainterPath>
@@ -24,6 +25,7 @@
 #include <QShowEvent>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 #include <utility>
@@ -46,8 +48,13 @@ bool is_harmonic_time_figure(InteractiveFigureDefinition::Kind kind) {
         || kind == InteractiveFigureDefinition::Kind::HarmonicBasisStates;
 }
 
-bool is_box_basis_figure(InteractiveFigureDefinition::Kind kind) {
-    return kind == InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion;
+bool is_basis_expansion_figure(InteractiveFigureDefinition::Kind kind) {
+    return kind == InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion
+        || kind == InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion;
+}
+
+bool is_harmonic_displaced_expansion(InteractiveFigureDefinition::Kind kind) {
+    return kind == InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion;
 }
 
 QString latex_math_html(QString source) {
@@ -68,6 +75,8 @@ QString latex_math_html(QString source) {
     html.replace(QStringLiteral("\\pi"), QStringLiteral("&pi;"));
     html.replace(QStringLiteral("\\psi"), QStringLiteral("&psi;"));
     html.replace(QStringLiteral("\\Psi"), QStringLiteral("&Psi;"));
+    html.replace(QStringLiteral("\\Phi"), QStringLiteral("&Phi;"));
+    html.replace(QStringLiteral("\\alpha"), QStringLiteral("&alpha;"));
     html.replace(QStringLiteral("\\omega"), QStringLiteral("&omega;"));
     html.replace(QStringLiteral("\\tau"), QStringLiteral("&tau;"));
     html.replace(QStringLiteral("\\ell"), QStringLiteral("&#x2113;"));
@@ -153,12 +162,17 @@ public:
     void set_definition(const InteractiveFigureDefinition& definition) {
         definition_ = definition;
         renderer_.load(definition.background_svg);
+        background_cache_ = {};
+        background_cache_logical_size_ = {};
+        background_cache_device_pixel_ratio_ = 0.0;
         amplitude_ = definition.amplitude_initial;
         frequency_ = definition.frequency_initial;
         harmonic_phase_ = definition.phase_initial;
         stretch_ = definition.stretch_initial;
         basis_count_ = definition.basis_count_initial;
         phase_ = 0.0;
+        rebuild_harmonic_basis_cache();
+        rebuild_basis_expansion_cache();
         update();
     }
 
@@ -175,7 +189,8 @@ protected:
         painter.setRenderHint(QPainter::Antialiasing, true);
         painter.fillRect(rect(), Qt::white);
         if (renderer_.isValid()) {
-            renderer_.render(&painter, QRectF(rect()));
+            ensure_background_cache();
+            painter.drawImage(QPointF(0.0, 0.0), background_cache_);
         }
         if (definition_.kind == InteractiveFigureDefinition::Kind::HarmonicBondWavepacket) {
             paint_harmonic_wavepacket(painter);
@@ -185,8 +200,8 @@ protected:
             paint_harmonic_basis_states(painter);
             return;
         }
-        if (is_box_basis_figure(definition_.kind)) {
-            paint_particle_in_box_step_expansion(painter);
+        if (is_basis_expansion_figure(definition_.kind)) {
+            paint_basis_expansion(painter);
             return;
         }
 
@@ -320,6 +335,53 @@ protected:
     }
 
 private:
+    void rebuild_harmonic_basis_cache() {
+        harmonic_basis_samples_.clear();
+        harmonic_basis_maxima_.clear();
+        if (definition_.kind != InteractiveFigureDefinition::Kind::HarmonicBasisStates) {
+            return;
+        }
+        constexpr int basis_count = 6;
+        constexpr int samples = 420;
+        harmonic_basis_samples_.resize(basis_count);
+        harmonic_basis_maxima_.resize(basis_count);
+        for (int n = 0; n < basis_count; ++n) {
+            QVector<double>& values = harmonic_basis_samples_[n];
+            values.reserve(samples + 1);
+            double maximum = 0.0;
+            for (int i = 0; i <= samples; ++i) {
+                const double x = definition_.x_min
+                    + (definition_.x_max - definition_.x_min) * i / samples;
+                const double value = harmonic_basis_wavefunction(n, x);
+                values.push_back(value);
+                maximum = std::max(maximum, std::abs(value));
+            }
+            harmonic_basis_maxima_[n] = maximum;
+        }
+    }
+
+    void ensure_background_cache() {
+        const qreal device_pixel_ratio = devicePixelRatioF();
+        if (!background_cache_.isNull()
+            && background_cache_logical_size_ == size()
+            && qFuzzyCompare(background_cache_device_pixel_ratio_, device_pixel_ratio)) {
+            return;
+        }
+        const QSize pixel_size(
+            std::max(1, qCeil(width() * device_pixel_ratio)),
+            std::max(1, qCeil(height() * device_pixel_ratio)));
+        QImage image(pixel_size, QImage::Format_ARGB32_Premultiplied);
+        image.setDevicePixelRatio(device_pixel_ratio);
+        image.fill(Qt::transparent);
+        QPainter background_painter(&image);
+        renderer_.render(
+            &background_painter,
+            QRectF(QPointF(0.0, 0.0), QSizeF(size())));
+        background_cache_ = std::move(image);
+        background_cache_logical_size_ = size();
+        background_cache_device_pixel_ratio_ = device_pixel_ratio;
+    }
+
     void paint_harmonic_wavepacket(QPainter& painter) {
         const HarmonicWavepacketObservation observation = evaluate_harmonic_wavepacket(
             harmonic_phase_, stretch_);
@@ -608,14 +670,17 @@ private:
             QColor(30, 41, 59));
 
         double component_limit = 0.0;
+        std::array<double, basis_count> component_amplitudes{};
+        std::array<double, basis_count> component_phase_factors{};
+        std::array<double, basis_count> component_weights{};
         for (int n = 0; n < basis_count; ++n) {
-            for (int i = 0; i <= 240; ++i) {
-                const double x = definition_.x_min
-                    + (definition_.x_max - definition_.x_min) * i / 240.0;
-                component_limit = std::max(component_limit,
-                    std::sqrt(coherent_state_basis_weight(n, stretch_))
-                        * std::abs(harmonic_basis_wavefunction(n, x)));
-            }
+            component_weights[n] = coherent_state_basis_weight(n, stretch_);
+            component_amplitudes[n] = std::sqrt(component_weights[n]);
+            component_phase_factors[n] = std::cos(
+                2.0 * std::numbers::pi * n * harmonic_phase_);
+            component_limit = std::max(
+                component_limit,
+                component_amplitudes[n] * harmonic_basis_maxima_.value(n));
         }
         component_limit = std::max(0.08, component_limit * 1.12);
 
@@ -632,11 +697,12 @@ private:
             draw_grid(panel, true);
             QPainterPath outline;
             for (int i = 0; i <= samples; ++i) {
-                const double x = definition_.x_min
-                    + (definition_.x_max - definition_.x_min) * i / samples;
-                const double component = coherent_state_basis_real_component(
-                    n, x, harmonic_phase_, stretch_);
-                const QPointF point(map_x(panel, x), panel.center().y()
+                const double component = component_amplitudes[n]
+                    * harmonic_basis_samples_.value(n).value(i)
+                    * component_phase_factors[n];
+                const QPointF point(
+                    panel.left() + panel.width() * i / samples,
+                    panel.center().y()
                     - component / component_limit * panel.height() / 2.0);
                 if (i == 0) outline.moveTo(point); else outline.lineTo(point);
             }
@@ -645,7 +711,6 @@ private:
             painter.drawPath(outline);
             painter.restore();
 
-            const double weight = coherent_state_basis_weight(n, stretch_);
             const QRectF component_caption(
                 panel.left() + 4.0,
                 panel.top() + 3.0,
@@ -656,7 +721,7 @@ private:
                 component_caption.adjusted(4.0, 0.0, -4.0, 0.0),
                 QStringLiteral("$n=%1\\quad |c_{%1}|^2=%2%$")
                     .arg(n)
-                    .arg(100.0 * weight, 0, 'f', 1),
+                    .arg(100.0 * component_weights[n], 0, 'f', 1),
                 Qt::AlignLeft | Qt::AlignVCenter,
                 text_font,
                 QColor(30, 41, 59));
@@ -709,7 +774,120 @@ private:
         painter.restore();
     }
 
-    void paint_particle_in_box_step_expansion(QPainter& painter) {
+    void rebuild_basis_expansion_cache() {
+        basis_target_samples_.clear();
+        basis_partial_sum_samples_.clear();
+        basis_captured_fractions_.clear();
+        basis_screen_paths_.clear();
+        basis_target_screen_path_ = {};
+        basis_cached_plot_rect_ = {};
+        if (!is_basis_expansion_figure(definition_.kind)) {
+            return;
+        }
+
+        constexpr int sample_count = 1001;
+        basis_partial_sum_samples_.resize(definition_.basis_count_max + 1);
+        basis_captured_fractions_.resize(definition_.basis_count_max + 1);
+        for (int count = definition_.basis_count_min;
+             count <= definition_.basis_count_max;
+             ++count) {
+            basis_partial_sum_samples_[count].reserve(sample_count);
+        }
+        if (is_harmonic_displaced_expansion(definition_.kind)) {
+            QVector<double> coefficients;
+            coefficients.reserve(definition_.basis_count_max);
+            double captured = 0.0;
+            for (int n = 0; n < definition_.basis_count_max; ++n) {
+                const double coefficient = harmonic_displaced_state_coefficient(
+                    n, definition_.displacement);
+                coefficients.push_back(coefficient);
+                captured += coefficient * coefficient;
+                basis_captured_fractions_[n + 1] = std::clamp(captured, 0.0, 1.0);
+            }
+            basis_target_samples_.reserve(sample_count);
+            for (int i = 0; i < sample_count; ++i) {
+                const double x = definition_.x_min
+                    + (definition_.x_max - definition_.x_min) * i
+                        / double(sample_count - 1);
+                basis_target_samples_.push_back(QPointF(
+                    x, harmonic_displaced_ground_state(x, definition_.displacement)));
+                double partial_sum = 0.0;
+                for (int n = 0; n < definition_.basis_count_max; ++n) {
+                    partial_sum += coefficients.at(n) * harmonic_basis_wavefunction(n, x);
+                    if (n + 1 >= definition_.basis_count_min) {
+                        basis_partial_sum_samples_[n + 1].push_back(
+                            QPointF(x, partial_sum));
+                    }
+                }
+            }
+            return;
+        }
+
+        basis_target_samples_ = {
+            QPointF(0.0, 0.0),
+            QPointF(definition_.step_position, 0.0),
+            QPointF(definition_.step_position, definition_.step_height),
+            QPointF(1.0, definition_.step_height),
+        };
+        QVector<double> coefficients;
+        coefficients.reserve(definition_.basis_count_max);
+        double captured = 0.0;
+        for (int n = 1; n <= definition_.basis_count_max; ++n) {
+            const double coefficient = particle_in_box_step_coefficient(
+                n, definition_.step_position, definition_.step_height);
+            coefficients.push_back(coefficient);
+            captured += coefficient * coefficient;
+            basis_captured_fractions_[n] = std::clamp(
+                0.5 * captured / (definition_.step_height * definition_.step_height
+                                  * (1.0 - definition_.step_position)),
+                0.0,
+                1.0);
+        }
+        for (int i = 0; i < sample_count; ++i) {
+            const double x = i / double(sample_count - 1);
+            double partial_sum = 0.0;
+            for (int n = 1; n <= definition_.basis_count_max; ++n) {
+                partial_sum += coefficients.at(n - 1)
+                    * std::sin(n * std::numbers::pi * x);
+                if (n >= definition_.basis_count_min) {
+                    basis_partial_sum_samples_[n].push_back(QPointF(x, partial_sum));
+                }
+            }
+        }
+    }
+
+    void ensure_basis_screen_path_cache(const QRectF& plot_rect) {
+        if (basis_cached_plot_rect_ == plot_rect
+            && basis_screen_paths_.size() == basis_partial_sum_samples_.size()) {
+            return;
+        }
+        const auto map_point = [&](const QPointF& point) {
+            return QPointF(
+                plot_rect.left() + (point.x() - definition_.x_min)
+                    / (definition_.x_max - definition_.x_min) * plot_rect.width(),
+                plot_rect.bottom() - (point.y() - definition_.y_min)
+                    / (definition_.y_max - definition_.y_min) * plot_rect.height());
+        };
+        const auto make_path = [&](const QVector<QPointF>& samples) {
+            QPainterPath path;
+            for (int i = 0; i < samples.size(); ++i) {
+                const QPointF point = map_point(samples.at(i));
+                i == 0 ? path.moveTo(point) : path.lineTo(point);
+            }
+            return path;
+        };
+
+        basis_target_screen_path_ = make_path(basis_target_samples_);
+        basis_screen_paths_.clear();
+        basis_screen_paths_.reserve(basis_partial_sum_samples_.size());
+        for (const QVector<QPointF>& samples : basis_partial_sum_samples_) {
+            basis_screen_paths_.push_back(make_path(samples));
+        }
+        basis_cached_plot_rect_ = plot_rect;
+    }
+
+    void paint_basis_expansion(QPainter& painter) {
+        const bool harmonic_expansion = is_harmonic_displaced_expansion(definition_.kind);
         QFont title_font = painter.font();
         title_font.setBold(true);
         title_font.setPixelSize(std::clamp(height() / 17, 20, 38));
@@ -737,16 +915,20 @@ private:
 
         const auto map_point = [&](double x, double y) {
             return QPointF(
-                plot_rect.left() + x * plot_rect.width(),
+                plot_rect.left() + (x - definition_.x_min)
+                    / (definition_.x_max - definition_.x_min) * plot_rect.width(),
                 plot_rect.bottom() - (y - definition_.y_min)
                     / (definition_.y_max - definition_.y_min) * plot_rect.height());
         };
 
+        ensure_basis_screen_path_cache(plot_rect);
+        const int x_divisions = harmonic_expansion ? 6 : 4;
+
         painter.save();
         painter.setClipRect(plot_rect);
         painter.setPen(QPen(QColor(71, 85, 105, 35), 1.0));
-        for (int i = 0; i <= 4; ++i) {
-            const qreal x = plot_rect.left() + plot_rect.width() * i / 4.0;
+        for (int i = 0; i <= x_divisions; ++i) {
+            const qreal x = plot_rect.left() + plot_rect.width() * i / x_divisions;
             painter.drawLine(QPointF(x, plot_rect.top()), QPointF(x, plot_rect.bottom()));
         }
         for (int i = 0; i <= 6; ++i) {
@@ -756,28 +938,18 @@ private:
         painter.setPen(QPen(QColor(71, 85, 105), 1.2));
         painter.drawRect(plot_rect);
         if (definition_.y_min <= 0.0 && definition_.y_max >= 0.0) {
-            painter.drawLine(map_point(0.0, 0.0), map_point(1.0, 0.0));
+            painter.drawLine(
+                map_point(definition_.x_min, 0.0),
+                map_point(definition_.x_max, 0.0));
         }
 
-        QPainterPath target;
-        target.moveTo(map_point(0.0, 0.0));
-        target.lineTo(map_point(definition_.step_position, 0.0));
-        target.lineTo(map_point(definition_.step_position, definition_.step_height));
-        target.lineTo(map_point(1.0, definition_.step_height));
         painter.setPen(QPen(definition_.target_color, 2.2, Qt::DashLine));
-        painter.drawPath(target);
-
-        const int sample_count = std::max(800, basis_count_ * 40 + 1);
-        const QVector<QPointF> samples = sample_particle_in_box_step_approximation(
-            basis_count_, sample_count, definition_.step_position, definition_.step_height);
-        QPainterPath approximation;
-        for (int i = 0; i < samples.size(); ++i) {
-            const QPointF point = map_point(samples.at(i).x(), samples.at(i).y());
-            if (i == 0) approximation.moveTo(point); else approximation.lineTo(point);
-        }
+        painter.drawPath(basis_target_screen_path_);
         painter.setPen(QPen(
             definition_.approximation_color, 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        painter.drawPath(approximation);
+        if (basis_count_ >= 0 && basis_count_ < basis_screen_paths_.size()) {
+            painter.drawPath(basis_screen_paths_.at(basis_count_));
+        }
         painter.restore();
 
         QFont tick_font = painter.font();
@@ -786,11 +958,20 @@ private:
         painter.setFont(tick_font);
         painter.setPen(QColor(71, 85, 105));
         const QFontMetricsF tick_metrics(tick_font);
-        const QStringList x_tick_labels = {
-            QStringLiteral("0"), QStringLiteral("L/4"), QStringLiteral("L/2"),
-            QStringLiteral("3L/4"), QStringLiteral("L")};
-        for (int i = 0; i <= 4; ++i) {
-            const qreal x = plot_rect.left() + plot_rect.width() * i / 4.0;
+        QStringList x_tick_labels;
+        if (harmonic_expansion) {
+            for (int i = 0; i <= x_divisions; ++i) {
+                const double value = definition_.x_min
+                    + (definition_.x_max - definition_.x_min) * i / x_divisions;
+                x_tick_labels.push_back(QString::number(value, 'g', 3));
+            }
+        } else {
+            x_tick_labels = {
+                QStringLiteral("0"), QStringLiteral("L/4"), QStringLiteral("L/2"),
+                QStringLiteral("3L/4"), QStringLiteral("L")};
+        }
+        for (int i = 0; i <= x_divisions; ++i) {
+            const qreal x = plot_rect.left() + plot_rect.width() * i / x_divisions;
             draw_math_text(
                 painter,
                 QRectF(x - 46.0, plot_rect.bottom() + 5.0,
@@ -848,7 +1029,9 @@ private:
         draw_math_text(
             painter,
             QRectF(legend_left + 50.0, legend_top, 300.0, legend_row_height),
-            QStringLiteral("target f(x)"),
+            harmonic_expansion
+                ? QStringLiteral("$\\mathrm{target}\\quad \\Phi(y)$")
+                : QStringLiteral("target f(x)"),
             Qt::AlignLeft | Qt::AlignVCenter,
             tick_font,
             QColor(51, 65, 85));
@@ -860,18 +1043,22 @@ private:
             painter,
             QRectF(legend_left + 50.0, legend_top + legend_row_height,
                    300.0, legend_row_height),
-            QStringLiteral("$S_{%1}(x)$").arg(basis_count_),
+            harmonic_expansion
+                ? QStringLiteral("$S_{%1}(y)$").arg(basis_count_)
+                : QStringLiteral("$S_{%1}(x)$").arg(basis_count_),
             Qt::AlignLeft | Qt::AlignVCenter,
             tick_font,
             QColor(51, 65, 85));
 
-        const double percentage = 100.0 * particle_in_box_step_captured_fraction(
-            basis_count_, definition_.step_position, definition_.step_height);
+        const double percentage = basis_count_ >= 0
+                && basis_count_ < basis_captured_fractions_.size()
+            ? 100.0 * basis_captured_fractions_.at(basis_count_)
+            : 0.0;
         QFont percentage_font = label_font;
         percentage_font.setPixelSize(std::clamp(height() / 20, 24, 44));
         const QString basis_text = QStringLiteral("$N = %1$").arg(basis_count_);
         const QString fit_text = QStringLiteral("$%1% \\mathrm{fit}$")
-            .arg(percentage, 0, 'f', 1);
+            .arg(percentage, 0, 'f', harmonic_expansion ? 2 : 1);
         const QSizeF basis_text_size = math_text_size(basis_text, percentage_font);
         const QSizeF fit_text_size = math_text_size(fit_text, percentage_font);
         const qreal label_gap = std::clamp(
@@ -905,12 +1092,23 @@ private:
 
     InteractiveFigureDefinition definition_;
     QSvgRenderer renderer_;
+    QImage background_cache_;
+    QSize background_cache_logical_size_;
+    qreal background_cache_device_pixel_ratio_ = 0.0;
     double amplitude_ = 1.0;
     double frequency_ = 1.0;
     double phase_ = 0.0;
     double harmonic_phase_ = 0.0;
     double stretch_ = 3.0;
     int basis_count_ = 1;
+    QVector<QPointF> basis_target_samples_;
+    QVector<QVector<QPointF>> basis_partial_sum_samples_;
+    QVector<double> basis_captured_fractions_;
+    QRectF basis_cached_plot_rect_;
+    QPainterPath basis_target_screen_path_;
+    QVector<QPainterPath> basis_screen_paths_;
+    QVector<QVector<double>> harmonic_basis_samples_;
+    QVector<double> harmonic_basis_maxima_;
 };
 
 InteractiveFigureWidget::InteractiveFigureWidget(QWidget* parent)
@@ -1007,9 +1205,9 @@ InteractiveFigureWidget::InteractiveFigureWidget(QWidget* parent)
     animation_timer_->setInterval(kAnimationIntervalMs);
     connect(animation_timer_, &QTimer::timeout, this, &InteractiveFigureWidget::advance_animation);
     connect(amplitude_slider_, &QSlider::valueChanged, this, [this](int position) {
-        if (is_box_basis_figure(definition_.kind)) {
+        if (is_basis_expansion_figure(definition_.kind)) {
             canvas_->set_basis_count(position);
-            update_box_basis_status();
+            update_basis_expansion_status();
         } else if (is_harmonic_time_figure(definition_.kind)) {
             canvas_->set_stretch(slider_value(
                 position, definition_.stretch_min, definition_.stretch_max));
@@ -1054,13 +1252,13 @@ void InteractiveFigureWidget::set_definition(const InteractiveFigureDefinition& 
     controls_layout_->removeWidget(reset_button_);
     controls_layout_->addWidget(
         reset_button_,
-        is_box_basis_figure(definition.kind) ? 0 : 1,
+        is_basis_expansion_figure(definition.kind) ? 0 : 1,
         2);
     if (is_harmonic_time_figure(definition.kind)) {
         root_layout_->insertWidget(0, controls_frame_);
         status_label_->show();
         reset_button_->hide();
-    } else if (is_box_basis_figure(definition.kind)) {
+    } else if (is_basis_expansion_figure(definition.kind)) {
         root_layout_->addWidget(controls_frame_);
         amplitude_slider_->setRange(definition.basis_count_min, definition.basis_count_max);
         amplitude_slider_->setPageStep(1);
@@ -1118,7 +1316,7 @@ void InteractiveFigureWidget::showEvent(QShowEvent* event) {
 }
 
 void InteractiveFigureWidget::reset_controls() {
-    if (is_box_basis_figure(definition_.kind)) {
+    if (is_basis_expansion_figure(definition_.kind)) {
         animation_requested_ = false;
         animation_timer_->stop();
         {
@@ -1128,7 +1326,7 @@ void InteractiveFigureWidget::reset_controls() {
         amplitude_slider_->setValue(definition_.basis_count_initial);
         canvas_->set_basis_count(definition_.basis_count_initial);
         update_labels();
-        update_box_basis_status();
+        update_basis_expansion_status();
         return;
     }
     if (is_harmonic_time_figure(definition_.kind)) {
@@ -1152,7 +1350,7 @@ void InteractiveFigureWidget::reset_controls() {
 }
 
 void InteractiveFigureWidget::update_labels() {
-    if (is_box_basis_figure(definition_.kind)) {
+    if (is_basis_expansion_figure(definition_.kind)) {
         amplitude_label_->setText(QStringLiteral("Basis functions <i>N</i>: %1")
             .arg(amplitude_slider_->value()));
         return;
@@ -1171,11 +1369,23 @@ void InteractiveFigureWidget::update_labels() {
         slider_value(frequency_slider_->value(), definition_.frequency_min, definition_.frequency_max), 0, 'f', 2));
 }
 
-void InteractiveFigureWidget::update_box_basis_status() {
-    if (!is_box_basis_figure(definition_.kind)) {
+void InteractiveFigureWidget::update_basis_expansion_status() {
+    if (!is_basis_expansion_figure(definition_.kind)) {
         return;
     }
     const int basis_count = amplitude_slider_->value();
+    if (is_harmonic_displaced_expansion(definition_.kind)) {
+        const double percentage = 100.0 * harmonic_displaced_captured_fraction(
+            basis_count, definition_.displacement);
+        status_label_->setText(
+            QStringLiteral(
+                "<i>N</i> = %1 &emsp; &Sigma;<sub><i>v</i>=0</sub>"
+                "<sup><i>N</i>&minus;1</sup> |<i>c</i><sub><i>v</i></sub>|"
+                "<sup>2</sup> = %2% &emsp; — fraction of &Phi;(<i>y</i>) reproduced")
+                .arg(basis_count)
+                .arg(percentage, 0, 'f', 2));
+        return;
+    }
     const double percentage = 100.0 * particle_in_box_step_captured_fraction(
         basis_count, definition_.step_position, definition_.step_height);
     status_label_->setText(

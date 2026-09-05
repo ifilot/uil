@@ -133,3 +133,64 @@ double coherent_state_basis_real_component(
     const double relative_phase = 2.0 * std::numbers::pi * n * phase;
     return amplitude * harmonic_basis_wavefunction(n, x) * std::cos(relative_phase);
 }
+
+double harmonic_displaced_ground_state(double x, double displacement) {
+    const double offset = x - displacement;
+    return std::exp(-0.5 * offset * offset) / std::pow(std::numbers::pi, 0.25);
+}
+
+double harmonic_displaced_state_coefficient(int n, double displacement) {
+    if (n < 0 || !std::isfinite(displacement)) {
+        return 0.0;
+    }
+    double coefficient = std::exp(-0.25 * displacement * displacement);
+    for (int order = 1; order <= n; ++order) {
+        coefficient *= displacement / std::sqrt(2.0 * order);
+    }
+    return coefficient;
+}
+
+double harmonic_displaced_captured_fraction(int basis_count, double displacement) {
+    if (basis_count <= 0 || !std::isfinite(displacement)) {
+        return 0.0;
+    }
+    double captured = 0.0;
+    double coefficient = std::exp(-0.25 * displacement * displacement);
+    for (int n = 0; n < basis_count; ++n) {
+        captured += coefficient * coefficient;
+        coefficient *= displacement / std::sqrt(2.0 * (n + 1));
+    }
+    return std::clamp(captured, 0.0, 1.0);
+}
+
+QVector<QPointF> sample_harmonic_displaced_approximation(
+    int basis_count,
+    double x_min,
+    double x_max,
+    int sample_count,
+    double displacement) {
+    QVector<QPointF> samples;
+    if (basis_count <= 0 || basis_count > 200 || !(x_max > x_min)
+        || sample_count < 2 || !std::isfinite(displacement)) {
+        return samples;
+    }
+
+    QVector<double> coefficients;
+    coefficients.reserve(basis_count);
+    double coefficient = std::exp(-0.25 * displacement * displacement);
+    for (int n = 0; n < basis_count; ++n) {
+        coefficients.push_back(coefficient);
+        coefficient *= displacement / std::sqrt(2.0 * (n + 1));
+    }
+
+    samples.reserve(sample_count);
+    for (int i = 0; i < sample_count; ++i) {
+        const double x = x_min + (x_max - x_min) * i / double(sample_count - 1);
+        double value = 0.0;
+        for (int n = 0; n < basis_count; ++n) {
+            value += coefficients.at(n) * harmonic_basis_wavefunction(n, x);
+        }
+        samples.push_back(QPointF(x, value));
+    }
+    return samples;
+}

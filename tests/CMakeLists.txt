@@ -123,6 +123,7 @@ add_uil_unit_test(molecule_geometry_test
 add_uil_unit_test(harmonic_wavepacket_test
     harmonic_wavepacket_test.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
 )
 
 add_uil_unit_test(particle_in_box_basis_test

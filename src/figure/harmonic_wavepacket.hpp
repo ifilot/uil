@@ -60,3 +60,20 @@ double coherent_state_basis_real_component(
     double x,
     double phase,
     double initial_stretch);
+
+/** @brief Evaluates the displaced ground state Phi(x) = psi_0(x-d). */
+double harmonic_displaced_ground_state(double x, double displacement);
+
+/** @brief Returns <psi_n|Phi> for a ground state displaced by @p displacement. */
+double harmonic_displaced_state_coefficient(int n, double displacement);
+
+/** @brief Returns the norm fraction captured by states n = 0 through N - 1. */
+double harmonic_displaced_captured_fraction(int basis_count, double displacement);
+
+/** @brief Samples the N-state approximation of a displaced ground state. */
+QVector<QPointF> sample_harmonic_displaced_approximation(
+    int basis_count,
+    double x_min,
+    double x_max,
+    int sample_count,
+    double displacement);

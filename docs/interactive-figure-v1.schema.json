@@ -51,6 +51,20 @@
           "controls": { "$ref": "#/$defs/particleInBoxStepControls" }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "plot": {
+            "properties": { "kind": { "const": "harmonic-displaced-state-expansion" } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "controls": { "$ref": "#/$defs/particleInBoxStepControls" }
+        }
+      }
     }
   ],
   "properties": {
@@ -67,7 +81,8 @@
         { "$ref": "#/$defs/sinePlot" },
         { "$ref": "#/$defs/harmonicWavepacketPlot" },
         { "$ref": "#/$defs/harmonicBasisStatesPlot" },
-        { "$ref": "#/$defs/particleInBoxStepPlot" }
+        { "$ref": "#/$defs/particleInBoxStepPlot" },
+        { "$ref": "#/$defs/harmonicDisplacedStatePlot" }
       ]
     },
     "controls": {
@@ -216,6 +231,26 @@
         "step_height": { "type": "number", "exclusiveMinimum": 0 },
         "target_color": { "type": "string", "default": "#64748b" },
         "approximation_color": { "type": "string", "default": "#0f766e" }
+      }
+    },
+    "harmonicDisplacedStatePlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind", "x_min", "x_max", "y_min", "y_max", "x_label", "y_label",
+        "displacement"
+      ],
+      "properties": {
+        "kind": { "const": "harmonic-displaced-state-expansion" },
+        "x_min": { "$ref": "#/$defs/finiteNumber" },
+        "x_max": { "$ref": "#/$defs/finiteNumber" },
+        "y_min": { "$ref": "#/$defs/finiteNumber" },
+        "y_max": { "$ref": "#/$defs/finiteNumber" },
+        "x_label": { "$ref": "#/$defs/mathLabel" },
+        "y_label": { "$ref": "#/$defs/mathLabel" },
+        "displacement": { "$ref": "#/$defs/finiteNumber" },
+        "target_color": { "type": "string", "default": "#64748b" },
+        "approximation_color": { "type": "string", "default": "#8e1b3e" }
       }
     },
     "particleInBoxStepControls": {

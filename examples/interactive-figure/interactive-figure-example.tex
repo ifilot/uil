@@ -7,6 +7,32 @@
 \setbeamertemplate{navigation symbols}{}
 \setbeamercolor{frametitle}{fg=white,bg=blue!65!black}
 
+% This badge is part of the static poster itself, rather than the surrounding
+% slide. UIL replaces the complete poster rectangle with the live widget.
+\tikzset{uil interactive badge/.style={
+  anchor=north east,
+  rounded corners=1.5pt,
+  fill=cyan!55!blue,
+  draw=white,
+  line width=0.35pt,
+  text=white,
+  font=\scriptsize\sffamily\bfseries,
+  inner xsep=5pt,
+  inner ysep=2.5pt
+}}
+\newcommand{\interactivepreviewbadge}{%
+  \coordinate (uilpreviewnorthwest) at (current bounding box.north west);%
+  \coordinate (uilpreviewnortheast) at (current bounding box.north east);%
+  % Reserve a narrow header inside the poster's measured rectangle. This keeps
+  % the badge away from both the graph title and the plotted data.
+  \path ([yshift=5.5mm]uilpreviewnorthwest)
+    -- ([yshift=5.5mm]uilpreviewnortheast);%
+  \node[uil interactive badge]
+    at ([xshift=-1.5mm,yshift=4.5mm]uilpreviewnortheast) {%
+      \raisebox{0.12ex}{\scalebox{0.72}{$\blacktriangleright$}}%
+      \hspace{0.3em}\strut INTERACTIVE};%
+}
+
 \newcommand{\waveposter}{%
   \begin{tikzpicture}
     \begin{axis}[
@@ -20,14 +46,20 @@
       grid=both,
       major grid style={draw=gray!25},
       xlabel={$x$ (radians)},
-      ylabel={amplitude},
-      title={Static PDF fallback: $y=\sin(x)$},
+      ylabel={$y$},
+      xlabel style={at={(axis description cs:0.5,-0.11)},anchor=north},
+      ylabel style={at={(axis description cs:-0.08,0.5)},anchor=south},
+      xtick={-6.283,-4.712,-3.142,-1.571,0,1.571,3.142,4.712,6.283},
+      xticklabels={$-6.28$,$-4.71$,$-3.14$,$-1.57$,$0$,$1.57$,$3.14$,$4.71$,$6.28$},
+      ytick={-2.5,-1.25,0,1.25,2.5},
+      title={A moving sine wave},
       samples=180,
       domain=-6.283:6.283,
       thick
     ]
       \addplot[blue!70!black] {sin(deg(x))};
     \end{axis}
+    \interactivepreviewbadge
   \end{tikzpicture}%
 }
 
@@ -38,11 +70,14 @@
       width=11.8cm,height=3.0cm,xmin=-5,xmax=5,
       grid=major,major grid style={draw=gray!22},
       axis line style={draw=gray!70},tick label style={font=\scriptsize},
-      label style={font=\small},domain=-5:5,samples=220
+      label style={font=\small},domain=-5:5,samples=220,
+      xtick={-5,-3.75,-2.5,-1.25,0,1.25,2.5,3.75,5}
     ]
       \nextgroupplot[
-        ymin=0,ymax=12.5,ylabel={$U/(\hbar\omega)$},xticklabels={},
-        title={Displaced coherent state at maximum stretch ($A=3$, $\tau=0$)},
+        ymin=0,ymax=12.5,ytick={0,6.25,12.5},
+        yticklabels={$0$,$6.25$,$12.5$},
+        ylabel={$U/(\hbar\omega)$},xticklabels={},
+        title={A displaced harmonic-bond wavepacket},
         title style={font=\small}
       ]
         \addplot[thick,gray!75!black] {x^2/2};
@@ -50,11 +85,20 @@
         \addplot[gray,dashed] coordinates {(3,0) (3,4.5)};
         \addplot[only marks,mark=*,mark size=2.6pt,red!75!black]
           coordinates {(3,4.5)};
-      \nextgroupplot[ymin=0,ymax=0.65,xlabel={$x=q/\ell$},ylabel={$\ell|\psi|^2$}]
+        \node[anchor=north west,font=\scriptsize]
+          at (axis description cs:0.015,0.96) {Harmonic potential};
+      \nextgroupplot[
+        ymin=0,ymax=0.65,ytick={0,0.325,0.65},
+        yticklabels={$0$,$0.325$,$0.65$},
+        xlabel={$x=q/\ell$},ylabel={$\ell|\psi|^2$}
+      ]
         \addplot[teal!70!black,thick,fill=teal!18]
           {exp(-(x-3)^2)/sqrt(pi)} \closedcycle;
         \addplot[red!75!black,dashed] coordinates {(3,0) (3,0.65)};
+        \node[anchor=north west,font=\scriptsize]
+          at (axis description cs:0.015,0.96) {Probability density};
     \end{groupplot}
+    \interactivepreviewbadge
   \end{tikzpicture}%
 }
 
@@ -64,41 +108,47 @@
       at={(0,3.50cm)},anchor=south west,scale only axis,
       width=11.15cm,height=1.55cm,xmin=-5,xmax=5,ymin=0,ymax=0.65,
       grid=major,major grid style={draw=gray!20},
-      axis line style={draw=gray!65},tick label style={font=\tiny},
+      axis line style={draw=gray!65},tick label style={font=\scriptsize},
       label style={font=\scriptsize},xticklabels={},ylabel={$\ell|\Psi|^2$},
-      title={Coherent-state density at $A=3$, $\tau=1/2$},title style={font=\scriptsize},
+      ytick={0,0.325,0.65},yticklabels={$0$,$0.325$,$0.65$},
+      title={A coherent packet and its real basis components},title style={font=\scriptsize},
       domain=-5:5,samples=220
     ]
       \addplot[teal!70!black,thick,fill=teal!12]
         {exp(-(x+3)^2)/sqrt(pi)} \closedcycle;
       \addplot[red!70!black,dashed] coordinates {(-3,0) (-3,0.65)};
+      \node[anchor=north west,font=\scriptsize]
+        at (axis description cs:0.015,0.95)
+        {Coherent-state density $\quad X=-3.00\ell$};
     \end{axis}
     \pgfplotsset{component/.style={
       scale only axis,width=3.15cm,height=1.05cm,
       xmin=-5,xmax=5,ymin=-0.38,ymax=0.38,
       axis lines=middle,grid=major,major grid style={draw=gray!18},
-      axis line style={draw=gray!60},tick label style={font=\tiny},
-      title style={font=\tiny},domain=-5:5,samples=180,yticklabels={}
+      axis line style={draw=gray!60},tick label style={font=\scriptsize},
+      title style={font=\scriptsize},domain=-5:5,samples=180,yticklabels={},
+      xtick={-5,0,5}
     }}
-    \begin{axis}[component,at={(0cm,1.50cm)},anchor=south west,title={$n=0$},xticklabels={}]
+    \begin{axis}[component,at={(0cm,1.50cm)},anchor=south west,title={$n=0\quad |c_0|^2=1.1\%$},xticklabels={}]
       \addplot[blue!70!black,thick] {0.1054*exp(-x^2/2)/pi^(1/4)};
     \end{axis}
-    \begin{axis}[component,at={(4.00cm,1.50cm)},anchor=south west,title={$n=1$},xticklabels={}]
+    \begin{axis}[component,at={(4.00cm,1.50cm)},anchor=south west,title={$n=1\quad |c_1|^2=5.0\%$},xticklabels={}]
       \addplot[teal!70!black,thick] {-0.2236*sqrt(2)*x*exp(-x^2/2)/pi^(1/4)};
     \end{axis}
-    \begin{axis}[component,at={(8.00cm,1.50cm)},anchor=south west,title={$n=2$},xticklabels={}]
+    \begin{axis}[component,at={(8.00cm,1.50cm)},anchor=south west,title={$n=2\quad |c_2|^2=11.2\%$},xticklabels={}]
       \addplot[orange!80!black,thick] {0.3354*(2*x^2-1)/sqrt(2)*exp(-x^2/2)/pi^(1/4)};
     \end{axis}
-    \begin{axis}[component,at={(0cm,0.10cm)},anchor=south west,title={$n=3$}]
+    \begin{axis}[component,at={(0cm,0.10cm)},anchor=south west,title={$n=3\quad |c_3|^2=16.9\%$}]
       \addplot[violet!80!black,thick] {-0.4108*(2*x^3-3*x)/sqrt(3)*exp(-x^2/2)/pi^(1/4)};
     \end{axis}
-    \begin{axis}[component,at={(4.00cm,0.10cm)},anchor=south west,title={$n=4$}]
+    \begin{axis}[component,at={(4.00cm,0.10cm)},anchor=south west,title={$n=4\quad |c_4|^2=19.0\%$}]
       \addplot[pink!75!black,thick] {0.4357*(16*x^4-48*x^2+12)/sqrt(384)*exp(-x^2/2)/pi^(1/4)};
     \end{axis}
-    \begin{axis}[component,at={(8.00cm,0.10cm)},anchor=south west,title={$n=5$}]
+    \begin{axis}[component,at={(8.00cm,0.10cm)},anchor=south west,title={$n=5\quad |c_5|^2=17.1\%$}]
       \addplot[cyan!65!black,thick] {-0.4133*(32*x^5-160*x^3+120*x)/sqrt(3840)*exp(-x^2/2)/pi^(1/4)};
     \end{axis}
     \node[font=\scriptsize] at (5.58cm,-0.45cm) {$x=q/\ell$};
+    \interactivepreviewbadge
   \end{tikzpicture}%
 }
 
@@ -112,16 +162,55 @@
       xlabel={$x$},ylabel={$f(x),\,S_N(x)$},
       xtick={0,0.25,0.5,0.75,1},
       xticklabels={$0$,$L/4$,$L/2$,$3L/4$,$L$},
-      title={Static PDF fallback: five particle-in-a-box basis functions},
-      title style={font=\small},domain=0:1,samples=260
+      ytick={-0.25,0.125,0.5,0.875,1.25},
+      yticklabels={$-0.25$,$0.125$,$0.5$,$0.875$,$1.25$},
+      title={Fitting a step with particle-in-a-box eigenfunctions},
+      title style={font=\small},domain=0:1,samples=260,
+      legend style={at={(0.015,0.97)},anchor=north west,draw=none,fill=none,
+        font=\scriptsize,row sep=1pt}
     ]
       \addplot[gray!75,dashed,thick] coordinates {(0,0) (0.5,0) (0.5,1) (1,1)};
+      \addlegendentry{target $f(x)$}
       \addplot[teal!75!black,very thick]
-        {0.63662*sin(deg(pi*x)) - 0.63662*sin(deg(2*pi*x))
-          + 0.21221*sin(deg(3*pi*x)) + 0.12732*sin(deg(5*pi*x))};
-      \node[anchor=north east,font=\bfseries,text=teal!75!black]
-        at (axis description cs:0.97,0.95) {$N=5$: 87.2\% fit};
+        {0.63662*sin(deg(pi*x))};
+      \addlegendentry{$S_1(x)$}
+      \node[anchor=south east,font=\bfseries,text=teal!75!black]
+        at (axis description cs:0.72,0.055) {$N=1$};
+      \node[anchor=south east,font=\bfseries,text=teal!75!black]
+        at (axis description cs:0.97,0.055) {$40.5\%\ \mathrm{fit}$};
     \end{axis}
+    \interactivepreviewbadge
+  \end{tikzpicture}%
+}
+
+\newcommand{\harmonicfitposter}{%
+  \begin{tikzpicture}
+    \begin{axis}[
+      width=11.8cm,height=5.25cm,
+      xmin=-6,xmax=6,ymin=-0.2,ymax=0.9,
+      grid=both,major grid style={draw=gray!22},
+      axis line style={draw=gray!70},
+      xlabel={$y=x/\alpha$},ylabel={$\Phi(y),\,S_N(y)$},
+      xtick={-6,-4,-2,0,2,4,6},
+      ytick={-0.2,0.075,0.35,0.625,0.9},
+      yticklabels={$-0.2$,$0.075$,$0.35$,$0.625$,$0.9$},
+      title={Fitting a stretched harmonic-oscillator state},
+      title style={font=\small},domain=-6:6,samples=360,
+      legend style={at={(0.015,0.97)},anchor=north west,draw=none,fill=none,
+        font=\scriptsize,row sep=1pt}
+    ]
+      \addplot[gray!75,dashed,thick]
+        {exp(-(x-2)^2/2)/pi^(1/4)};
+      \addlegendentry{target $\Phi(y)$}
+      \addplot[red!55!black,very thick]
+        {exp(-1)*exp(-x^2/2)/pi^(1/4)};
+      \addlegendentry{$S_1(y)$}
+      \node[anchor=south east,font=\bfseries,text=red!55!black]
+        at (axis description cs:0.72,0.055) {$N=1$};
+      \node[anchor=south east,font=\bfseries,text=red!55!black]
+        at (axis description cs:0.97,0.055) {$13.53\%\ \mathrm{fit}$};
+    \end{axis}
+    \interactivepreviewbadge
   \end{tikzpicture}%
 }
 
@@ -158,6 +247,13 @@
   \interactivefigure[width=11.8cm,height=5.25cm]
     {\stepfitposter}
     {particle-in-box-step-expansion.uilfig}
+\end{frame}
+
+\begin{frame}{Fitting a stretched harmonic-oscillator state}
+  \centering
+  \interactivefigure[width=11.8cm,height=5.25cm]
+    {\harmonicfitposter}
+    {harmonic-displaced-state-expansion.uilfig}
 \end{frame}
 
 \end{document}

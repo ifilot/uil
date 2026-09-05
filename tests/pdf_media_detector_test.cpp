@@ -265,7 +265,7 @@ void PdfMediaDetectorTest::bundled_interactive_figure_example_loads() {
     const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
     QCOMPARE(result.annotations.size(), 0);
     QCOMPARE(result.molecule_annotations.size(), 0);
-    QCOMPARE(result.interactive_figure_annotations.size(), 4);
+    QCOMPARE(result.interactive_figure_annotations.size(), 5);
 
     const PdfInteractiveFigureAnnotation& sine =
         result.interactive_figure_annotations.at(0);
@@ -315,6 +315,20 @@ void PdfMediaDetectorTest::bundled_interactive_figure_example_loads() {
         InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion);
     QCOMPARE(step_fit.definition.basis_count_min, 1);
     QCOMPARE(step_fit.definition.basis_count_max, 25);
+
+    const PdfInteractiveFigureAnnotation& harmonic_fit =
+        result.interactive_figure_annotations.at(4);
+    QCOMPARE(harmonic_fit.page_index, 4);
+    QCOMPARE(
+        harmonic_fit.file_name,
+        QStringLiteral("harmonic-displaced-state-expansion.uilfig"));
+    QVERIFY2(harmonic_fit.is_ready(), qPrintable(harmonic_fit.error_message));
+    QCOMPARE(
+        harmonic_fit.definition.kind,
+        InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion);
+    QCOMPARE(harmonic_fit.definition.displacement, 2.0);
+    QCOMPARE(harmonic_fit.definition.basis_count_min, 1);
+    QCOMPARE(harmonic_fit.definition.basis_count_max, 25);
 }
 
 void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {

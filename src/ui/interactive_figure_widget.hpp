@@ -38,7 +38,7 @@ private:
     void reset_controls();
     void update_labels();
     void update_harmonic_status();
-    void update_box_basis_status();
+    void update_basis_expansion_status();
     void advance_animation();
     void set_harmonic_phase(double phase, bool update_slider);
     void set_animation_running(bool running);

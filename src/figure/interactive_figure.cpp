@@ -28,14 +28,18 @@ bool InteractiveFigureDefinition::is_valid() const {
     if (background_svg.isEmpty() || !(x_max > x_min)) {
         return false;
     }
-    if (kind == Kind::ParticleInBoxStepExpansion) {
-        return std::abs(x_min) < 1e-12
-            && std::abs(x_max - 1.0) < 1e-12
+    if (kind == Kind::ParticleInBoxStepExpansion
+        || kind == Kind::HarmonicDisplacedStateExpansion) {
+        const bool kind_specific_ranges = kind == Kind::ParticleInBoxStepExpansion
+            ? std::abs(x_min) < 1e-12
+                && std::abs(x_max - 1.0) < 1e-12
+                && step_position > 0.0
+                && step_position < 1.0
+                && std::isfinite(step_height)
+                && step_height > 0.0
+            : std::isfinite(displacement);
+        return kind_specific_ranges
             && y_max > y_min
-            && step_position > 0.0
-            && step_position < 1.0
-            && std::isfinite(step_height)
-            && step_height > 0.0
             && basis_count_min >= 1
             && basis_count_max >= basis_count_min
             && basis_count_max <= 200
@@ -97,7 +101,8 @@ bool parse_interactive_figure(
     if (kind != QStringLiteral("sine-wave")
         && kind != QStringLiteral("harmonic-bond-wavepacket")
         && kind != QStringLiteral("harmonic-basis-states")
-        && kind != QStringLiteral("particle-in-box-step-expansion")) {
+        && kind != QStringLiteral("particle-in-box-step-expansion")
+        && kind != QStringLiteral("harmonic-displaced-state-expansion")) {
         set_error(error_message, QStringLiteral("Unsupported interactive-figure plot kind"));
         return false;
     }
@@ -109,6 +114,8 @@ bool parse_interactive_figure(
         parsed.kind = InteractiveFigureDefinition::Kind::HarmonicBasisStates;
     } else if (kind == QStringLiteral("particle-in-box-step-expansion")) {
         parsed.kind = InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion;
+    } else if (kind == QStringLiteral("harmonic-displaced-state-expansion")) {
+        parsed.kind = InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion;
     } else {
         parsed.kind = InteractiveFigureDefinition::Kind::SineWave;
     }
@@ -163,14 +170,21 @@ bool parse_interactive_figure(
         parsed.period_seconds = finite_number(
             controls, QStringLiteral("period_seconds"), parsed.period_seconds);
         parsed.loop = controls.value(QStringLiteral("loop")).toBool(false);
-    } else if (parsed.kind == InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion) {
+    } else if (parsed.kind == InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion
+               || parsed.kind
+                   == InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion) {
         parsed.y_min = finite_number(plot, QStringLiteral("y_min"), parsed.y_min);
         parsed.y_max = finite_number(plot, QStringLiteral("y_max"), parsed.y_max);
         parsed.y_label = plot.value(QStringLiteral("y_label")).toString(parsed.y_label);
-        parsed.step_position = finite_number(
-            plot, QStringLiteral("step_position"), parsed.step_position);
-        parsed.step_height = finite_number(
-            plot, QStringLiteral("step_height"), parsed.step_height);
+        if (parsed.kind == InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion) {
+            parsed.step_position = finite_number(
+                plot, QStringLiteral("step_position"), parsed.step_position);
+            parsed.step_height = finite_number(
+                plot, QStringLiteral("step_height"), parsed.step_height);
+        } else {
+            parsed.displacement = finite_number(
+                plot, QStringLiteral("displacement"), parsed.displacement);
+        }
         const QColor target_color(plot.value(QStringLiteral("target_color")).toString());
         const QColor approximation_color(
             plot.value(QStringLiteral("approximation_color")).toString());

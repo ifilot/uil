@@ -51,6 +51,7 @@ private slots:
     void harmonic_wavepacket_controls_update_status();
     void harmonic_basis_controls_update_phase_status();
     void particle_in_box_basis_slider_updates_fit_status();
+    void harmonic_displaced_basis_slider_updates_fit_status();
 
 private:
     QTemporaryDir settings_directory_;
@@ -496,6 +497,53 @@ void AudienceWindowTest::particle_in_box_basis_slider_updates_fit_status() {
     QVERIFY(status->text().contains(QStringLiteral("97.5%")));
     basis_count->setValue(16);
     QCoreApplication::processEvents();
+}
+
+void AudienceWindowTest::harmonic_displaced_basis_slider_updates_fit_status() {
+    AudienceWindow window;
+    window.resize(1100, 700);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    InteractiveFigureDefinition definition;
+    definition.kind = InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion;
+    definition.title = QStringLiteral("Fitting a stretched harmonic-oscillator state");
+    definition.background_svg = QByteArrayLiteral(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 520'>"
+        "<rect width='800' height='520' fill='#f8fafc'/></svg>");
+    definition.x_min = -6.0;
+    definition.x_max = 6.0;
+    definition.y_min = -0.2;
+    definition.y_max = 0.9;
+    definition.x_label = QStringLiteral("$y=x/\\alpha$");
+    definition.y_label = QStringLiteral("$\\Phi(y), S_N(y)$");
+    definition.displacement = 2.0;
+    window.set_interactive_figure_overlay(definition, QRectF(0.08, 0.08, 0.84, 0.84));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* figure = window.findChild<InteractiveFigureWidget*>(
+        QStringLiteral("interactiveFigureWidget"));
+    QVERIFY(figure);
+    auto* status = figure->findChild<QLabel*>(QStringLiteral("figureStatusLabel"));
+    auto* basis_count = figure->findChild<QSlider*>(QStringLiteral("figureAmplitudeSlider"));
+    QVERIFY(status);
+    QVERIFY(basis_count);
+    QCOMPARE(basis_count->minimum(), 1);
+    QCOMPARE(basis_count->maximum(), 25);
+    QVERIFY2(status->text().contains(QStringLiteral("13.53%")), qPrintable(status->text()));
+
+    for (int n = 1; n <= 25; ++n) {
+        basis_count->setValue(n);
+        QCoreApplication::processEvents();
+        QVERIFY2(status->text().contains(QStringLiteral("= %1").arg(n)),
+                 qPrintable(status->text()));
+    }
+    basis_count->setValue(5);
+    QVERIFY(status->text().contains(QStringLiteral("94.73%")));
+    basis_count->setValue(25);
+    QVERIFY(status->text().contains(QStringLiteral("100.00%")));
 }
 
 QTEST_MAIN(AudienceWindowTest)

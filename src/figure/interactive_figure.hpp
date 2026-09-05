@@ -12,6 +12,7 @@ struct InteractiveFigureDefinition {
         HarmonicBondWavepacket,
         HarmonicBasisStates,
         ParticleInBoxStepExpansion,
+        HarmonicDisplacedStateExpansion,
     };
 
     Kind kind = Kind::SineWave;
@@ -59,6 +60,7 @@ struct InteractiveFigureDefinition {
 
     double step_position = 0.5;
     double step_height = 1.0;
+    double displacement = 2.0;
     int basis_count_min = 1;
     int basis_count_max = 25;
     int basis_count_initial = 1;
