@@ -59,6 +59,7 @@ add_uil_unit_test(audience_window_test
     ${PROJECT_SOURCE_DIR}/src/ui/interactive_figure_widget.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/particle_in_box_basis.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
 )
@@ -89,6 +90,7 @@ add_uil_unit_test(app_controller_test
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/particle_in_box_basis.cpp
     ${PROJECT_SOURCE_DIR}/src/package/uil_package.cpp
 )
 target_compile_definitions(app_controller_test PRIVATE
@@ -121,6 +123,12 @@ add_uil_unit_test(molecule_geometry_test
 add_uil_unit_test(harmonic_wavepacket_test
     harmonic_wavepacket_test.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
+)
+
+add_uil_unit_test(particle_in_box_basis_test
+    particle_in_box_basis_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/particle_in_box_basis.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
 )
 
 add_uil_unit_test(molecule_widget_test

@@ -28,6 +28,20 @@ bool InteractiveFigureDefinition::is_valid() const {
     if (background_svg.isEmpty() || !(x_max > x_min)) {
         return false;
     }
+    if (kind == Kind::ParticleInBoxStepExpansion) {
+        return std::abs(x_min) < 1e-12
+            && std::abs(x_max - 1.0) < 1e-12
+            && y_max > y_min
+            && step_position > 0.0
+            && step_position < 1.0
+            && std::isfinite(step_height)
+            && step_height > 0.0
+            && basis_count_min >= 1
+            && basis_count_max >= basis_count_min
+            && basis_count_max <= 200
+            && basis_count_initial >= basis_count_min
+            && basis_count_initial <= basis_count_max;
+    }
     if (kind == Kind::HarmonicBondWavepacket || kind == Kind::HarmonicBasisStates) {
         return potential_y_max > 0.0
             && density_y_max > 0.0
@@ -82,7 +96,8 @@ bool parse_interactive_figure(
     const QString kind = plot.value(QStringLiteral("kind")).toString();
     if (kind != QStringLiteral("sine-wave")
         && kind != QStringLiteral("harmonic-bond-wavepacket")
-        && kind != QStringLiteral("harmonic-basis-states")) {
+        && kind != QStringLiteral("harmonic-basis-states")
+        && kind != QStringLiteral("particle-in-box-step-expansion")) {
         set_error(error_message, QStringLiteral("Unsupported interactive-figure plot kind"));
         return false;
     }
@@ -92,6 +107,8 @@ bool parse_interactive_figure(
         parsed.kind = InteractiveFigureDefinition::Kind::HarmonicBondWavepacket;
     } else if (kind == QStringLiteral("harmonic-basis-states")) {
         parsed.kind = InteractiveFigureDefinition::Kind::HarmonicBasisStates;
+    } else if (kind == QStringLiteral("particle-in-box-step-expansion")) {
+        parsed.kind = InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion;
     } else {
         parsed.kind = InteractiveFigureDefinition::Kind::SineWave;
     }
@@ -146,6 +163,30 @@ bool parse_interactive_figure(
         parsed.period_seconds = finite_number(
             controls, QStringLiteral("period_seconds"), parsed.period_seconds);
         parsed.loop = controls.value(QStringLiteral("loop")).toBool(false);
+    } else if (parsed.kind == InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion) {
+        parsed.y_min = finite_number(plot, QStringLiteral("y_min"), parsed.y_min);
+        parsed.y_max = finite_number(plot, QStringLiteral("y_max"), parsed.y_max);
+        parsed.y_label = plot.value(QStringLiteral("y_label")).toString(parsed.y_label);
+        parsed.step_position = finite_number(
+            plot, QStringLiteral("step_position"), parsed.step_position);
+        parsed.step_height = finite_number(
+            plot, QStringLiteral("step_height"), parsed.step_height);
+        const QColor target_color(plot.value(QStringLiteral("target_color")).toString());
+        const QColor approximation_color(
+            plot.value(QStringLiteral("approximation_color")).toString());
+        if (target_color.isValid()) parsed.target_color = target_color;
+        if (approximation_color.isValid()) {
+            parsed.approximation_color = approximation_color;
+        }
+
+        const QJsonObject basis_count = controls.value(
+            QStringLiteral("basis_count")).toObject();
+        parsed.basis_count_min = basis_count.value(QStringLiteral("min")).toInt(
+            parsed.basis_count_min);
+        parsed.basis_count_max = basis_count.value(QStringLiteral("max")).toInt(
+            parsed.basis_count_max);
+        parsed.basis_count_initial = basis_count.value(QStringLiteral("value")).toInt(
+            parsed.basis_count_initial);
     } else {
         const QColor color(plot.value(QStringLiteral("color")).toString(QStringLiteral("#2563eb")));
         if (color.isValid()) parsed.curve_color = color;

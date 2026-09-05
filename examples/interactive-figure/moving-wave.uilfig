@@ -10,8 +10,8 @@
     "x_max": 6.283185307,
     "y_min": -2.5,
     "y_max": 2.5,
-    "x_label": "x (radians)",
-    "y_label": "amplitude"
+    "x_label": "$x\\;\\mathrm{(radians)}$",
+    "y_label": "$y$"
   },
   "controls": {
     "amplitude": { "min": 0.0, "max": 2.0, "value": 1.0 },

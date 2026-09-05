@@ -50,6 +50,7 @@ private slots:
     void interactive_figure_controls_and_tool_switching();
     void harmonic_wavepacket_controls_update_status();
     void harmonic_basis_controls_update_phase_status();
+    void particle_in_box_basis_slider_updates_fit_status();
 
 private:
     QTemporaryDir settings_directory_;
@@ -342,6 +343,8 @@ void AudienceWindowTest::interactive_figure_controls_and_tool_switching() {
 
     InteractiveFigureDefinition definition;
     definition.title = QStringLiteral("A moving sine wave");
+    definition.x_label = QStringLiteral("$x\\;\\mathrm{(radians)}$");
+    definition.y_label = QStringLiteral("$y$");
     definition.background_svg = QByteArrayLiteral(
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 500'>"
         "<rect width='800' height='500' fill='#ffffff'/></svg>");
@@ -353,6 +356,7 @@ void AudienceWindowTest::interactive_figure_controls_and_tool_switching() {
         QStringLiteral("interactiveFigureWidget"));
     QVERIFY(figure);
     QVERIFY(figure->isVisible());
+    QVERIFY(figure->font().pixelSize() >= 28);
     auto* amplitude = figure->findChild<QSlider*>(QStringLiteral("figureAmplitudeSlider"));
     QVERIFY(amplitude);
     QVERIFY(!figure->findChild<QWidget*>(QStringLiteral("figureColorButton")));
@@ -381,6 +385,9 @@ void AudienceWindowTest::harmonic_wavepacket_controls_update_status() {
         "<rect width='800' height='600' fill='#f8fafc'/></svg>");
     definition.x_min = -5.0;
     definition.x_max = 5.0;
+    definition.x_label = QStringLiteral("$x = q / \\ell$");
+    definition.potential_label = QStringLiteral("$U/(\\hbar\\omega)$");
+    definition.density_label = QStringLiteral("$\\ell|\\psi|^2$");
     definition.animate_initially = false;
     window.set_interactive_figure_overlay(definition, QRectF(0.08, 0.08, 0.84, 0.84));
     window.show();
@@ -421,6 +428,7 @@ void AudienceWindowTest::harmonic_basis_controls_update_phase_status() {
         "<rect width='800' height='600' fill='#f8fafc'/></svg>");
     definition.x_min = -5.0;
     definition.x_max = 5.0;
+    definition.x_label = QStringLiteral("$x = q / \\ell$");
     definition.phase_initial = 0.5;
     definition.animate_initially = false;
     window.set_interactive_figure_overlay(definition, QRectF(0.08, 0.08, 0.84, 0.84));
@@ -435,11 +443,59 @@ void AudienceWindowTest::harmonic_basis_controls_update_phase_status() {
     QVERIFY(status);
     QVERIFY(phase);
     QVERIFY(!figure->findChild<QWidget*>(QStringLiteral("figureColorButton")));
-    QVERIFY(status->text().contains(QStringLiteral("coherent density moves")));
     QVERIFY(status->text().contains(QStringLiteral("τ = 0.500")));
     phase->setValue(750);
     QVERIFY(status->text().contains(QStringLiteral("τ = 0.750")));
-    QVERIFY(status->text().contains(QStringLiteral("real components evolve")));
+}
+
+void AudienceWindowTest::particle_in_box_basis_slider_updates_fit_status() {
+    AudienceWindow window;
+    window.resize(1100, 700);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    InteractiveFigureDefinition definition;
+    definition.kind = InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion;
+    definition.title = QStringLiteral("Fitting a step with box eigenfunctions");
+    definition.background_svg = QByteArrayLiteral(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 520'>"
+        "<rect width='800' height='520' fill='#f8fafc'/></svg>");
+    definition.x_min = 0.0;
+    definition.x_max = 1.0;
+    definition.y_min = -0.25;
+    definition.y_max = 1.25;
+    definition.x_label = QStringLiteral("$x$");
+    definition.y_label = QStringLiteral("$f(x), S_N(x)$");
+    window.set_interactive_figure_overlay(definition, QRectF(0.08, 0.08, 0.84, 0.84));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* figure = window.findChild<InteractiveFigureWidget*>(
+        QStringLiteral("interactiveFigureWidget"));
+    QVERIFY(figure);
+    auto* status = figure->findChild<QLabel*>(QStringLiteral("figureStatusLabel"));
+    auto* basis_count = figure->findChild<QSlider*>(QStringLiteral("figureAmplitudeSlider"));
+    QVERIFY(status);
+    QVERIFY(basis_count);
+    QCOMPARE(basis_count->minimum(), 1);
+    QCOMPARE(basis_count->maximum(), 25);
+    QVERIFY(status->text().contains(QStringLiteral("40.5%")));
+
+    for (int n = 1; n <= 25; ++n) {
+        basis_count->setValue(n);
+        QCoreApplication::processEvents();
+        QVERIFY2(status->text().contains(QStringLiteral("= %1").arg(n)),
+                 qPrintable(status->text()));
+    }
+    basis_count->setValue(5);
+    QVERIFY(status->text().contains(QStringLiteral("= 5")));
+    QVERIFY(status->text().contains(QStringLiteral("87.2%")));
+    basis_count->setValue(25);
+    QVERIFY(status->text().contains(QStringLiteral("= 25")));
+    QVERIFY(status->text().contains(QStringLiteral("97.5%")));
+    basis_count->setValue(16);
+    QCoreApplication::processEvents();
 }
 
 QTEST_MAIN(AudienceWindowTest)

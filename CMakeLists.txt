@@ -240,6 +240,8 @@ qt_add_executable(${UIL_VIEWER_TARGET}
     src/figure/interactive_figure.cpp
     src/figure/harmonic_wavepacket.hpp
     src/figure/harmonic_wavepacket.cpp
+    src/figure/particle_in_box_basis.hpp
+    src/figure/particle_in_box_basis.cpp
     src/molecule/molecule_geometry.hpp
     src/molecule/molecule_geometry.cpp
     src/molecule/molecule_camera.hpp

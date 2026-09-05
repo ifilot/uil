@@ -10,6 +10,7 @@
 
 class QLabel;
 class QFrame;
+class QGridLayout;
 class QPushButton;
 class QSlider;
 class QTimer;
@@ -37,12 +38,14 @@ private:
     void reset_controls();
     void update_labels();
     void update_harmonic_status();
+    void update_box_basis_status();
     void advance_animation();
     void set_harmonic_phase(double phase, bool update_slider);
     void set_animation_running(bool running);
 
     InteractiveFigureDefinition definition_;
     QVBoxLayout* root_layout_ = nullptr;
+    QGridLayout* controls_layout_ = nullptr;
     QFrame* controls_frame_ = nullptr;
     QLabel* status_label_ = nullptr;
     PlotCanvas* canvas_ = nullptr;

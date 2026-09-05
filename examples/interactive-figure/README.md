@@ -1,8 +1,10 @@
 # Embedded interactive figure prototype
 
-This three-slide deck demonstrates a moving sine wave, a displaced coherent
+This four-slide deck demonstrates a moving sine wave, a displaced coherent
 wavepacket in a harmonic bond, and a moving coherent-state density above its
-first six time-dependent real basis components. Every slide contains a normal poster and a
+first six time-dependent real basis components. The final slide fits a step
+function with between 1 and 25 particle-in-a-box basis functions and reports
+the fraction reproduced. Every slide contains a normal poster and a
 complete UIL interactive-figure payload. No companion file is required after
 the PDF is built.
 
@@ -13,16 +15,24 @@ make
 ```
 
 Open `build/interactive-figure-example.pdf` in an ordinary PDF reader to see the
-three static posters. Open the same file in UIL, start the audience view, and
+four static posters. Open the same file in UIL, start the audience view, and
 use the sliders and playback controls. The sine-wave slide
 offers amplitude and frequency controls; both oscillator slides offer phase and
-initial-stretch controls.
+initial-stretch controls. The step-expansion slide has a discrete, live-updating
+basis-count slider from 1 through 25.
 
 The version-one `.uilfig` format is intentionally a focused prototype. It
-supports the sine wave, coherent wavepacket, and six-component harmonic-basis
+supports the sine wave, coherent wavepacket, six-component harmonic-basis, and
+particle-in-a-box step-expansion
 views and proves embedded extraction, Qt SVG rendering, native controls, and
 the PDF fallback behavior end to end. Plot colors and continuous-loop behavior
 are authored exclusively in the JSON. The equation below the
 first figure is ordinary LaTeX slide content, outside the media annotation. The
 normative shape of the JSON document is recorded in
 `../../docs/interactive-figure-v1.schema.json`.
+
+Plot and axis labels accept a small, presentation-safe LaTeX math subset when
+wrapped in `$...$`. Supported notation includes `_` and `^` groups,
+`\frac`, `\mathrm`, `\sum`, `\pi`, `\psi`, `\omega`, `\tau`, `\ell`, and
+`\hbar`. UIL typesets these labels itself, so a LaTeX installation is not
+required on the presentation computer.

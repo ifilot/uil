@@ -265,7 +265,7 @@ void PdfMediaDetectorTest::bundled_interactive_figure_example_loads() {
     const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
     QCOMPARE(result.annotations.size(), 0);
     QCOMPARE(result.molecule_annotations.size(), 0);
-    QCOMPARE(result.interactive_figure_annotations.size(), 3);
+    QCOMPARE(result.interactive_figure_annotations.size(), 4);
 
     const PdfInteractiveFigureAnnotation& sine =
         result.interactive_figure_annotations.at(0);
@@ -273,8 +273,8 @@ void PdfMediaDetectorTest::bundled_interactive_figure_example_loads() {
     QCOMPARE(sine.file_name, QStringLiteral("moving-wave.uilfig"));
     QVERIFY2(sine.is_ready(), qPrintable(sine.error_message));
     QCOMPARE(sine.definition.title, QStringLiteral("A moving sine wave"));
-    QCOMPARE(sine.definition.x_label, QStringLiteral("x (radians)"));
-    QCOMPARE(sine.definition.y_label, QStringLiteral("amplitude"));
+    QCOMPARE(sine.definition.x_label, QStringLiteral("$x\\;\\mathrm{(radians)}$"));
+    QCOMPARE(sine.definition.y_label, QStringLiteral("$y$"));
 
     const PdfInteractiveFigureAnnotation& figure =
         result.interactive_figure_annotations.at(1);
@@ -287,7 +287,7 @@ void PdfMediaDetectorTest::bundled_interactive_figure_example_loads() {
     QCOMPARE(figure.definition.stretch_initial, 3.0);
     QCOMPARE(figure.definition.period_seconds, 8.0);
     QVERIFY(figure.definition.loop);
-    QCOMPARE(figure.definition.x_label, QStringLiteral("x = q / ℓ"));
+    QCOMPARE(figure.definition.x_label, QStringLiteral("$x = q / \\ell$"));
 
     const PdfInteractiveFigureAnnotation& basis =
         result.interactive_figure_annotations.at(2);
@@ -302,6 +302,19 @@ void PdfMediaDetectorTest::bundled_interactive_figure_example_loads() {
     QCOMPARE(
         basis.definition.title,
         QStringLiteral("A coherent packet and its real basis components"));
+
+    const PdfInteractiveFigureAnnotation& step_fit =
+        result.interactive_figure_annotations.at(3);
+    QCOMPARE(step_fit.page_index, 3);
+    QCOMPARE(
+        step_fit.file_name,
+        QStringLiteral("particle-in-box-step-expansion.uilfig"));
+    QVERIFY2(step_fit.is_ready(), qPrintable(step_fit.error_message));
+    QCOMPARE(
+        step_fit.definition.kind,
+        InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion);
+    QCOMPARE(step_fit.definition.basis_count_min, 1);
+    QCOMPARE(step_fit.definition.basis_count_max, 25);
 }
 
 void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {

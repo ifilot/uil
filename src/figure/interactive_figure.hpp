@@ -11,6 +11,7 @@ struct InteractiveFigureDefinition {
         SineWave,
         HarmonicBondWavepacket,
         HarmonicBasisStates,
+        ParticleInBoxStepExpansion,
     };
 
     Kind kind = Kind::SineWave;
@@ -55,6 +56,14 @@ struct InteractiveFigureDefinition {
         QColor(QStringLiteral("#be185d")),
         QColor(QStringLiteral("#0369a1")),
     };
+
+    double step_position = 0.5;
+    double step_height = 1.0;
+    int basis_count_min = 1;
+    int basis_count_max = 25;
+    int basis_count_initial = 1;
+    QColor target_color = QColor(QStringLiteral("#64748b"));
+    QColor approximation_color = QColor(QStringLiteral("#0f766e"));
 
     /** @brief Returns whether the definition contains usable plot bounds and SVG artwork. */
     bool is_valid() const;

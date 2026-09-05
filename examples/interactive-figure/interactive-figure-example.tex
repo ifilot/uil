@@ -102,6 +102,29 @@
   \end{tikzpicture}%
 }
 
+\newcommand{\stepfitposter}{%
+  \begin{tikzpicture}
+    \begin{axis}[
+      width=11.8cm,height=5.25cm,
+      xmin=0,xmax=1,ymin=-0.25,ymax=1.25,
+      grid=both,major grid style={draw=gray!22},
+      axis line style={draw=gray!70},
+      xlabel={$x$},ylabel={$f(x),\,S_N(x)$},
+      xtick={0,0.25,0.5,0.75,1},
+      xticklabels={$0$,$L/4$,$L/2$,$3L/4$,$L$},
+      title={Static PDF fallback: five particle-in-a-box basis functions},
+      title style={font=\small},domain=0:1,samples=260
+    ]
+      \addplot[gray!75,dashed,thick] coordinates {(0,0) (0.5,0) (0.5,1) (1,1)};
+      \addplot[teal!75!black,very thick]
+        {0.63662*sin(deg(pi*x)) - 0.63662*sin(deg(2*pi*x))
+          + 0.21221*sin(deg(3*pi*x)) + 0.12732*sin(deg(5*pi*x))};
+      \node[anchor=north east,font=\bfseries,text=teal!75!black]
+        at (axis description cs:0.97,0.95) {$N=5$: 87.2\% fit};
+    \end{axis}
+  \end{tikzpicture}%
+}
+
 \begin{document}
 
 \begin{frame}{A completely embedded interactive figure}
@@ -128,6 +151,13 @@
   \interactivefigure[width=11.8cm,height=6.15cm]
     {\basisposter}
     {harmonic-basis-states.uilfig}
+\end{frame}
+
+\begin{frame}{Fitting a step with particle-in-a-box eigenfunctions}
+  \centering
+  \interactivefigure[width=11.8cm,height=5.25cm]
+    {\stepfitposter}
+    {particle-in-box-step-expansion.uilfig}
 \end{frame}
 
 \end{document}
