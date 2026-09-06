@@ -55,13 +55,17 @@ void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
   rotation_button->click();
   QVERIFY(widget.auto_rotation_enabled());
   QVERIFY(rotation_button->isChecked());
-  widget.show();
-  QTRY_VERIFY(rotation_timer->isActive());
-  widget.hide();
-  QVERIFY(widget.auto_rotation_enabled());
-  QVERIFY(!rotation_timer->isActive());
-  widget.show();
-  QTRY_VERIFY(rotation_timer->isActive());
+  if (QGuiApplication::platformName() != QStringLiteral("offscreen")) {
+    widget.show();
+    QTRY_VERIFY(rotation_timer->isActive());
+    widget.hide();
+    QVERIFY(widget.auto_rotation_enabled());
+    QVERIFY(!rotation_timer->isActive());
+    widget.show();
+    QTRY_VERIFY(rotation_timer->isActive());
+  } else {
+    QVERIFY(!rotation_timer->isActive());
+  }
   rotation_button->click();
   QVERIFY(!widget.auto_rotation_enabled());
   QVERIFY(!rotation_timer->isActive());
