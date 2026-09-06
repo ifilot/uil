@@ -94,7 +94,7 @@ QByteArray atomic_orbital_pdf_fixture() {
         "\"sampling_plane\":{\"type\":\"xz\","
         "\"offset\":{\"min\":-1,\"max\":1,\"value\":0.25}},"
         "\"contour\":{\"colormap\":\"RdBu_r\","
-        "\"logarithmic_floor\":0.0001,\"levels\":14}}\n");
+        "\"maximum\":0.01,\"levels\":14}}\n");
     return QByteArrayLiteral(
         "%PDF-1.7\n"
         "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
@@ -387,6 +387,7 @@ void PdfMediaDetectorTest::embedded_atomic_orbital_loads() {
     QCOMPARE(orbital.definition.orbital, QStringLiteral("2pz"));
     QCOMPARE(orbital.definition.plane, AtomicOrbitalDefinition::Plane::XZ);
     QCOMPARE(orbital.definition.colormap, QStringLiteral("RdBu_r"));
+    QCOMPARE(orbital.definition.contour_maximum, 0.01);
     QCOMPARE(orbital.definition.offset_initial, 0.25);
     QVERIFY(result.summary().contains(QStringLiteral("embedded orbital ready")));
 }

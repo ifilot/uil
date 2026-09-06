@@ -232,7 +232,7 @@ Create `2pz.uilorb`:
   },
   "contour": {
     "colormap": "RdBu_r",
-    "logarithmic_floor": 0.0001,
+    "maximum": 0.1,
     "levels": 14
   }
 }
@@ -248,10 +248,16 @@ fractions of the sampled volume half-extent.
 labels. Delimit math with `$...$`; subscripts, superscripts, Greek symbols, and
 `\mathrm{...}` are rendered as formatted text rather than literal markup.
 
-Contour magnitudes are mapped logarithmically between `logarithmic_floor` and
-the largest sampled absolute wavefunction value. Available Matplotlib-inspired
-divergent maps are `coolwarm`, `seismic`, `bwr`, `RdBu`, `PuOr`, `BrBG`,
-`PiYG`, `PRGn`, and `RdGy`; append `_r` to reverse any map.
+Contour magnitudes are mapped on a fixed absolute logarithmic scale. The lower
+cutoff is always `1e-8` in wavefunction units; values below it use the neutral
+center color. Set `contour.maximum` to choose the symmetric positive and
+negative color limits. It defaults to `1e-2` and is snapped to the nearest
+power of ten, so the scale remains stable and its scientific-notation limits
+stay easy to read while the plane moves. Values beyond either limit saturate.
+
+Available Matplotlib-inspired divergent maps are `coolwarm`, `seismic`, `bwr`,
+`RdBu`, `PuOr`, `BrBG`, `PiYG`, `PRGn`, and `RdGy`; append `_r` to reverse any
+map.
 
 Reference the payload from `slides.tex`:
 

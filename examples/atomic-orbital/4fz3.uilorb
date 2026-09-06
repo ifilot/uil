@@ -15,7 +15,7 @@
   },
   "contour": {
     "colormap": "RdBu_r",
-    "logarithmic_floor": 0.00001,
+    "maximum": 0.01,
     "levels": 16
   }
 }

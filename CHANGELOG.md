@@ -29,6 +29,8 @@ Notable user-facing changes to `uil` are documented here.
 
 - Render atomic-orbital titles and panel notation as math text, enlarge their
   controls, and replace fixed-axis mouse rotation with a quaternion arcball.
+- Use a JSON-configurable, power-of-ten absolute maximum for orbital contour
+  colors, with a fixed `1e-8` cutoff and scientific-notation colorbar limits.
 - Generate atomic-orbital PDF posters from the live renderer and label them as
   interactive, keeping fallback previews consistent with the live object.
 

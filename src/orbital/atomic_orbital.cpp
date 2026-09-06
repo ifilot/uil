@@ -58,6 +58,18 @@ double finite_number(const QJsonObject& object, const QString& key, double fallb
     return std::isfinite(value) ? value : fallback;
 }
 
+double nearest_order_of_magnitude(double value) {
+    if (!std::isfinite(value) || value <= 0.0) return value;
+    return std::pow(10.0, std::round(std::log10(value)));
+}
+
+bool is_order_of_magnitude(double value) {
+    if (!std::isfinite(value) || value <= 0.0) return false;
+    const double exponent = std::round(std::log10(value));
+    return std::abs(value - std::pow(10.0, exponent))
+        <= value * 1.0e-10;
+}
+
 double factorial(int value) {
     return std::tgamma(double(value) + 1.0);
 }
@@ -343,7 +355,9 @@ bool AtomicOrbitalDefinition::is_valid() const {
         && std::isfinite(offset_initial) && offset_max > offset_min
         && offset_min >= -1.0 && offset_max <= 1.0
         && offset_initial >= offset_min && offset_initial <= offset_max
-        && logarithmic_floor > 0.0 && logarithmic_floor < 1.0
+        && contour_maximum > kAtomicOrbitalContourMinimum
+        && contour_maximum <= 1.0
+        && is_order_of_magnitude(contour_maximum)
         && contour_levels >= 2 && contour_levels <= 32
         && grid_size >= 33 && grid_size <= 129 && grid_size % 2 == 1;
 }
@@ -464,8 +478,8 @@ bool parse_atomic_orbital(
 
     const QJsonObject contour = root.value(QStringLiteral("contour")).toObject();
     parsed.colormap = contour.value(QStringLiteral("colormap")).toString(parsed.colormap);
-    parsed.logarithmic_floor = finite_number(
-        contour, QStringLiteral("logarithmic_floor"), parsed.logarithmic_floor);
+    parsed.contour_maximum = nearest_order_of_magnitude(finite_number(
+        contour, QStringLiteral("maximum"), parsed.contour_maximum));
     parsed.contour_levels = contour.value(QStringLiteral("levels")).toInt(parsed.contour_levels);
 
     if (parsed.title.size() > 200 || !parsed.is_valid()) {

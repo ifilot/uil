@@ -65,11 +65,12 @@
           ],
           "default": "coolwarm"
         },
-        "logarithmic_floor": {
+        "maximum": {
           "type": "number",
-          "exclusiveMinimum": 0,
-          "exclusiveMaximum": 1,
-          "default": 0.0001
+          "exclusiveMinimum": 1e-8,
+          "maximum": 1,
+          "default": 0.01,
+          "description": "Absolute wavefunction magnitude at the ends of the divergent scale. UIL snaps it to the nearest power of ten; the lower cutoff is fixed at 1e-8."
         },
         "levels": { "type": "integer", "minimum": 2, "maximum": 32, "default": 12 }
       }

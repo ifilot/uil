@@ -17,6 +17,7 @@ inline QString latex_segment_to_html(QString source, bool math_mode) {
     html.replace(QStringLiteral("\\;"), QStringLiteral("&#x2005;"));
     html.replace(QStringLiteral("\\quad"), QStringLiteral("&#x2003;"));
     html.replace(QStringLiteral("\\sum"), QStringLiteral("&Sigma;"));
+    html.replace(QStringLiteral("\\times"), QStringLiteral("&times;"));
     html.replace(QStringLiteral("\\pi"), QStringLiteral("&pi;"));
     html.replace(QStringLiteral("\\psi"), QStringLiteral("&psi;"));
     html.replace(QStringLiteral("\\Psi"), QStringLiteral("&Psi;"));

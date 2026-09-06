@@ -61,6 +61,13 @@ QString orbital_math_label(const QString& name) {
     return QStringLiteral("$%1$").arg(name);
 }
 
+QString signed_order_label(double value, bool positive) {
+    const int exponent = int(std::lround(std::log10(value)));
+    return QStringLiteral("$%1\\,1\\times10^{%2}$")
+        .arg(positive ? QStringLiteral("+") : QStringLiteral("-"))
+        .arg(exponent);
+}
+
 int plane_index(AtomicOrbitalDefinition::Plane plane) {
     switch (plane) {
     case AtomicOrbitalDefinition::Plane::XY: return 0;
@@ -267,22 +274,23 @@ vec3 plane_world(vec2 uv, int plane, float offset, float extent) {
     return vec3(offset * extent, p.x, p.y);
 }
 vec4 sampled_color(vec3 world, sampler3D volume_texture, sampler1D color_texture,
-                   mat4 inverse_rotation, float extent, float maximum_value,
-                   float logarithmic_floor, int contour_levels) {
+                   mat4 inverse_rotation, float extent, float minimum_value,
+                   float maximum_value, int contour_levels) {
     vec3 object_position = (inverse_rotation * vec4(world, 1.0)).xyz;
     vec3 tc = object_position / (2.0 * extent) + vec3(0.5);
     if (any(lessThan(tc, vec3(0.0))) || any(greaterThan(tc, vec3(1.0)))) {
         return vec4(0.97, 0.97, 0.98, 1.0);
     }
     float value = texture(volume_texture, tc).r;
-    float ratio = clamp(abs(value) / maximum_value, 0.0, 1.0);
-    float magnitude = log(1.0 + ratio / logarithmic_floor)
-        / log(1.0 + 1.0 / logarithmic_floor);
+    float absolute_value = abs(value);
+    float magnitude = absolute_value <= minimum_value ? 0.0
+        : clamp(log(absolute_value / minimum_value)
+                / log(maximum_value / minimum_value), 0.0, 1.0);
     float signed_value = sign(value) * magnitude;
     vec3 color = texture(color_texture, 0.5 + 0.5 * signed_value).rgb;
-    if (ratio > logarithmic_floor) {
-        float log_position = -log(max(ratio, logarithmic_floor))
-            / -log(logarithmic_floor);
+    if (absolute_value > minimum_value && absolute_value < maximum_value) {
+        float log_position = log(absolute_value / minimum_value)
+            / log(maximum_value / minimum_value);
         float line_distance = abs(fract(log_position * float(contour_levels)) - 0.5);
         if (line_distance > 0.46) color *= 0.58;
     }
@@ -297,13 +305,13 @@ uniform sampler3D volume_texture;
 uniform sampler1D color_texture;
 uniform mat4 inverse_rotation;
 uniform float extent;
+uniform float minimum_value;
 uniform float maximum_value;
-uniform float logarithmic_floor;
 uniform int contour_levels;
 out vec4 fragment_color;
 void main() {
     vec4 color = sampled_color(world_position, volume_texture, color_texture,
-        inverse_rotation, extent, maximum_value, logarithmic_floor, contour_levels);
+        inverse_rotation, extent, minimum_value, maximum_value, contour_levels);
     fragment_color = vec4(color.rgb, 0.58);
 })glsl");
     static constexpr char contour_vertex[] = R"glsl(#version 330 core
@@ -334,15 +342,15 @@ uniform sampler1D color_texture;
 uniform mat4 inverse_rotation;
 uniform float extent;
 uniform float plane_offset;
+uniform float minimum_value;
 uniform float maximum_value;
-uniform float logarithmic_floor;
 uniform int contour_levels;
 uniform int plane;
 out vec4 fragment_color;
 void main() {
     vec3 world = plane_world(uv, plane, plane_offset, extent);
     fragment_color = sampled_color(world, volume_texture, color_texture,
-        inverse_rotation, extent, maximum_value, logarithmic_floor, contour_levels);
+        inverse_rotation, extent, minimum_value, maximum_value, contour_levels);
 })glsl");
 
     const auto make_program = [this](const QByteArray& vertex, const QByteArray& fragment) {
@@ -571,8 +579,9 @@ void AtomicOrbitalWidget::draw_sampling_plane(
     plane_program_->setUniformValue("view_projection", projection * view);
     plane_program_->setUniformValue("inverse_rotation", inverse_rotation);
     plane_program_->setUniformValue("extent", volume_.half_extent);
-    plane_program_->setUniformValue("maximum_value", volume_.maximum_absolute_value);
-    plane_program_->setUniformValue("logarithmic_floor", float(definition_.logarithmic_floor));
+    plane_program_->setUniformValue(
+        "minimum_value", float(kAtomicOrbitalContourMinimum));
+    plane_program_->setUniformValue("maximum_value", float(definition_.contour_maximum));
     plane_program_->setUniformValue("contour_levels", definition_.contour_levels);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_3D, volume_texture_);
@@ -597,8 +606,9 @@ void AtomicOrbitalWidget::draw_contour(
     contour_program_->setUniformValue("inverse_rotation", inverse_rotation);
     contour_program_->setUniformValue("extent", volume_.half_extent);
     contour_program_->setUniformValue("plane_offset", float(plane_offset()));
-    contour_program_->setUniformValue("maximum_value", volume_.maximum_absolute_value);
-    contour_program_->setUniformValue("logarithmic_floor", float(definition_.logarithmic_floor));
+    contour_program_->setUniformValue(
+        "minimum_value", float(kAtomicOrbitalContourMinimum));
+    contour_program_->setUniformValue("maximum_value", float(definition_.contour_maximum));
     contour_program_->setUniformValue("contour_levels", definition_.contour_levels);
     contour_program_->setUniformValue("plane", plane_index(definition_.plane));
     glActiveTexture(GL_TEXTURE0);
@@ -696,7 +706,7 @@ void AtomicOrbitalWidget::draw_labels_and_colorbar() {
         Qt::AlignLeft | Qt::AlignTop, label_font, QColor(QStringLiteral("#1f2937")));
     ui_math_text::draw(
         painter, right_logical_viewport().adjusted(6, 2, -4, -3),
-        QStringLiteral("Signed $\\psi$ contour"),
+        QStringLiteral("Signed $\\psi$ contour ($a_0^{-3/2}$)"),
         Qt::AlignLeft | Qt::AlignTop, label_font, QColor(QStringLiteral("#1f2937")));
 
     painter.setPen(QPen(QColor(75, 85, 99), 1.0));
@@ -704,7 +714,7 @@ void AtomicOrbitalWidget::draw_labels_and_colorbar() {
     painter.drawRect(right_logical_viewport().adjusted(0, 0, -1, -1));
 
     const QRect right = right_logical_viewport();
-    const QRect bar(right.right() - 27, right.top() + 50, 16,
+    const QRect bar(right.right() - 43, right.top() + 50, 16,
                     std::max(10, right.height() - 72));
     const QVector<QColor> colors = atomic_orbital_colormap(definition_.colormap);
     for (int y = 0; y < bar.height(); ++y) {
@@ -720,12 +730,27 @@ void AtomicOrbitalWidget::draw_labels_and_colorbar() {
     legend_font.setPixelSize(kLegendPixelSize);
     painter.setFont(legend_font);
     painter.drawRect(bar.adjusted(0, 0, -1, -1));
-    painter.drawText(QRect(bar.left() - 76, bar.top() - 10, 68, 24),
-                     Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("+max"));
-    painter.drawText(QRect(bar.left() - 76, bar.center().y() - 12, 68, 24),
-                     Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("0"));
-    painter.drawText(QRect(bar.left() - 76, bar.bottom() - 14, 68, 24),
-                     Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("−max"));
+    const QRectF label_bounds(bar.left() - 106, 0, 98, 24);
+    ui_math_text::draw(
+        painter, label_bounds.translated(0, bar.top() - 10),
+        signed_order_label(definition_.contour_maximum, true),
+        Qt::AlignRight | Qt::AlignVCenter, legend_font, QColor(55, 65, 81));
+    ui_math_text::draw(
+        painter, label_bounds.translated(0, bar.center().y() - 30),
+        signed_order_label(kAtomicOrbitalContourMinimum, true),
+        Qt::AlignRight | Qt::AlignVCenter, legend_font, QColor(55, 65, 81));
+    ui_math_text::draw(
+        painter, label_bounds.translated(0, bar.center().y() + 6),
+        signed_order_label(kAtomicOrbitalContourMinimum, false),
+        Qt::AlignRight | Qt::AlignVCenter, legend_font, QColor(55, 65, 81));
+    ui_math_text::draw(
+        painter, QRectF(bar.right() + 5, bar.center().y() - 12, 22, 24),
+        QStringLiteral("$0$"), Qt::AlignLeft | Qt::AlignVCenter,
+        legend_font, QColor(55, 65, 81));
+    ui_math_text::draw(
+        painter, label_bounds.translated(0, bar.bottom() - 14),
+        signed_order_label(definition_.contour_maximum, false),
+        Qt::AlignRight | Qt::AlignVCenter, legend_font, QColor(55, 65, 81));
     if (!renderer_error_.isEmpty()) {
         painter.setPen(QColor(QStringLiteral("#b91c1c")));
         painter.drawText(rect().adjusted(20, 30, -20, -kControlHeight),

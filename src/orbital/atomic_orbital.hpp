@@ -6,6 +6,8 @@
 #include <QVector>
 #include <QVector3D>
 
+inline constexpr double kAtomicOrbitalContourMinimum = 1.0e-8;
+
 /** @brief One real hydrogen-like orbital exposed by the atomic-orbital object. */
 struct AtomicOrbitalCatalogEntry {
     QString name;
@@ -32,7 +34,8 @@ struct AtomicOrbitalDefinition {
     double offset_min = -1.0;
     double offset_max = 1.0;
     double offset_initial = 0.0;
-    double logarithmic_floor = 1.0e-4;
+    // Absolute symmetric color limit; always stored as a power of ten.
+    double contour_maximum = 1.0e-2;
     int contour_levels = 12;
     int grid_size = 65;
 

@@ -63,7 +63,7 @@ void AtomicOrbitalTest::payload_parses_rendering_and_sampling_options() {
       },
       "contour": {
         "colormap": "RdBu_r",
-        "logarithmic_floor": 0.0001,
+        "maximum": 0.004,
         "levels": 14
       }
     })json";
@@ -77,6 +77,7 @@ void AtomicOrbitalTest::payload_parses_rendering_and_sampling_options() {
     QCOMPARE(definition.plane, AtomicOrbitalDefinition::Plane::XZ);
     QCOMPARE(definition.colormap, QStringLiteral("RdBu_r"));
     QCOMPARE(definition.contour_levels, 14);
+    QCOMPARE(definition.contour_maximum, 0.01);
     QCOMPARE(definition.isovalue, 0.0125);
 }
 
@@ -92,6 +93,14 @@ void AtomicOrbitalTest::invalid_orbital_and_colormap_are_rejected() {
         QByteArrayLiteral(R"({
           "format":"uil.atomic-orbital","version":1,"orbital":"2s",
           "contour":{"colormap":"viridis"}
+        })"),
+        &definition, &error));
+    QVERIFY(error.contains(QStringLiteral("invalid")));
+
+    QVERIFY(!parse_atomic_orbital(
+        QByteArrayLiteral(R"({
+          "format":"uil.atomic-orbital","version":1,"orbital":"2s",
+          "contour":{"maximum":1e-9}
         })"),
         &definition, &error));
     QVERIFY(error.contains(QStringLiteral("invalid")));
