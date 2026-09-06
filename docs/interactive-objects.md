@@ -355,6 +355,13 @@ sampling controls share geometry. Qt's implicitly shared arrays avoid copying la
 into each widget. Unchanged definitions preserve the existing view and GPU resources; presentation
 changes using the same cached volume reuse the geometry buffers and refresh the palette/plane.
 
+Each plot also retains up to 32 MiB of inactive GPU meshes and 3D textures using an LRU
+cache. Revisiting a retained orbital restores those resources without uploading geometry again;
+palettes and sampling-plane controls are refreshed independently. This budget counts vertex and
+texture payloads, excluding the active orbital, framebuffer attachments, and driver overhead.
+Cached resources are released in their owning OpenGL context, including when Qt recreates that
+context. They do not retain additional copies of the CPU volume arrays.
+
 Current-slide requests precede prefetches for the next, previous, and second-next slide.
 Repeated requests share one build. Navigating replaces unstarted speculative requests; at most
 two already-running builds finish before new work can start. Completions only populate matching
@@ -367,7 +374,9 @@ for the audience window's lifetime and does not write files or require changes t
 The Windows release-build regression benchmark (Qt 6.10.1, grid 81) measured a 5g build at
 335 ms, an asynchronous request at 0.11 ms, and shared cache lookup at 0.043 microseconds.
 The atlas integration test measured three rapid cold navigation calls at 1.23 ms combined
-and a cached four-orbital navigation call at 76 ms, including widget updates. These are local
+and a cached four-orbital navigation call at 76 ms before GPU caching. With the GPU cache,
+the same integration test measured 38 ms and verified zero geometry uploads on the revisit.
+These are local
 measurements, not frame-presentation guarantees; uncached PDF rendering and GPU work still
 contribute to visible transition time. Reproduce the measurements with
 `atomic_orbital_cache_test -o cache.txt,txt` and

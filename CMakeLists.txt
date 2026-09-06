@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(uil VERSION 0.2.1 LANGUAGES C CXX)
+project(uil VERSION 0.3.0 LANGUAGES C CXX)
 
 include(CTest)
 

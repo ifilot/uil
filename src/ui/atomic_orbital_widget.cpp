@@ -23,6 +23,14 @@
 #include <utility>
 
 namespace {
+constexpr qint64 kGpuCacheBudget = 32 * 1024 * 1024;
+
+/** @brief Compares every input to orbital geometry, excluding presentation settings. */
+bool same_geometry(const AtomicOrbitalDefinition& a, const AtomicOrbitalDefinition& b) {
+  return a.n == b.n && a.l == b.l && a.m == b.m && a.grid_size == b.grid_size &&
+         a.isovalue == b.isovalue;
+}
+
 constexpr int kControlHeight = 78;
 constexpr int kHeaderHeight = 54;
 constexpr int kOuterMargin = 12;
@@ -116,6 +124,27 @@ struct AtomicOrbitalWidget::Mesh {
     }
 };
 
+struct AtomicOrbitalWidget::CachedGpuVolume {
+  AtomicOrbitalDefinition definition;
+  std::unique_ptr<Mesh> positive;
+  std::unique_ptr<Mesh> negative;
+  GLuint texture = 0;
+  qint64 bytes = 0;
+};
+
+quint64 AtomicOrbitalWidget::geometry_upload_count() const { return geometry_upload_count_; }
+qint64 AtomicOrbitalWidget::gpu_cache_bytes() const { return gpu_cache_bytes_; }
+
+void AtomicOrbitalWidget::clear_gpu_cache() {
+  for (auto& entry : gpu_cache_) {
+    glDeleteTextures(1, &entry->texture);
+    entry->positive->destroy();
+    entry->negative->destroy();
+  }
+  gpu_cache_.clear();
+  gpu_cache_bytes_ = 0;
+}
+
 AtomicOrbitalWidget::AtomicOrbitalWidget(QWidget* parent) : QOpenGLWidget(parent) {
     setObjectName(QStringLiteral("atomicOrbitalWidget"));
     QSurfaceFormat surface_format = format();
@@ -134,11 +163,12 @@ AtomicOrbitalWidget::AtomicOrbitalWidget(QWidget* parent) : QOpenGLWidget(parent
 }
 
 AtomicOrbitalWidget::~AtomicOrbitalWidget() {
-    if (context() && context()->isValid()) {
-        makeCurrent();
-        destroy_renderer();
-        doneCurrent();
-    }
+  disconnect(context_cleanup_connection_);
+  if (context() && context()->isValid()) {
+    makeCurrent();
+    destroy_renderer();
+    doneCurrent();
+  }
 }
 
 void AtomicOrbitalWidget::set_definition(const AtomicOrbitalDefinition& definition) {
@@ -155,7 +185,8 @@ void AtomicOrbitalWidget::set_prepared_definition(const AtomicOrbitalDefinition&
   if (!definition.is_valid()) return;
   if (definition_ == definition && volume_.is_valid()) return;
   const bool reuse_geometry = renderer_ready_ && !volume_dirty_ && volume_.is_valid() &&
-                              volume_.values.constData() == volume.values.constData();
+                              uploaded_bytes_ > 0 &&
+                              same_geometry(uploaded_definition_, definition);
   definition_ = definition;
   volume_ = volume;
   renderer_error_ = error;
@@ -257,6 +288,15 @@ void AtomicOrbitalWidget::reset_view() {
 
 void AtomicOrbitalWidget::initializeGL() {
     initializeOpenGLFunctions();
+    disconnect(context_cleanup_connection_);
+    context_cleanup_connection_ = connect(
+        context(), &QOpenGLContext::aboutToBeDestroyed, this,
+        [this] {
+          makeCurrent();
+          destroy_renderer();
+          doneCurrent();
+        },
+        Qt::DirectConnection);
     renderer_ready_ = create_renderer();
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
@@ -444,28 +484,77 @@ void main() {
 }
 
 void AtomicOrbitalWidget::destroy_renderer() {
-    if (positive_mesh_) positive_mesh_->destroy();
-    if (negative_mesh_) negative_mesh_->destroy();
-    positive_mesh_.reset();
-    negative_mesh_.reset();
-    plane_vao_.destroy();
-    quad_vao_.destroy();
-    plane_buffer_.destroy();
-    axis_vao_.destroy();
-    axis_buffer_.destroy();
-    if (volume_texture_) glDeleteTextures(1, &volume_texture_);
-    if (colormap_texture_) glDeleteTextures(1, &colormap_texture_);
-    volume_texture_ = 0;
-    colormap_texture_ = 0;
-    surface_program_.reset();
-    plane_program_.reset();
-    contour_program_.reset();
-    axis_program_.reset();
-    renderer_ready_ = false;
+  clear_gpu_cache();
+  uploaded_bytes_ = 0;
+  volume_dirty_ = volume_.is_valid();
+  if (positive_mesh_) positive_mesh_->destroy();
+  if (negative_mesh_) negative_mesh_->destroy();
+  positive_mesh_.reset();
+  negative_mesh_.reset();
+  plane_vao_.destroy();
+  quad_vao_.destroy();
+  plane_buffer_.destroy();
+  axis_vao_.destroy();
+  axis_buffer_.destroy();
+  if (volume_texture_) glDeleteTextures(1, &volume_texture_);
+  if (colormap_texture_) glDeleteTextures(1, &colormap_texture_);
+  volume_texture_ = 0;
+  colormap_texture_ = 0;
+  surface_program_.reset();
+  plane_program_.reset();
+  contour_program_.reset();
+  axis_program_.reset();
+  renderer_ready_ = false;
 }
 
 bool AtomicOrbitalWidget::upload_volume() {
     if (!volume_.is_valid() || !surface_program_) return false;
+    // Remove the requested entry before eviction, so admitting the outgoing volume
+    // cannot evict the very geometry we are about to display.
+    std::unique_ptr<CachedGpuVolume> hit;
+    for (auto it = gpu_cache_.begin(); it != gpu_cache_.end(); ++it) {
+      if (same_geometry((*it)->definition, definition_)) {
+        hit = std::move(*it);
+        gpu_cache_bytes_ -= hit->bytes;
+        gpu_cache_.erase(it);
+        break;
+      }
+    }
+    if (uploaded_bytes_ > 0 && uploaded_bytes_ <= kGpuCacheBudget) {
+      while (gpu_cache_bytes_ + uploaded_bytes_ > kGpuCacheBudget && !gpu_cache_.empty()) {
+        auto& oldest = gpu_cache_.front();
+        glDeleteTextures(1, &oldest->texture);
+        oldest->positive->destroy();
+        oldest->negative->destroy();
+        gpu_cache_bytes_ -= oldest->bytes;
+        gpu_cache_.erase(gpu_cache_.begin());
+      }
+      auto outgoing = std::make_unique<CachedGpuVolume>();
+      outgoing->definition = uploaded_definition_;
+      outgoing->positive = std::move(positive_mesh_);
+      outgoing->negative = std::move(negative_mesh_);
+      outgoing->texture = std::exchange(volume_texture_, 0);
+      outgoing->bytes = uploaded_bytes_;
+      gpu_cache_bytes_ += outgoing->bytes;
+      gpu_cache_.push_back(std::move(outgoing));
+    }
+    uploaded_bytes_ = 0;
+    if (hit) {
+      if (positive_mesh_) positive_mesh_->destroy();
+      if (negative_mesh_) negative_mesh_->destroy();
+      if (volume_texture_) glDeleteTextures(1, &volume_texture_);
+      positive_mesh_ = std::move(hit->positive);
+      negative_mesh_ = std::move(hit->negative);
+      volume_texture_ = hit->texture;
+      uploaded_bytes_ = hit->bytes;
+      uploaded_definition_ = definition_;
+      upload_colormap();
+      volume_dirty_ = false;
+      renderer_error_.clear();
+      update_plane_buffer();
+      return true;
+    }
+
     if (positive_mesh_) positive_mesh_->destroy();
     if (negative_mesh_) negative_mesh_->destroy();
     positive_mesh_ = std::make_unique<Mesh>();
@@ -489,10 +578,15 @@ bool AtomicOrbitalWidget::upload_volume() {
     const float border[] = {0, 0, 0, 0};
     glTexParameterfv(GL_TEXTURE_3D, GL_TEXTURE_BORDER_COLOR, border);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    ++geometry_upload_count_;
     glTexImage3D(GL_TEXTURE_3D, 0, GL_R32F,
                  volume_.grid_size, volume_.grid_size, volume_.grid_size,
                  0, GL_RED, GL_FLOAT, volume_.values.constData());
 
+    uploaded_definition_ = definition_;
+    uploaded_bytes_ = qint64(volume_.values.size()) * sizeof(float) +
+                      qint64(volume_.positive_vertices.size() + volume_.negative_vertices.size()) *
+                          sizeof(AtomicOrbitalVertex);
     glBindTexture(GL_TEXTURE_3D, 0);
     upload_colormap();
     volume_dirty_ = false;

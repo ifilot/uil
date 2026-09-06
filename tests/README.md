@@ -77,3 +77,8 @@ Run `python3 tests/latex_orbital_test.py` with pdfLaTeX, LuaLaTeX, and qpdf
 installed. This verifies every atlas identifier, embedded payloads, multiple
 annotations per page, exact custom-poster dimensions, local options, and
 expected error messages. XeLaTeX static-mode checks run when available.
+
+The orbital widget regression also checks GPU-cache hits without new texture uploads, exact
+frame restoration, palette changes, LRU eviction within the 32 MiB per-widget payload budget,
+and reparenting across OpenGL contexts. Atlas navigation asserts that a warm four-orbital
+revisit performs zero geometry uploads.

@@ -216,10 +216,15 @@ void AppControllerTest::orbital_atlas_navigation() {
   QTRY_VERIFY_WITH_TIMEOUT(matches_page(12), 15000);
   controller.go_to_page(0);
   QTRY_VERIFY_WITH_TIMEOUT(matches_page(0), 15000);
+  const auto widgets = window.findChildren<AtomicOrbitalWidget*>();
+  QVector<quint64> uploads;
+  for (const auto* widget : widgets) uploads.push_back(widget->geometry_upload_count());
   timer.restart();
   controller.go_to_page(12);
   const double warm_ms = timer.nsecsElapsed() / 1e6;
   QTRY_VERIFY_WITH_TIMEOUT(matches_page(12), 15000);
+  for (int i = 0; i < widgets.size(); ++i)
+    QCOMPARE(widgets[i]->geometry_upload_count(), uploads[i]);
   qInfo(
       "Atlas: three cold navigation requests %.3f ms total; cached four-orbital transition %.3f ms",
       jump_ms, warm_ms);

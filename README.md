@@ -2,7 +2,7 @@
 
 Pronounced `/œyl/`.
 
-[![Version](https://img.shields.io/badge/version-v0.2.1-blue.svg)](https://github.com/ifilot/uil/releases)
+[![Version](https://img.shields.io/badge/version-v0.3.0-blue.svg)](https://github.com/ifilot/uil/releases)
 [![License: LGPL v3](https://img.shields.io/badge/license-LGPL--3.0--only-blue.svg)](LICENSE)
 [![Sanitizers](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml)
 
