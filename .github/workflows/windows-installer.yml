@@ -3,6 +3,7 @@ name: Windows Installer
 on:
   push:
     branches:
+      - develop
       - main
       - master
     tags:
