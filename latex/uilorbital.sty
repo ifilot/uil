@@ -1,0 +1,99 @@
+%% uilorbital.sty -- self-contained UIL atomic-orbital annotations
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{uilorbital}[2026/09/06 v0.1 UIL embedded atomic orbitals]
+
+\RequirePackage{embedfile}
+\RequirePackage{graphicx}
+\RequirePackage{keyval}
+
+\makeatletter
+
+\newif\ifuilorb@supported
+\newif\ifuilorb@widthset
+\newif\ifuilorb@heightset
+\newif\ifuilorb@depthset
+\newcounter{uilorb@asset}
+\newdimen\uilorb@width
+\newdimen\uilorb@height
+\newdimen\uilorb@depth
+
+\ifdefined\pdfextension
+  \uilorb@supportedtrue
+  \protected\def\uilorb@pdfannot{\pdfextension annot }
+\else
+  \ifdefined\pdfannot
+    \uilorb@supportedtrue
+    \let\uilorb@pdfannot\pdfannot
+  \else
+    \uilorb@supportedfalse
+  \fi
+\fi
+
+\define@key{uilorbital}{width}{\uilorb@width=#1\relax\uilorb@widthsettrue}
+\define@key{uilorbital}{height}{\uilorb@height=#1\relax\uilorb@heightsettrue}
+\define@key{uilorbital}{depth}{\uilorb@depth=#1\relax\uilorb@depthsettrue}
+\define@key{uilorbital}{borderwidth}{\def\uilorb@borderwidth{#1}}
+
+%% Usage: \atomicorbital[width=...,height=...]{poster material}{orbital.uilorb}
+\newcommand\atomicorbital[3][]{%
+  \leavevmode
+  \IfFileExists{#3}{}{%
+    \PackageError{uilorbital}{The atomic orbital `#3' was not found}{}%
+  }%
+  \setbox\@tempboxa=\hbox{#2}%
+  \uilorb@width=\wd\@tempboxa
+  \uilorb@height=\ht\@tempboxa
+  \uilorb@depth=\dp\@tempboxa
+  \def\uilorb@borderwidth{0}%
+  \uilorb@widthsetfalse
+  \uilorb@heightsetfalse
+  \uilorb@depthsetfalse
+  \setkeys{uilorbital}{#1}%
+  \ifuilorb@heightset
+    \ifuilorb@depthset\else
+      \uilorb@depth=0pt
+    \fi
+  \fi
+  \ifuilorb@widthset
+    \ifuilorb@heightset
+      \setbox\@tempboxa=\hbox{%
+        \resizebox*{\uilorb@width}{\dimexpr\uilorb@height+\uilorb@depth\relax}{\box\@tempboxa}}%
+    \else
+      \setbox\@tempboxa=\hbox{\resizebox{\uilorb@width}{!}{\box\@tempboxa}}%
+    \fi
+  \else
+    \ifuilorb@heightset
+      \setbox\@tempboxa=\hbox{%
+        \resizebox*{!}{\dimexpr\uilorb@height+\uilorb@depth\relax}{\box\@tempboxa}}%
+    \fi
+  \fi
+  \uilorb@width=\wd\@tempboxa
+  \uilorb@height=\ht\@tempboxa
+  \uilorb@depth=\dp\@tempboxa
+  \stepcounter{uilorb@asset}%
+  \edef\uilorb@id{uilorbital-\arabic{uilorb@asset}}%
+  \ifuilorb@supported
+    \embedfile[
+      id=\uilorb@id,
+      filespec=#3,
+      ucfilespec=#3,
+      mimetype=application/vnd.uil.atomic-orbital,
+      desc={UIL atomic orbital},
+      afrelationship=Supplement
+    ]{#3}%
+    \uilorb@pdfannot width \uilorb@width height \uilorb@height depth \uilorb@depth {%
+      /Subtype /UILAtomicOrbital
+      /Border [0 0 \uilorb@borderwidth]
+      /UIL <<
+        /Version 1
+        /Asset \embedfilegetobject{\uilorb@id}{Filespec}
+      >>
+    }%
+  \else
+    \PackageError{uilorbital}{Only pdfLaTeX and LuaLaTeX are currently supported}{}%
+  \fi
+  \box\@tempboxa
+}
+
+\makeatother
+\endinput

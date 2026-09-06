@@ -2,6 +2,7 @@
 
 #include "figure/interactive_figure.hpp"
 #include "molecule/molecule_geometry.hpp"
+#include "orbital/atomic_orbital.hpp"
 
 #include <QColor>
 #include <QHash>
@@ -26,6 +27,7 @@ class QResizeEvent;
 class QWheelEvent;
 class MoleculeWidget;
 class InteractiveFigureWidget;
+class AtomicOrbitalWidget;
 
 class AudienceWindow : public QWidget {
     Q_OBJECT
@@ -63,6 +65,12 @@ public:
         QRectF slide_rect);
     /** @brief Clears the active embedded interactive figure. */
     void clear_interactive_figure_overlay();
+    /** @brief Displays an embedded atomic orbital over a normalized slide rectangle. */
+    void set_atomic_orbital_overlay(
+        const AtomicOrbitalDefinition& definition,
+        QRectF slide_rect);
+    /** @brief Clears the active embedded atomic orbital. */
+    void clear_atomic_orbital_overlay();
     /** @brief Selects the screen on which the audience window appears. */
     void set_audience_screen(QScreen* screen);
     /** @brief Enters full-screen presentation mode. */
@@ -255,6 +263,10 @@ private:
     void update_interactive_figure_overlay_geometry();
     /** @brief Saves the current figure frame before disabling interaction. */
     void capture_interactive_figure_frame();
+    /** @brief Repositions and shows or hides the active atomic orbital. */
+    void update_atomic_orbital_overlay_geometry();
+    /** @brief Saves the current atomic-orbital frame before disabling interaction. */
+    void capture_atomic_orbital_frame();
 
     QString current_texture_key_;
     QImage current_slide_image_;
@@ -267,6 +279,9 @@ private:
     std::unique_ptr<InteractiveFigureWidget> interactive_figure_widget_;
     QRectF interactive_figure_rect_;
     QImage interactive_figure_snapshot_frame_;
+    std::unique_ptr<AtomicOrbitalWidget> atomic_orbital_widget_;
+    QRectF atomic_orbital_rect_;
+    QImage atomic_orbital_snapshot_frame_;
     QHash<int, QImage> deck_overview_images_;
     QSize deck_overview_image_size_;
     QHash<QString, QImage> annotation_images_;
@@ -296,5 +311,6 @@ private:
     QPointer<QWidget> feature_menu_;
     bool molecule_suspended_for_feature_menu_ = false;
     bool interactive_figure_suspended_for_feature_menu_ = false;
+    bool atomic_orbital_suspended_for_feature_menu_ = false;
     bool resume_molecule_vibration_after_menu_ = false;
 };

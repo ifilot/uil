@@ -1,4 +1,5 @@
 #include "ui/audience_window.hpp"
+#include "ui/atomic_orbital_widget.hpp"
 #include "ui/interactive_figure_widget.hpp"
 #include "ui/molecule_widget.hpp"
 
@@ -48,6 +49,7 @@ private slots:
     void molecule_right_click_suspends_surface_while_menu_is_open();
     void molecule_tool_switch_restores_interaction_without_extra_click();
     void interactive_figure_controls_and_tool_switching();
+    void atomic_orbital_controls_and_tool_switching();
     void harmonic_wavepacket_controls_update_status();
     void harmonic_basis_controls_update_phase_status();
     void particle_in_box_basis_slider_updates_fit_status();
@@ -369,6 +371,48 @@ void AudienceWindowTest::interactive_figure_controls_and_tool_switching() {
     QVERIFY(figure->isHidden());
     window.set_cursor_tool();
     QVERIFY(figure->isVisible());
+}
+
+void AudienceWindowTest::atomic_orbital_controls_and_tool_switching() {
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+        QSKIP("The offscreen Qt platform cannot safely expose QOpenGLWidget");
+    }
+
+    AudienceWindow window;
+    window.resize(900, 520);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(QColor(235, 240, 245));
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    AtomicOrbitalDefinition definition;
+    definition.title = QStringLiteral("2p z slice");
+    definition.orbital = QStringLiteral("2pz");
+    definition.n = 2;
+    definition.l = 1;
+    definition.m = 0;
+    definition.grid_size = 33;
+    definition.plane = AtomicOrbitalDefinition::Plane::XZ;
+    window.set_atomic_orbital_overlay(definition, QRectF(0.08, 0.1, 0.84, 0.8));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* orbital = window.findChild<AtomicOrbitalWidget*>(
+        QStringLiteral("atomicOrbitalWidget"));
+    QVERIFY(orbital);
+    QVERIFY(orbital->isVisible());
+    QCOMPARE(orbital->definition().orbital, QStringLiteral("2pz"));
+    auto* slider = orbital->findChild<QSlider*>(
+        QStringLiteral("atomicOrbitalOffsetSlider"));
+    QVERIFY(slider);
+    const int initial_value = slider->value();
+    slider->setValue(std::min(slider->maximum(), initial_value + 125));
+    QVERIFY(slider->value() != initial_value);
+    QVERIFY(orbital->plane_offset() > 0.0);
+
+    window.set_pen_tool();
+    QVERIFY(orbital->isHidden());
+    window.set_cursor_tool();
+    QVERIFY(orbital->isVisible());
 }
 
 void AudienceWindowTest::harmonic_wavepacket_controls_update_status() {

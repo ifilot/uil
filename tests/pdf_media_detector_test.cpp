@@ -83,6 +83,34 @@ QByteArray interactive_figure_pdf_fixture() {
         + payload
         + QByteArrayLiteral("endstream\nendobj\n%%EOF\n");
 }
+
+/** @brief Returns a PDF containing an embedded atomic-orbital definition. */
+QByteArray atomic_orbital_pdf_fixture() {
+    const QByteArray payload = QByteArrayLiteral(
+        "{\"format\":\"uil.atomic-orbital\",\"version\":1,"
+        "\"title\":\"Embedded 2p z\",\"orbital\":\"2pz\","
+        "\"surface\":{\"positive_color\":\"#2563eb\","
+        "\"negative_color\":\"#dc2626\",\"grid_size\":33},"
+        "\"sampling_plane\":{\"type\":\"xz\","
+        "\"offset\":{\"min\":-1,\"max\":1,\"value\":0.25}},"
+        "\"contour\":{\"colormap\":\"RdBu_r\","
+        "\"logarithmic_floor\":0.0001,\"levels\":14}}\n");
+    return QByteArrayLiteral(
+        "%PDF-1.7\n"
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>\nendobj\n"
+        "4 0 obj\n<< /Type /Annot /Subtype /UILAtomicOrbital "
+        "/Rect [12 24 612 424] /UIL << /Version 1 /Asset 5 0 R >> >>\nendobj\n"
+        "5 0 obj\n<< /Type /Filespec /F (2pz.uilorb) /UF (2pz.uilorb) "
+        "/EF << /F 6 0 R >> >>\nendobj\n"
+        "6 0 obj\n<< /Type /EmbeddedFile /Subtype /application#2Fvnd.uil.atomic-orbital "
+        "/Length ")
+        + QByteArray::number(payload.size())
+        + QByteArrayLiteral(" >>\nstream\n")
+        + payload
+        + QByteArrayLiteral("endstream\nendobj\n%%EOF\n");
+}
 }
 
 class PdfMediaDetectorTest final : public QObject {
@@ -115,6 +143,12 @@ private slots:
 
     /** @brief Verifies the bundled LaTeX-produced example end to end. */
     void bundled_interactive_figure_example_loads();
+
+    /** @brief Verifies extraction and validation of an embedded atomic orbital. */
+    void embedded_atomic_orbital_loads();
+
+    /** @brief Verifies the bundled atomic-orbital presentation end to end. */
+    void bundled_atomic_orbital_example_loads();
 
 #if defined(UIL_HAVE_FFMPEG)
     /** @brief Verifies that the optional FFmpeg runtime can be loaded on first use. */
@@ -329,6 +363,50 @@ void PdfMediaDetectorTest::bundled_interactive_figure_example_loads() {
     QCOMPARE(harmonic_fit.definition.displacement, 2.0);
     QCOMPARE(harmonic_fit.definition.basis_count_min, 1);
     QCOMPARE(harmonic_fit.definition.basis_count_max, 25);
+}
+
+void PdfMediaDetectorTest::embedded_atomic_orbital_loads() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString pdf_path = directory.filePath(QStringLiteral("embedded-orbital.pdf"));
+    QVERIFY(write_pdf_fixture(pdf_path, atomic_orbital_pdf_fixture()));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.annotations.size(), 0);
+    QCOMPARE(result.molecule_annotations.size(), 0);
+    QCOMPARE(result.interactive_figure_annotations.size(), 0);
+    QCOMPARE(result.atomic_orbital_annotations.size(), 1);
+    const PdfAtomicOrbitalAnnotation& orbital =
+        result.atomic_orbital_annotations.constFirst();
+    QCOMPARE(orbital.page_index, 0);
+    QCOMPARE(orbital.object_number, 4);
+    QCOMPARE(orbital.file_name, QStringLiteral("2pz.uilorb"));
+    QCOMPARE(orbital.rect, QRectF(12, 24, 600, 400));
+    QVERIFY2(orbital.is_ready(), qPrintable(orbital.error_message));
+    QCOMPARE(orbital.definition.title, QStringLiteral("Embedded 2p z"));
+    QCOMPARE(orbital.definition.orbital, QStringLiteral("2pz"));
+    QCOMPARE(orbital.definition.plane, AtomicOrbitalDefinition::Plane::XZ);
+    QCOMPARE(orbital.definition.colormap, QStringLiteral("RdBu_r"));
+    QCOMPARE(orbital.definition.offset_initial, 0.25);
+    QVERIFY(result.summary().contains(QStringLiteral("embedded orbital ready")));
+}
+
+void PdfMediaDetectorTest::bundled_atomic_orbital_example_loads() {
+    const QString pdf_path = QStringLiteral(
+        UIL_TEST_SOURCE_DIR "/examples/bundled/atomic-orbitals.pdf");
+    QVERIFY2(QFileInfo::exists(pdf_path), qPrintable(pdf_path));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.atomic_orbital_annotations.size(), 3);
+    const QStringList expected_names{
+        QStringLiteral("2s"), QStringLiteral("2pz"), QStringLiteral("3dz2")};
+    for (int index = 0; index < expected_names.size(); ++index) {
+        const PdfAtomicOrbitalAnnotation& orbital =
+            result.atomic_orbital_annotations.at(index);
+        QCOMPARE(orbital.page_index, index);
+        QVERIFY2(orbital.is_ready(), qPrintable(orbital.error_message));
+        QCOMPARE(orbital.definition.orbital, expected_names.at(index));
+    }
 }
 
 void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {

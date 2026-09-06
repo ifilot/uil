@@ -303,6 +303,11 @@ bool is_interactive_figure_annotation(const QByteArray& bytes) {
     return has_name(bytes, QStringLiteral("UILInteractiveFigure"));
 }
 
+/** @brief Returns whether a PDF annotation describes an embedded UIL atomic orbital. */
+bool is_atomic_orbital_annotation(const QByteArray& bytes) {
+    return has_name(bytes, QStringLiteral("UILAtomicOrbital"));
+}
+
 /** @brief Cheaply detects whether object bytes could contain a supported media annotation. */
 bool contains_media_marker(const QByteArray& bytes) {
     return bytes.contains("/Movie")
@@ -311,7 +316,8 @@ bool contains_media_marker(const QByteArray& bytes) {
         || bytes.contains("/EmbeddedFile")
         || bytes.contains("/Sound")
         || bytes.contains("/UILMolecule")
-        || bytes.contains("/UILInteractiveFigure");
+        || bytes.contains("/UILInteractiveFigure")
+        || bytes.contains("/UILAtomicOrbital");
 }
 
 /** @brief Extracts directly represented indirect objects from PDF bytes. */
@@ -563,6 +569,44 @@ PdfInteractiveFigureAnnotation interactive_figure_annotation_from_object(
     return annotation;
 }
 
+/** @brief Builds and decodes an atomic orbital referenced by a custom annotation. */
+PdfAtomicOrbitalAnnotation atomic_orbital_annotation_from_object(
+    const ObjectMap& objects,
+    int page_index,
+    int object_number,
+    const QByteArray& body) {
+    PdfAtomicOrbitalAnnotation annotation;
+    annotation.page_index = page_index;
+    annotation.object_number = object_number;
+    annotation.rect = rect_for_annotation(body);
+
+    const std::optional<int> asset_ref = referenced_object(body, QStringLiteral("Asset"));
+    if (!asset_ref || !objects.contains(*asset_ref)) {
+        annotation.error_message = QStringLiteral("Atomic orbital has no embedded file specification");
+        return annotation;
+    }
+    const QByteArray file_spec = objects.value(*asset_ref);
+    annotation.file_name = pdf_string_value(file_spec, QStringLiteral("UF"));
+    if (annotation.file_name.isEmpty()) {
+        annotation.file_name = pdf_string_value(file_spec, QStringLiteral("F"));
+    }
+    const std::optional<int> stream_ref = referenced_object(file_spec, QStringLiteral("F"));
+    if (!stream_ref || !objects.contains(*stream_ref)) {
+        annotation.error_message = QStringLiteral("Atomic-orbital embedded stream is missing");
+        return annotation;
+    }
+    const QByteArray stream_object = objects.value(*stream_ref);
+    if (!has_type(dictionary_part(stream_object), QStringLiteral("EmbeddedFile"))) {
+        annotation.error_message = QStringLiteral("Atomic-orbital asset is not an embedded file");
+        return annotation;
+    }
+    const QByteArray payload = decoded_stream_payload(stream_object, &annotation.error_message);
+    if (!payload.isEmpty()) {
+        parse_atomic_orbital(payload, &annotation.definition, &annotation.error_message);
+    }
+    return annotation;
+}
+
 /** @brief Normalizes a package-relative asset path. */
 QString normalized_package_path(QString path) {
     path.replace(QLatin1Char('\\'), QLatin1Char('/'));
@@ -703,14 +747,20 @@ bool PdfInteractiveFigureAnnotation::is_ready() const {
     return error_message.isEmpty() && definition.is_valid() && rect.isValid();
 }
 
+bool PdfAtomicOrbitalAnnotation::is_ready() const {
+    return error_message.isEmpty() && definition.is_valid() && rect.isValid();
+}
+
 bool PdfMediaScanResult::has_media() const {
     return !annotations.isEmpty() || !molecule_annotations.isEmpty()
-        || !interactive_figure_annotations.isEmpty();
+        || !interactive_figure_annotations.isEmpty()
+        || !atomic_orbital_annotations.isEmpty();
 }
 
 QString PdfMediaScanResult::summary() const {
     if (annotations.isEmpty() && molecule_annotations.isEmpty()
-        && interactive_figure_annotations.isEmpty()) {
+        && interactive_figure_annotations.isEmpty()
+        && atomic_orbital_annotations.isEmpty()) {
         return QStringLiteral("No PDF media annotations detected");
     }
 
@@ -751,9 +801,20 @@ QString PdfMediaScanResult::summary() const {
                                       : QStringLiteral(" [figure unavailable]");
         parts.push_back(part);
     }
+    for (const PdfAtomicOrbitalAnnotation& annotation : atomic_orbital_annotations) {
+        QString part = annotation.page_index >= 0
+            ? QStringLiteral("page %1 atomic orbital").arg(annotation.page_index + 1)
+            : QStringLiteral("unknown page atomic orbital");
+        if (!annotation.file_name.isEmpty()) {
+            part += QStringLiteral(" (%1)").arg(annotation.file_name);
+        }
+        part += annotation.is_ready() ? QStringLiteral(" [embedded orbital ready]")
+                                      : QStringLiteral(" [orbital unavailable]");
+        parts.push_back(part);
+    }
     return QStringLiteral("%1 interactive annotation(s): %2")
         .arg(annotations.size() + molecule_annotations.size()
-             + interactive_figure_annotations.size())
+             + interactive_figure_annotations.size() + atomic_orbital_annotations.size())
         .arg(parts.join(QStringLiteral("; ")));
 }
 
@@ -840,7 +901,12 @@ PdfMediaScanResult scan_pdf_media_annotations(
         const QByteArray page_body = objects.value(pages.at(page_index));
         for (int annotation_object : annotation_objects_for_page(objects, page_body)) {
             const QByteArray annotation_body = objects.value(annotation_object);
-            if (!annotation_body.isEmpty() && is_interactive_figure_annotation(annotation_body)) {
+            if (!annotation_body.isEmpty() && is_atomic_orbital_annotation(annotation_body)) {
+                result.atomic_orbital_annotations.push_back(
+                    atomic_orbital_annotation_from_object(
+                        objects, page_index, annotation_object, annotation_body));
+                seen_interactive_objects.insert(annotation_object);
+            } else if (!annotation_body.isEmpty() && is_interactive_figure_annotation(annotation_body)) {
                 result.interactive_figure_annotations.push_back(
                     interactive_figure_annotation_from_object(
                         objects, page_index, annotation_object, annotation_body));
@@ -863,6 +929,7 @@ PdfMediaScanResult scan_pdf_media_annotations(
         {QStringLiteral("annotation_count"), result.annotations.size()},
         {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
         {QStringLiteral("interactive_figure_annotation_count"), result.interactive_figure_annotations.size()},
+        {QStringLiteral("atomic_orbital_annotation_count"), result.atomic_orbital_annotations.size()},
         {QStringLiteral("page_count"), pages.size()}
     });
 
@@ -870,7 +937,10 @@ PdfMediaScanResult scan_pdf_media_annotations(
         if (seen_interactive_objects.contains(it.key())) {
             continue;
         }
-        if (is_interactive_figure_annotation(it.value())) {
+        if (is_atomic_orbital_annotation(it.value())) {
+            result.atomic_orbital_annotations.push_back(
+                atomic_orbital_annotation_from_object(objects, -1, it.key(), it.value()));
+        } else if (is_interactive_figure_annotation(it.value())) {
             result.interactive_figure_annotations.push_back(
                 interactive_figure_annotation_from_object(objects, -1, it.key(), it.value()));
         } else if (is_molecule_annotation(it.value())) {
@@ -886,6 +956,7 @@ PdfMediaScanResult scan_pdf_media_annotations(
             {QStringLiteral("annotation_count"), result.annotations.size()},
             {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
             {QStringLiteral("interactive_figure_annotation_count"), result.interactive_figure_annotations.size()},
+            {QStringLiteral("atomic_orbital_annotation_count"), result.atomic_orbital_annotations.size()},
         });
 
     resolve_and_extract_media_frames(result, path, package_root_path, package_movie_asset_paths);
@@ -904,12 +975,14 @@ PdfMediaScanResult scan_pdf_media_annotations(
         {QStringLiteral("annotation_count"), result.annotations.size()},
         {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
         {QStringLiteral("interactive_figure_annotation_count"), result.interactive_figure_annotations.size()},
+        {QStringLiteral("atomic_orbital_annotation_count"), result.atomic_orbital_annotations.size()},
         {QStringLiteral("frames_ready"), frames_ready}
     });
     scan_span.add_field(
         QStringLiteral("annotation_count"),
         result.annotations.size() + result.molecule_annotations.size()
-            + result.interactive_figure_annotations.size());
+            + result.interactive_figure_annotations.size()
+            + result.atomic_orbital_annotations.size());
     scan_span.add_field(QStringLiteral("page_count"), pages.size());
     scan_span.set_outcome(QStringLiteral("scanned"));
     qCInfo(logMedia) << result.summary();

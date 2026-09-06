@@ -3,6 +3,7 @@
 #include "ui/bluecurve.hpp"
 #include "ui/font_awesome.hpp"
 #include "ui/interactive_figure_widget.hpp"
+#include "ui/atomic_orbital_widget.hpp"
 #include "ui/molecule_widget.hpp"
 
 #include <QApplication>
@@ -769,6 +770,7 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
     if (texture_key != current_texture_key_) {
         molecule_snapshot_frame_ = {};
         interactive_figure_snapshot_frame_ = {};
+        atomic_orbital_snapshot_frame_ = {};
     }
     current_texture_key_ = texture_key;
     current_slide_image_ = image;
@@ -776,6 +778,7 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
     emit annotation_overlay_changed(current_annotation_overlay_image());
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
+    update_atomic_orbital_overlay_geometry();
     update();
 }
 
@@ -789,6 +792,8 @@ void AudienceWindow::clear_slide_image() {
     clear_molecule_overlay();
     interactive_figure_snapshot_frame_ = {};
     clear_interactive_figure_overlay();
+    atomic_orbital_snapshot_frame_ = {};
+    clear_atomic_orbital_overlay();
     emit annotation_overlay_changed({});
     update();
 }
@@ -942,6 +947,30 @@ void AudienceWindow::clear_interactive_figure_overlay() {
     }
 }
 
+void AudienceWindow::set_atomic_orbital_overlay(
+    const AtomicOrbitalDefinition& definition,
+    QRectF slide_rect) {
+    if (!definition.is_valid() || !slide_rect.isValid()) {
+        clear_atomic_orbital_overlay();
+        return;
+    }
+    if (!atomic_orbital_widget_) {
+        atomic_orbital_widget_ = std::make_unique<AtomicOrbitalWidget>(this);
+        atomic_orbital_widget_->set_context_menu_handler(
+            [this](const QPoint& global_position) { show_feature_menu(global_position); });
+    }
+    atomic_orbital_snapshot_frame_ = {};
+    atomic_orbital_rect_ = slide_rect;
+    atomic_orbital_widget_->set_definition(definition);
+    update_atomic_orbital_overlay_geometry();
+}
+
+void AudienceWindow::clear_atomic_orbital_overlay() {
+    atomic_orbital_rect_ = {};
+    atomic_orbital_snapshot_frame_ = {};
+    if (atomic_orbital_widget_) atomic_orbital_widget_->hide();
+}
+
 void AudienceWindow::set_audience_screen(QScreen* screen) {
     if (!screen) {
         return;
@@ -1028,12 +1057,14 @@ void AudienceWindow::set_cursor_tool() {
     update_cursor_appearance();
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
+    update_atomic_orbital_overlay_geometry();
     update();
 }
 
 void AudienceWindow::set_pointer_tool() {
     capture_molecule_frame();
     capture_interactive_figure_frame();
+    capture_atomic_orbital_frame();
     interaction_tool_ = InteractionTool::Pointer;
     hide_pointer();
     eraser_cursor_visible_ = false;
@@ -1041,12 +1072,14 @@ void AudienceWindow::set_pointer_tool() {
     update_cursor_appearance();
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
+    update_atomic_orbital_overlay_geometry();
     update();
 }
 
 void AudienceWindow::set_pen_tool() {
     capture_molecule_frame();
     capture_interactive_figure_frame();
+    capture_atomic_orbital_frame();
     interaction_tool_ = InteractionTool::Pen;
     hide_pointer();
     eraser_cursor_visible_ = false;
@@ -1054,12 +1087,14 @@ void AudienceWindow::set_pen_tool() {
     update_cursor_appearance();
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
+    update_atomic_orbital_overlay_geometry();
     update();
 }
 
 void AudienceWindow::set_eraser_tool() {
     capture_molecule_frame();
     capture_interactive_figure_frame();
+    capture_atomic_orbital_frame();
     interaction_tool_ = InteractionTool::Eraser;
     hide_pointer();
     eraser_cursor_visible_ = false;
@@ -1067,6 +1102,7 @@ void AudienceWindow::set_eraser_tool() {
     update_cursor_appearance();
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
+    update_atomic_orbital_overlay_geometry();
     update();
 }
 
@@ -1258,6 +1294,7 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
     painter.fillRect(rect(), blank_mode_ == BlankMode::White ? Qt::white : Qt::black);
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
+    update_atomic_orbital_overlay_geometry();
 
     if (blank_mode_ != BlankMode::None) {
         return;
@@ -1322,6 +1359,21 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
             image_source_rect(interactive_figure_snapshot_frame_));
     }
 
+    const bool orbital_is_interactive = atomic_orbital_widget_
+        && atomic_orbital_widget_->isVisible()
+        && interaction_tool_ == InteractionTool::Cursor
+        && !atomic_orbital_suspended_for_feature_menu_;
+    if (!orbital_is_interactive && !atomic_orbital_snapshot_frame_.isNull()
+        && atomic_orbital_rect_.isValid()) {
+        const QRectF target(
+            slide_rect.left() + atomic_orbital_rect_.left() * slide_rect.width(),
+            slide_rect.top() + atomic_orbital_rect_.top() * slide_rect.height(),
+            atomic_orbital_rect_.width() * slide_rect.width(),
+            atomic_orbital_rect_.height() * slide_rect.height());
+        painter.drawImage(target, atomic_orbital_snapshot_frame_,
+            image_source_rect(atomic_orbital_snapshot_frame_));
+    }
+
     if (molecule_is_interactive && molecule_rect_.isValid()) {
         const QRectF target(
             slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
@@ -1344,6 +1396,7 @@ void AudienceWindow::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
+    update_atomic_orbital_overlay_geometry();
 }
 
 void AudienceWindow::keyPressEvent(QKeyEvent* event) {
@@ -1792,6 +1845,43 @@ void AudienceWindow::capture_interactive_figure_frame() {
     }
 }
 
+void AudienceWindow::update_atomic_orbital_overlay_geometry() {
+    if (!atomic_orbital_widget_) return;
+    if (atomic_orbital_suspended_for_feature_menu_
+        || !atomic_orbital_rect_.isValid()
+        || current_slide_image_.isNull()
+        || blank_mode_ != BlankMode::None
+        || deck_overview_visible_
+        || interaction_tool_ != InteractionTool::Cursor) {
+        atomic_orbital_widget_->hide();
+        return;
+    }
+    const QRectF slide_rect = slide_logical_rect(current_slide_image_.size());
+    if (!slide_rect.isValid()) {
+        atomic_orbital_widget_->hide();
+        return;
+    }
+    const QRect target = QRectF(
+        slide_rect.left() + atomic_orbital_rect_.left() * slide_rect.width(),
+        slide_rect.top() + atomic_orbital_rect_.top() * slide_rect.height(),
+        atomic_orbital_rect_.width() * slide_rect.width(),
+        atomic_orbital_rect_.height() * slide_rect.height()).toAlignedRect();
+    if (target.width() < 2 || target.height() < 2) {
+        atomic_orbital_widget_->hide();
+        return;
+    }
+    atomic_orbital_widget_->setGeometry(target);
+    atomic_orbital_widget_->show();
+    atomic_orbital_widget_->raise();
+    atomic_orbital_snapshot_frame_ = {};
+}
+
+void AudienceWindow::capture_atomic_orbital_frame() {
+    if (!atomic_orbital_widget_ || !atomic_orbital_widget_->isVisible()) return;
+    const QPixmap snapshot = atomic_orbital_widget_->grab();
+    if (!snapshot.isNull()) atomic_orbital_snapshot_frame_ = snapshot.toImage();
+}
+
 QPointF AudienceWindow::slide_image_point(QPointF window_point, QSize texture_size, bool* inside) const {
     const QRectF slide_rect = slide_logical_rect(texture_size);
     const bool contains = slide_rect.contains(window_point);
@@ -2201,6 +2291,12 @@ void AudienceWindow::show_feature_menu(const QPoint& global_position) {
         interactive_figure_widget_->hide();
         repaint();
     }
+    if (atomic_orbital_widget_ && atomic_orbital_widget_->isVisible()) {
+        capture_atomic_orbital_frame();
+        atomic_orbital_suspended_for_feature_menu_ = true;
+        atomic_orbital_widget_->hide();
+        repaint();
+    }
 
     auto* menu = new FeatureMenuPanel(this);
     feature_menu_ = menu;
@@ -2218,8 +2314,10 @@ void AudienceWindow::show_feature_menu(const QPoint& global_position) {
         }
         molecule_suspended_for_feature_menu_ = false;
         interactive_figure_suspended_for_feature_menu_ = false;
+        atomic_orbital_suspended_for_feature_menu_ = false;
         update_molecule_overlay_geometry();
         update_interactive_figure_overlay_geometry();
+        update_atomic_orbital_overlay_geometry();
         if (resume_molecule_vibration_after_menu_ && molecule_widget_
             && molecule_widget_->isVisible()) {
             molecule_widget_->set_vibration_playing(true);

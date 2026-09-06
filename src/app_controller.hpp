@@ -149,6 +149,8 @@ private:
     void update_active_molecule();
     /** @brief Shows the first ready embedded interactive figure on the current page. */
     void update_active_interactive_figure();
+    /** @brief Shows the first ready embedded atomic orbital on the current page. */
+    void update_active_atomic_orbital();
     /** @brief Starts playback of the current slide's media. */
     void start_media_playback();
     /** @brief Stops active media playback and clears its frame overlay. */

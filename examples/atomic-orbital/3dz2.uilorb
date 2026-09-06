@@ -1,0 +1,21 @@
+{
+  "format": "uil.atomic-orbital",
+  "version": 1,
+  "title": "Hydrogen-like 3d_z2 orbital",
+  "orbital": "3dz2",
+  "surface": {
+    "isovalue": 0.0,
+    "positive_color": "#7c3aed",
+    "negative_color": "#f59e0b",
+    "grid_size": 65
+  },
+  "sampling_plane": {
+    "type": "yz",
+    "offset": { "min": -1.0, "max": 1.0, "value": 0.0 }
+  },
+  "contour": {
+    "colormap": "PuOr",
+    "logarithmic_floor": 0.00001,
+    "levels": 16
+  }
+}

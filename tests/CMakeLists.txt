@@ -56,12 +56,14 @@ add_uil_unit_test(audience_window_test
     ${PROJECT_SOURCE_DIR}/src/ui/bluecurve.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/atomic_orbital_widget.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/interactive_figure_widget.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/particle_in_box_basis.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
 )
 target_link_libraries(audience_window_test PRIVATE
     Qt6::Widgets
@@ -80,6 +82,7 @@ add_uil_unit_test(app_controller_test
     ${PROJECT_SOURCE_DIR}/src/ui/bluecurve.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/atomic_orbital_widget.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/interactive_figure_widget.cpp
     ${PROJECT_SOURCE_DIR}/src/util/document_hash.cpp
     ${PROJECT_SOURCE_DIR}/src/util/image_util.cpp
@@ -88,6 +91,7 @@ add_uil_unit_test(app_controller_test
     ${PROJECT_SOURCE_DIR}/src/media/video_frame_buffer.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/particle_in_box_basis.cpp
@@ -118,6 +122,22 @@ add_uil_unit_test(molecule_camera_test
 add_uil_unit_test(molecule_geometry_test
     molecule_geometry_test.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+)
+
+add_uil_unit_test(atomic_orbital_test
+    atomic_orbital_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+)
+
+add_uil_unit_test(atomic_orbital_widget_test
+    atomic_orbital_widget_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/atomic_orbital_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+)
+target_link_libraries(atomic_orbital_widget_test PRIVATE
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
 )
 
 add_uil_unit_test(harmonic_wavepacket_test
@@ -170,6 +190,7 @@ add_uil_unit_test(pdf_media_detector_test
     ${PROJECT_SOURCE_DIR}/src/media/video_frame_extractor.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
 )
 target_compile_definitions(pdf_media_detector_test PRIVATE
     UIL_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"

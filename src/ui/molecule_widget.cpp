@@ -10,6 +10,7 @@
 #include <QOpenGLBuffer>
 #include <QOpenGLContext>
 #include <QOpenGLShaderProgram>
+#include <QOpenGLVertexArrayObject>
 #include <QPainter>
 #include <QPen>
 #include <QResizeEvent>
@@ -187,27 +188,44 @@ void create_cylinder_geometry(QVector<MeshVertex>* vertices, QVector<quint32>* i
 struct MoleculeWidget::Mesh {
   QOpenGLBuffer vertex_buffer{QOpenGLBuffer::VertexBuffer};
   QOpenGLBuffer index_buffer{QOpenGLBuffer::IndexBuffer};
+  QOpenGLVertexArrayObject vao;
   int index_count = 0;
 
-  bool create(const QVector<MeshVertex>& vertices, const QVector<quint32>& indices) {
-    if (!vertex_buffer.create() || !index_buffer.create() || !vertex_buffer.bind()) {
+  bool create(QOpenGLShaderProgram* program, const QVector<MeshVertex>& vertices,
+              const QVector<quint32>& indices) {
+    if (!program || !vao.create() || !vertex_buffer.create() || !index_buffer.create()) {
       return false;
     }
-    vertex_buffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
-    vertex_buffer.allocate(vertices.constData(), int(vertices.size() * sizeof(MeshVertex)));
-    vertex_buffer.release();
+    {
+      QOpenGLVertexArrayObject::Binder binder(&vao);
+      if (!vertex_buffer.bind()) return false;
+      vertex_buffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
+      vertex_buffer.allocate(vertices.constData(), int(vertices.size() * sizeof(MeshVertex)));
+      if (!index_buffer.bind()) {
+        return false;
+      }
+      index_buffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
+      index_buffer.allocate(indices.constData(), int(indices.size() * sizeof(quint32)));
 
-    if (!index_buffer.bind()) {
-      return false;
+      const int position_location = program->attributeLocation("vertex_position");
+      const int normal_location = program->attributeLocation("vertex_normal");
+      program->enableAttributeArray(position_location);
+      program->setAttributeBuffer(position_location, GL_FLOAT,
+                                  int(offsetof(MeshVertex, position)), 3,
+                                  int(sizeof(MeshVertex)));
+      program->enableAttributeArray(normal_location);
+      program->setAttributeBuffer(normal_location, GL_FLOAT,
+                                  int(offsetof(MeshVertex, normal)), 3,
+                                  int(sizeof(MeshVertex)));
+      vertex_buffer.release();
     }
-    index_buffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
-    index_buffer.allocate(indices.constData(), int(indices.size() * sizeof(quint32)));
     index_buffer.release();
     index_count = indices.size();
     return index_count > 0;
   }
 
   void destroy() {
+    vao.destroy();
     vertex_buffer.destroy();
     index_buffer.destroy();
     index_count = 0;
@@ -217,6 +235,8 @@ struct MoleculeWidget::Mesh {
 MoleculeWidget::MoleculeWidget(QWidget* parent) : QOpenGLWidget(parent) {
   setObjectName(QStringLiteral("moleculeWidget"));
   QSurfaceFormat surface_format = format();
+  surface_format.setVersion(3, 3);
+  surface_format.setProfile(QSurfaceFormat::CoreProfile);
   surface_format.setDepthBufferSize(24);
   surface_format.setSamples(4);
   setFormat(surface_format);
@@ -352,14 +372,14 @@ bool MoleculeWidget::create_renderer() {
   destroy_renderer();
   renderer_error_.clear();
 
-  static constexpr char kVertexShader[] = R"(
-        attribute vec3 vertex_position;
-        attribute vec3 vertex_normal;
+  static constexpr char kVertexShader[] = R"(#version 330 core
+        layout(location = 0) in vec3 vertex_position;
+        layout(location = 1) in vec3 vertex_normal;
         uniform mat4 model_view_projection;
         uniform mat4 model_view;
         uniform mat3 normal_matrix;
-        varying vec3 view_position;
-        varying vec3 view_normal;
+        out vec3 view_position;
+        out vec3 view_normal;
         void main() {
             vec4 position = model_view * vec4(vertex_position, 1.0);
             view_position = position.xyz;
@@ -367,10 +387,11 @@ bool MoleculeWidget::create_renderer() {
             gl_Position = model_view_projection * vec4(vertex_position, 1.0);
         }
     )";
-  static constexpr char kFragmentShader[] = R"(
+  static constexpr char kFragmentShader[] = R"(#version 330 core
         uniform vec3 base_color;
-        varying vec3 view_position;
-        varying vec3 view_normal;
+        in vec3 view_position;
+        in vec3 view_normal;
+        out vec4 fragment_color;
         void main() {
             vec3 normal = normalize(view_normal);
             vec3 light = normalize(vec3(-0.45, 0.65, 1.0));
@@ -380,7 +401,7 @@ bool MoleculeWidget::create_renderer() {
             float specular = pow(max(dot(normal, half_direction), 0.0), 42.0);
             vec3 linear_rgb = base_color * (0.25 + 0.72 * diffuse) + vec3(0.45 * specular);
             vec3 display_rgb = pow(clamp(linear_rgb, 0.0, 1.0), vec3(1.0 / 2.2));
-            gl_FragColor = vec4(display_rgb, 1.0);
+            fragment_color = vec4(display_rgb, 1.0);
         }
     )";
 
@@ -398,7 +419,7 @@ bool MoleculeWidget::create_renderer() {
   QVector<quint32> sphere_indices;
   create_sphere_geometry(&sphere_vertices, &sphere_indices);
   sphere_mesh_ = std::make_unique<Mesh>();
-  if (!sphere_mesh_->create(sphere_vertices, sphere_indices)) {
+  if (!sphere_mesh_->create(shader_program_.get(), sphere_vertices, sphere_indices)) {
     renderer_error_ = QStringLiteral("Could not create sphere mesh buffers");
     destroy_renderer();
     return false;
@@ -408,7 +429,7 @@ bool MoleculeWidget::create_renderer() {
   QVector<quint32> cylinder_indices;
   create_cylinder_geometry(&cylinder_vertices, &cylinder_indices);
   cylinder_mesh_ = std::make_unique<Mesh>();
-  if (!cylinder_mesh_->create(cylinder_vertices, cylinder_indices)) {
+  if (!cylinder_mesh_->create(shader_program_.get(), cylinder_vertices, cylinder_indices)) {
     renderer_error_ = QStringLiteral("Could not create cylinder mesh buffers");
     destroy_renderer();
     return false;
@@ -607,21 +628,8 @@ void MoleculeWidget::draw_mesh(Mesh& mesh, const QMatrix4x4& model, const QVecto
   shader_program_->setUniformValue("normal_matrix", model_view.normalMatrix());
   shader_program_->setUniformValue("base_color", color);
 
-  mesh.vertex_buffer.bind();
-  mesh.index_buffer.bind();
-  const int position_location = shader_program_->attributeLocation("vertex_position");
-  const int normal_location = shader_program_->attributeLocation("vertex_normal");
-  shader_program_->enableAttributeArray(position_location);
-  shader_program_->enableAttributeArray(normal_location);
-  shader_program_->setAttributeBuffer(position_location, GL_FLOAT,
-                                      int(offsetof(MeshVertex, position)), 3, sizeof(MeshVertex));
-  shader_program_->setAttributeBuffer(normal_location, GL_FLOAT, int(offsetof(MeshVertex, normal)),
-                                      3, sizeof(MeshVertex));
+  QOpenGLVertexArrayObject::Binder binder(&mesh.vao);
   glDrawElements(GL_TRIANGLES, mesh.index_count, GL_UNSIGNED_INT, nullptr);
-  shader_program_->disableAttributeArray(position_location);
-  shader_program_->disableAttributeArray(normal_location);
-  mesh.index_buffer.release();
-  mesh.vertex_buffer.release();
 }
 
 void MoleculeWidget::create_toolbar() {

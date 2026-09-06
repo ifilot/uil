@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QMatrix4x4>
-#include <QOpenGLFunctions>
+#include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLWidget>
 #include <QPoint>
 #include <QPointF>
@@ -27,7 +27,7 @@ class QToolButton;
 class QWheelEvent;
 
 /** @brief Displays an interactive ball-and-stick molecular geometry. */
-class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions {
+class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core {
  public:
   /** @brief Stereo output modes supported by the embedded renderer. */
   enum class StereoMode { Mono, RedCyanAnaglyph };

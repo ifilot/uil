@@ -28,6 +28,7 @@ private slots:
     void empty_controller_rejects_document_operations();
     void opens_renders_and_navigates_bundled_document();
     void opens_bundled_molecule_presentation();
+    void opens_bundled_atomic_orbital_presentation();
     void failed_open_preserves_current_document();
     void saves_and_reopens_annotation_package();
     void exports_annotated_pdf();
@@ -129,6 +130,31 @@ void AppControllerTest::opens_bundled_molecule_presentation() {
     QCOMPARE(benzene.bonds.size(), 12);
     for (const MoleculeAtom& atom : benzene.atoms) {
         QCOMPARE(atom.position.x(), 0.0f);
+    }
+}
+
+void AppControllerTest::opens_bundled_atomic_orbital_presentation() {
+    AppController controller;
+    PdfMediaScanResult scan_result;
+    connect(&controller, &AppController::media_scan_changed, this,
+            [&scan_result](const PdfMediaScanResult& result) {
+                scan_result = result;
+            });
+
+    const QString path = example_path(QStringLiteral("atomic-orbitals.pdf"));
+    QVERIFY(controller.open_pdf(path));
+    QCOMPARE(controller.page_count(), 3);
+    QVERIFY(controller.current_package_path().isEmpty());
+    QTRY_COMPARE_WITH_TIMEOUT(scan_result.atomic_orbital_annotations.size(), 3, 5000);
+
+    const QStringList expected_names{
+        QStringLiteral("2s"), QStringLiteral("2pz"), QStringLiteral("3dz2")};
+    for (int index = 0; index < expected_names.size(); ++index) {
+        const PdfAtomicOrbitalAnnotation& orbital =
+            scan_result.atomic_orbital_annotations.at(index);
+        QCOMPARE(orbital.page_index, index);
+        QVERIFY2(orbital.is_ready(), qPrintable(orbital.error_message));
+        QCOMPARE(orbital.definition.orbital, expected_names.at(index));
     }
 }
 
