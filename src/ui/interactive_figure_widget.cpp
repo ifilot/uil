@@ -1,10 +1,10 @@
 #include "ui/interactive_figure_widget.hpp"
+#include "ui/math_text.hpp"
 
 #include "figure/harmonic_wavepacket.hpp"
 #include "figure/particle_in_box_basis.hpp"
 
 #include <QContextMenuEvent>
-#include <QAbstractTextDocumentLayout>
 #include <QFrame>
 #include <QFontMetricsF>
 #include <QGridLayout>
@@ -14,12 +14,10 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
-#include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QStringList>
 #include <QSvgRenderer>
-#include <QTextDocument>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QShowEvent>
@@ -57,63 +55,8 @@ bool is_harmonic_displaced_expansion(InteractiveFigureDefinition::Kind kind) {
     return kind == InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion;
 }
 
-QString latex_math_html(QString source) {
-    source = source.trimmed();
-    const bool math_mode = source.size() >= 2
-        && source.startsWith(QLatin1Char('$'))
-        && source.endsWith(QLatin1Char('$'));
-    if (math_mode) {
-        source = source.mid(1, source.size() - 2);
-    }
-    QString html = source.toHtmlEscaped();
-    html.replace(QStringLiteral("\\left"), QString());
-    html.replace(QStringLiteral("\\right"), QString());
-    html.replace(QStringLiteral("\\,"), QStringLiteral("&#x2009;"));
-    html.replace(QStringLiteral("\\;"), QStringLiteral("&#x2005;"));
-    html.replace(QStringLiteral("\\quad"), QStringLiteral("&#x2003;"));
-    html.replace(QStringLiteral("\\sum"), QStringLiteral("&Sigma;"));
-    html.replace(QStringLiteral("\\pi"), QStringLiteral("&pi;"));
-    html.replace(QStringLiteral("\\psi"), QStringLiteral("&psi;"));
-    html.replace(QStringLiteral("\\Psi"), QStringLiteral("&Psi;"));
-    html.replace(QStringLiteral("\\Phi"), QStringLiteral("&Phi;"));
-    html.replace(QStringLiteral("\\alpha"), QStringLiteral("&alpha;"));
-    html.replace(QStringLiteral("\\omega"), QStringLiteral("&omega;"));
-    html.replace(QStringLiteral("\\tau"), QStringLiteral("&tau;"));
-    html.replace(QStringLiteral("\\ell"), QStringLiteral("&#x2113;"));
-    html.replace(QStringLiteral("\\hbar"), QStringLiteral("&#x210F;"));
-    html.replace(
-        QRegularExpression(QStringLiteral(R"(\\frac\{([^{}]+)\}\{([^{}]+)\})")),
-        QStringLiteral("<span><sup>\\1</sup>&frasl;<sub>\\2</sub></span>"));
-    html.replace(
-        QRegularExpression(QStringLiteral(R"(\\mathrm\{([^{}]+)\})")),
-        QStringLiteral("<span style='font-style:normal'>\\1</span>"));
-    html.replace(
-        QRegularExpression(QStringLiteral(R"(_\{([^{}]+)\})")),
-        QStringLiteral("<sub>\\1</sub>"));
-    html.replace(
-        QRegularExpression(QStringLiteral(R"(\^\{([^{}]+)\})")),
-        QStringLiteral("<sup>\\1</sup>"));
-    html.replace(
-        QRegularExpression(QStringLiteral(R"(_([A-Za-z0-9]))")),
-        QStringLiteral("<sub>\\1</sub>"));
-    html.replace(
-        QRegularExpression(QStringLiteral(R"(\^([A-Za-z0-9]))")),
-        QStringLiteral("<sup>\\1</sup>"));
-    if (math_mode) {
-        html = QStringLiteral("<i>%1</i>").arg(html);
-    }
-    return html;
-}
-
 QSizeF math_text_size(const QString& text, const QFont& font) {
-    QTextDocument document;
-    document.setDocumentMargin(0.0);
-    document.setDefaultFont(font);
-    document.setHtml(QStringLiteral("<span style='white-space:nowrap'>%1</span>")
-                         .arg(latex_math_html(text)));
-    document.setTextWidth(-1.0);
-    document.setTextWidth(document.idealWidth());
-    return document.documentLayout()->documentSize();
+    return ui_math_text::size(text, font);
 }
 
 void draw_math_text(
@@ -123,31 +66,7 @@ void draw_math_text(
     Qt::Alignment alignment,
     const QFont& font,
     const QColor& color) {
-    QTextDocument document;
-    document.setDocumentMargin(0.0);
-    document.setDefaultFont(font);
-    document.setHtml(QStringLiteral(
-        "<span style='white-space:nowrap; color:%1'>%2</span>")
-        .arg(color.name(QColor::HexRgb), latex_math_html(text)));
-    document.setTextWidth(-1.0);
-    document.setTextWidth(document.idealWidth());
-    const QSizeF text_size = document.documentLayout()->documentSize();
-    qreal x = bounds.left();
-    qreal y = bounds.top();
-    if (alignment.testFlag(Qt::AlignHCenter)) {
-        x += (bounds.width() - text_size.width()) / 2.0;
-    } else if (alignment.testFlag(Qt::AlignRight)) {
-        x += bounds.width() - text_size.width();
-    }
-    if (alignment.testFlag(Qt::AlignVCenter)) {
-        y += (bounds.height() - text_size.height()) / 2.0;
-    } else if (alignment.testFlag(Qt::AlignBottom)) {
-        y += bounds.height() - text_size.height();
-    }
-    painter.save();
-    painter.translate(x, y);
-    document.drawContents(&painter, QRectF(QPointF(0.0, 0.0), text_size));
-    painter.restore();
+    ui_math_text::draw(painter, bounds, text, alignment, font, color);
 }
 }
 

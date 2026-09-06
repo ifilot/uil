@@ -17,7 +17,7 @@ void AtomicOrbitalWidgetTest::renders_and_resamples_when_opengl_is_available() {
     }
 
     AtomicOrbitalDefinition definition;
-    definition.title = QStringLiteral("Hydrogen-like 2p_z orbital");
+    definition.title = QStringLiteral("Hydrogen-like $2p_z$ orbital");
     definition.orbital = QStringLiteral("2pz");
     definition.n = 2;
     definition.l = 1;
@@ -34,7 +34,7 @@ void AtomicOrbitalWidgetTest::renders_and_resamples_when_opengl_is_available() {
         QSKIP("The active Qt platform does not provide a QOpenGLWidget context");
     }
     QVERIFY2(widget.renderer_available(), qPrintable(widget.renderer_error()));
-    const QImage centered = widget.grabFramebuffer();
+    const QImage centered = widget.capture_frame();
     QVERIFY(!centered.isNull());
 
     auto* slider = widget.findChild<QSlider*>(
@@ -42,7 +42,7 @@ void AtomicOrbitalWidgetTest::renders_and_resamples_when_opengl_is_available() {
     QVERIFY(slider);
     slider->setValue(700);
     QTest::qWait(50);
-    const QImage offset = widget.grabFramebuffer();
+    const QImage offset = widget.capture_frame();
     QVERIFY(!offset.isNull());
     QVERIFY(offset != centered);
 }

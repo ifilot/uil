@@ -10,10 +10,10 @@ Notable user-facing changes to `uil` are documented here.
   orbitals from 1s through 5g, with signed isosurfaces and configurable phase colors.
 - Added a movable world-fixed sampling plane, logarithmic signed-wavefunction
   contours, divergent color maps, and a colorbar beside the rotatable orbital.
-- Added a world-fixed black XYZ axis triad with billboarded endpoint labels to
-  the orbital scene.
+- Added a world-fixed, depth-tested black XYZ axis triad with billboarded 3D
+  endpoint labels to the orbital scene.
 - Added the `uilorbital` LaTeX package, version-one JSON schema, authoring guide,
-  and bundled 2s, 2pz, and 3dz2 example presentation.
+  and bundled 2s, 2pz, 3dz2, and 4fz3 example presentation.
 - Added one-click red/cyan anaglyph molecule rendering.
 - Added sinusoidal normal-mode playback from optional XYZ displacement vectors.
 - Added a Blender-style X/Y/Z orientation gizmo to molecule views.
@@ -26,6 +26,11 @@ Notable user-facing changes to `uil` are documented here.
 - Placed the example water molecule in the YZ plane and added benzene to the bundled tour.
 
 ### Fixed
+
+- Render atomic-orbital titles and panel notation as math text, enlarge their
+  controls, and replace fixed-axis mouse rotation with a quaternion arcball.
+- Generate atomic-orbital PDF posters from the live renderer and label them as
+  interactive, keeping fallback previews consistent with the live object.
 
 - Forward molecule right-clicks immediately to an audience-window overlay and suspend the OpenGL
   surface while it is visible, preventing delayed menus and black fullscreen compositor frames.

@@ -397,9 +397,10 @@ void PdfMediaDetectorTest::bundled_atomic_orbital_example_loads() {
     QVERIFY2(QFileInfo::exists(pdf_path), qPrintable(pdf_path));
 
     const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
-    QCOMPARE(result.atomic_orbital_annotations.size(), 3);
+    QCOMPARE(result.atomic_orbital_annotations.size(), 4);
     const QStringList expected_names{
-        QStringLiteral("2s"), QStringLiteral("2pz"), QStringLiteral("3dz2")};
+        QStringLiteral("2s"), QStringLiteral("2pz"), QStringLiteral("3dz2"),
+        QStringLiteral("4fz(5z2-3r2)")};
     for (int index = 0; index < expected_names.size(); ++index) {
         const PdfAtomicOrbitalAnnotation& orbital =
             result.atomic_orbital_annotations.at(index);

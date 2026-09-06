@@ -143,12 +143,13 @@ void AppControllerTest::opens_bundled_atomic_orbital_presentation() {
 
     const QString path = example_path(QStringLiteral("atomic-orbitals.pdf"));
     QVERIFY(controller.open_pdf(path));
-    QCOMPARE(controller.page_count(), 3);
+    QCOMPARE(controller.page_count(), 4);
     QVERIFY(controller.current_package_path().isEmpty());
-    QTRY_COMPARE_WITH_TIMEOUT(scan_result.atomic_orbital_annotations.size(), 3, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(scan_result.atomic_orbital_annotations.size(), 4, 5000);
 
     const QStringList expected_names{
-        QStringLiteral("2s"), QStringLiteral("2pz"), QStringLiteral("3dz2")};
+        QStringLiteral("2s"), QStringLiteral("2pz"), QStringLiteral("3dz2"),
+        QStringLiteral("4fz(5z2-3r2)")};
     for (int index = 0; index < expected_names.size(); ++index) {
         const PdfAtomicOrbitalAnnotation& orbital =
             scan_result.atomic_orbital_annotations.at(index);

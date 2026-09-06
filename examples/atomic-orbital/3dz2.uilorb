@@ -1,7 +1,7 @@
 {
   "format": "uil.atomic-orbital",
   "version": 1,
-  "title": "Hydrogen-like 3d_z2 orbital",
+  "title": "Hydrogen-like $3d_{z^2}$ orbital",
   "orbital": "3dz2",
   "surface": {
     "isovalue": 0.0,

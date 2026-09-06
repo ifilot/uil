@@ -6,10 +6,11 @@
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLVertexArrayObject>
 #include <QOpenGLWidget>
+#include <QImage>
 #include <QPointF>
 #include <QQuaternion>
+#include <QVector3D>
 
-#include <array>
 #include <functional>
 #include <memory>
 
@@ -48,6 +49,8 @@ public:
     bool renderer_available() const;
     /** @brief Returns the renderer or volume-construction error, if any. */
     QString renderer_error() const;
+    /** @brief Captures the OpenGL frame together with the child controls. */
+    QImage capture_frame();
 
 protected:
     void initializeGL() override;
@@ -79,6 +82,7 @@ private:
     void create_controls();
     void position_controls();
     void update_offset_label();
+    QVector3D trackball_point(const QPointF& position) const;
     QRect left_logical_viewport() const;
     QRect right_logical_viewport() const;
     QRect to_gl_viewport(const QRect& logical) const;
@@ -87,7 +91,7 @@ private:
     AtomicOrbitalVolume volume_;
     QString renderer_error_;
     QQuaternion rotation_;
-    QPointF last_mouse_position_;
+    QVector3D last_trackball_point_;
     float zoom_factor_ = 1.0f;
     bool rotating_ = false;
     bool renderer_ready_ = false;
@@ -105,7 +109,6 @@ private:
     QOpenGLVertexArrayObject quad_vao_;
     QOpenGLBuffer axis_buffer_{QOpenGLBuffer::VertexBuffer};
     QOpenGLVertexArrayObject axis_vao_;
-    std::array<QPointF, 3> axis_label_positions_{};
     QFrame* controls_panel_ = nullptr;
     QLabel* offset_label_ = nullptr;
     QSlider* offset_slider_ = nullptr;

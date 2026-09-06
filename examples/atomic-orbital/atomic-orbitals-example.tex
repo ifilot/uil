@@ -5,97 +5,39 @@
 \setbeamertemplate{navigation symbols}{}
 \setbeamercolor{frametitle}{fg=white,bg=teal!65!black}
 
-\definecolor{phaseblue}{HTML}{2563EB}
-\definecolor{phasered}{HTML}{DC2626}
-\definecolor{phasegreen}{HTML}{0F766E}
-\definecolor{phaseorange}{HTML}{C2410C}
-\definecolor{phaseviolet}{HTML}{7C3AED}
-\definecolor{phasegold}{HTML}{F59E0B}
-
-\tikzset{orbital phase/.style={draw=white,line width=.5pt,opacity=.88},
-  contour/.style={line width=.55pt}}
-
-\newcommand{\posterbase}[1]{%
-  \fill[gray!4] (0,0) rectangle (12,5.4);
-  \draw[gray!45] (0,0) rectangle (12,5.4);
-  \draw[gray!45] (6.15,.25) -- (6.15,5.15);
-  \node[anchor=north west,font=\small\bfseries] at (.2,5.18) {#1 orbital and sampling plane};
-  \node[anchor=north west,font=\small\bfseries] at (6.35,5.18) {Signed $\psi$ contour};
-  \fill[white,opacity=.62] (1.0,1.0) -- (5.4,1.55) -- (5.4,4.05) -- (1.0,3.5) -- cycle;
-  \draw[cyan!55!black,line width=.8pt] (1.0,1.0) -- (5.4,1.55) -- (5.4,4.05) -- (1.0,3.5) -- cycle;
-  \draw[gray!55] (6.55,.65) rectangle (11.45,4.65);
-  \shade[bottom color=phasered,top color=white]
-    (11.08,.8) rectangle (11.28,2.65);
-  \shade[bottom color=white,top color=phaseblue]
-    (11.08,2.65) rectangle (11.28,4.5);
-  \draw[gray!50] (11.08,.8) rectangle (11.28,4.5);
-  \node[font=\tiny,anchor=west] at (11.32,4.5) {$+\max$};
-  \node[font=\tiny,anchor=west] at (11.32,2.65) {$0$};
-  \node[font=\tiny,anchor=west] at (11.32,.8) {$-\max$};
-  \node[anchor=south east,rounded corners=1.5pt,fill=cyan!55!blue,text=white,
-    font=\scriptsize\bfseries,inner xsep=5pt,inner ysep=2.5pt]
-    at (11.8,.18) {$\blacktriangleright$\ INTERACTIVE};
+% Each fallback is captured from AtomicOrbitalWidget itself, keeping the PDF
+% preview faithful to the live renderer. The badge remains a PDF-only overlay.
+\newcommand{\orbitalposter}[1]{%
+  \begin{tikzpicture}
+    \node[inner sep=0] (render)
+      {\includegraphics[width=12cm,height=5.4cm]{previews/#1.png}};
+    \node[anchor=north east,rounded corners=1.5pt,fill=cyan!55!blue,text=white,
+      font=\scriptsize\bfseries,inner xsep=5pt,inner ysep=2.5pt]
+      at ([xshift=-2mm,yshift=-2mm]render.north east)
+      {$\blacktriangleright$\ INTERACTIVE};
+  \end{tikzpicture}%
 }
-
-\newcommand{\twosposter}{%
-\begin{tikzpicture}[x=1cm,y=1cm]
-  \posterbase{$2s$}
-  \fill[phaseblue,orbital phase] (3.15,2.7) circle (.72);
-  \fill[phasered,orbital phase,even odd rule] (3.15,2.7) circle (1.45) (3.15,2.7) circle (.87);
-  \foreach \r in {.35,.72,1.08,1.45,1.82}{
-    \draw[contour,blue!65!black] (8.8,2.65) circle (\r);}
-  \draw[contour,red!70!black,dashed] (8.8,2.65) circle (.85);
-  \draw[gray!45,dotted] (6.75,2.65)--(10.85,2.65) (8.8,.75)--(8.8,4.55);
-\end{tikzpicture}}
-
-\newcommand{\twopzposter}{%
-\begin{tikzpicture}[x=1cm,y=1cm]
-  \posterbase{$2p_z$}
-  \begin{scope}
-    \clip (0,2.7) rectangle (6.1,5.2);
-    \fill[phasegreen,orbital phase] (3.15,2.7) ellipse (.78 and 1.65);
-  \end{scope}
-  \begin{scope}
-    \clip (0,.2) rectangle (6.1,2.7);
-    \fill[phaseorange,orbital phase] (3.15,2.7) ellipse (.78 and 1.65);
-  \end{scope}
-  \draw[gray!35,dashed] (3.15,.65)--(3.15,4.75);
-  \foreach \s in {.42,.72,1.02,1.32}{
-    \draw[contour,teal!75!black] (8.8,{2.65+\s/1.7}) ellipse ({\s/2.2} and \s);
-    \draw[contour,orange!85!black] (8.8,{2.65-\s/1.7}) ellipse ({\s/2.2} and \s);}
-  \draw[gray!45,dotted] (6.75,2.65)--(10.85,2.65) (8.8,.75)--(8.8,4.55);
-\end{tikzpicture}}
-
-\newcommand{\threedzposter}{%
-\begin{tikzpicture}[x=1cm,y=1cm]
-  \posterbase{$3d_{z^2}$}
-  \fill[phaseviolet,orbital phase] (3.15,3.62) ellipse (.66 and 1.05);
-  \fill[phaseviolet,orbital phase] (3.15,1.78) ellipse (.66 and 1.05);
-  \fill[phasegold,orbital phase,even odd rule] (3.15,2.7) ellipse (1.28 and .48)
-    (3.15,2.7) ellipse (.62 and .2);
-  \foreach \s in {.32,.58,.84,1.1}{
-    \draw[contour,violet!75!black] (8.8,{2.65+\s/1.25}) ellipse ({\s/2.5} and \s);
-    \draw[contour,violet!75!black] (8.8,{2.65-\s/1.25}) ellipse ({\s/2.5} and \s);}
-  \foreach \r in {.55,.82,1.1}{\draw[contour,orange!85!black,dashed]
-    (8.8,2.65) ellipse [x radius=\r,y radius={\r/2.8}];}
-  \draw[gray!45,dotted] (6.75,2.65)--(10.85,2.65) (8.8,.75)--(8.8,4.55);
-\end{tikzpicture}}
 
 \begin{document}
 
 \begin{frame}{Atomic orbitals: radial node in $2s$}
   \centering
-  \atomicorbital[width=12cm,height=5.4cm]{\twosposter}{2s.uilorb}
+  \atomicorbital[width=12cm,height=5.4cm]{\orbitalposter{2s}}{2s.uilorb}
 \end{frame}
 
 \begin{frame}{Atomic orbitals: angular node in $2p_z$}
   \centering
-  \atomicorbital[width=12cm,height=5.4cm]{\twopzposter}{2pz.uilorb}
+  \atomicorbital[width=12cm,height=5.4cm]{\orbitalposter{2pz}}{2pz.uilorb}
 \end{frame}
 
 \begin{frame}{Atomic orbitals: $3d_{z^2}$}
   \centering
-  \atomicorbital[width=12cm,height=5.4cm]{\threedzposter}{3dz2.uilorb}
+  \atomicorbital[width=12cm,height=5.4cm]{\orbitalposter{3dz2}}{3dz2.uilorb}
+\end{frame}
+
+\begin{frame}{Atomic orbitals: $4f_{z^3}$}
+  \centering
+  \atomicorbital[width=12cm,height=5.4cm]{\orbitalposter{4fz3}}{4fz3.uilorb}
 \end{frame}
 
 \end{document}

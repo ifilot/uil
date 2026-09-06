@@ -140,6 +140,22 @@ target_link_libraries(atomic_orbital_widget_test PRIVATE
     Qt6::OpenGLWidgets
 )
 
+add_executable(atomic_orbital_preview_generator
+    atomic_orbital_preview_generator.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/atomic_orbital_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+)
+target_include_directories(atomic_orbital_preview_generator PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(atomic_orbital_preview_generator PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+)
+uil_enable_windows_hardening(atomic_orbital_preview_generator)
+uil_enable_sanitizers(atomic_orbital_preview_generator)
+
 add_uil_unit_test(harmonic_wavepacket_test
     harmonic_wavepacket_test.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp

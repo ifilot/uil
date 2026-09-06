@@ -1878,8 +1878,8 @@ void AudienceWindow::update_atomic_orbital_overlay_geometry() {
 
 void AudienceWindow::capture_atomic_orbital_frame() {
     if (!atomic_orbital_widget_ || !atomic_orbital_widget_->isVisible()) return;
-    const QPixmap snapshot = atomic_orbital_widget_->grab();
-    if (!snapshot.isNull()) atomic_orbital_snapshot_frame_ = snapshot.toImage();
+    const QImage snapshot = atomic_orbital_widget_->capture_frame();
+    if (!snapshot.isNull()) atomic_orbital_snapshot_frame_ = snapshot;
 }
 
 QPointF AudienceWindow::slide_image_point(QPointF window_point, QSize texture_size, bool* inside) const {

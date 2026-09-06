@@ -1,4 +1,5 @@
 #include "ui/atomic_orbital_widget.hpp"
+#include "ui/math_text.hpp"
 
 #include <QContextMenuEvent>
 #include <QDebug>
@@ -22,7 +23,7 @@
 #include <utility>
 
 namespace {
-constexpr int kControlHeight = 70;
+constexpr int kControlHeight = 78;
 constexpr int kHeaderHeight = 54;
 constexpr int kOuterMargin = 12;
 constexpr int kPanelGap = 14;
@@ -50,6 +51,14 @@ QString plane_name(AtomicOrbitalDefinition::Plane plane) {
     case AtomicOrbitalDefinition::Plane::XY: return QStringLiteral("xy");
     }
     return QStringLiteral("xy");
+}
+
+QString orbital_math_label(const QString& name) {
+    AtomicOrbitalCatalogEntry entry;
+    if (resolve_atomic_orbital(name, &entry)) {
+        return QStringLiteral("$%1$").arg(entry.label);
+    }
+    return QStringLiteral("$%1$").arg(name);
 }
 
 int plane_index(AtomicOrbitalDefinition::Plane plane) {
@@ -167,6 +176,25 @@ bool AtomicOrbitalWidget::renderer_available() const {
 
 QString AtomicOrbitalWidget::renderer_error() const {
     return renderer_error_;
+}
+
+QImage AtomicOrbitalWidget::capture_frame() {
+    QImage image = grabFramebuffer();
+    if (image.isNull() || !controls_panel_ || !controls_panel_->isVisible()) {
+        return image;
+    }
+    const QImage controls = controls_panel_->grab().toImage();
+    if (controls.isNull()) return image;
+
+    const qreal scale_x = qreal(image.width()) / qreal(std::max(1, width()));
+    const qreal scale_y = qreal(image.height()) / qreal(std::max(1, height()));
+    const QRect geometry = controls_panel_->geometry();
+    const QRectF target(
+        geometry.x() * scale_x, geometry.y() * scale_y,
+        geometry.width() * scale_x, geometry.height() * scale_y);
+    QPainter painter(&image);
+    painter.drawImage(target, controls);
+    return image;
 }
 
 void AtomicOrbitalWidget::reset_view() {
@@ -352,15 +380,10 @@ void main() {
         plane_buffer_.release();
     }
     {
-        static constexpr float axes[] = {
-            0, 0, 0, 1, 0, 0,
-            0, 0, 0, 0, 1, 0,
-            0, 0, 0, 0, 0, 1,
-        };
         QOpenGLVertexArrayObject::Binder binder(&axis_vao_);
         axis_buffer_.bind();
-        axis_buffer_.setUsagePattern(QOpenGLBuffer::StaticDraw);
-        axis_buffer_.allocate(axes, int(sizeof(axes)));
+        axis_buffer_.setUsagePattern(QOpenGLBuffer::DynamicDraw);
+        axis_buffer_.allocate(32 * 3 * int(sizeof(float)));
         axis_program_->enableAttributeArray(0);
         axis_program_->setAttributeBuffer(0, GL_FLOAT, 0, 3, 3 * int(sizeof(float)));
         axis_buffer_.release();
@@ -594,34 +617,60 @@ void AtomicOrbitalWidget::draw_world_axes(
     const QMatrix4x4& view,
     const QMatrix4x4& projection) {
     if (!axis_program_ || !axis_vao_.isCreated()) return;
-    QMatrix4x4 model;
     const float length = volume_.half_extent * 0.72f;
-    model.scale(length);
-    const QMatrix4x4 mvp = projection * view * model;
+    const float glyph_size = volume_.half_extent * 0.052f;
+    const float label_gap = volume_.half_extent * 0.045f;
+    const QVector3D eye_direction = QVector3D(2.8f, -3.2f, 2.35f).normalized();
+    const QVector3D forward = -eye_direction;
+    const QVector3D right = QVector3D::crossProduct(
+        forward, QVector3D(0, 0, 1)).normalized();
+    const QVector3D up = QVector3D::crossProduct(right, forward).normalized();
 
-    glDisable(GL_DEPTH_TEST);
+    QVector<QVector3D> vertices;
+    vertices.reserve(28);
+    const auto line = [&vertices](const QVector3D& from, const QVector3D& to) {
+        vertices.append(from);
+        vertices.append(to);
+    };
+    const QVector3D origin;
+    const QVector3D x_end(length, 0, 0);
+    const QVector3D y_end(0, length, 0);
+    const QVector3D z_end(0, 0, length);
+    line(origin, x_end);
+    line(origin, y_end);
+    line(origin, z_end);
+
+    const auto glyph_point = [&](const QVector3D& center, float x, float y) {
+        return center + right * (x * glyph_size) + up * (y * glyph_size);
+    };
+    const QVector3D x_label = x_end + QVector3D(label_gap, 0, 0);
+    line(glyph_point(x_label, -0.55f, -0.65f), glyph_point(x_label, 0.55f, 0.65f));
+    line(glyph_point(x_label, -0.55f, 0.65f), glyph_point(x_label, 0.55f, -0.65f));
+
+    const QVector3D y_label = y_end + QVector3D(0, label_gap, 0);
+    line(glyph_point(y_label, -0.55f, 0.65f), glyph_point(y_label, 0.0f, 0.05f));
+    line(glyph_point(y_label, 0.55f, 0.65f), glyph_point(y_label, 0.0f, 0.05f));
+    line(glyph_point(y_label, 0.0f, 0.05f), glyph_point(y_label, 0.0f, -0.68f));
+
+    const QVector3D z_label = z_end + QVector3D(0, 0, label_gap);
+    line(glyph_point(z_label, -0.52f, 0.65f), glyph_point(z_label, 0.52f, 0.65f));
+    line(glyph_point(z_label, 0.52f, 0.65f), glyph_point(z_label, -0.52f, -0.65f));
+    line(glyph_point(z_label, -0.52f, -0.65f), glyph_point(z_label, 0.52f, -0.65f));
+
+    axis_buffer_.bind();
+    axis_buffer_.allocate(vertices.constData(), int(vertices.size() * sizeof(QVector3D)));
+    axis_buffer_.release();
+
+    glEnable(GL_DEPTH_TEST);
     glLineWidth(std::max(1.0f, float(devicePixelRatioF()) * 2.0f));
     axis_program_->bind();
-    axis_program_->setUniformValue("model_view_projection", mvp);
+    axis_program_->setUniformValue("model_view_projection", projection * view);
     {
         QOpenGLVertexArrayObject::Binder binder(&axis_vao_);
-        glDrawArrays(GL_LINES, 0, 6);
+        glDrawArrays(GL_LINES, 0, vertices.size());
     }
     axis_program_->release();
     glLineWidth(1.0f);
-    glEnable(GL_DEPTH_TEST);
-
-    const std::array<QVector3D, 3> endpoints{{
-        QVector3D(1, 0, 0), QVector3D(0, 1, 0), QVector3D(0, 0, 1)}};
-    const QRect viewport = left_logical_viewport();
-    for (int index = 0; index < int(endpoints.size()); ++index) {
-        const QVector4D clip = mvp * QVector4D(endpoints[index], 1.0f);
-        if (std::abs(clip.w()) < 1.0e-6f) continue;
-        const QVector3D ndc = clip.toVector3DAffine();
-        axis_label_positions_[index] = QPointF(
-            viewport.left() + (double(ndc.x()) + 1.0) * 0.5 * viewport.width(),
-            viewport.top() + (1.0 - (double(ndc.y()) + 1.0) * 0.5) * viewport.height());
-    }
 }
 
 void AtomicOrbitalWidget::draw_labels_and_colorbar() {
@@ -632,39 +681,23 @@ void AtomicOrbitalWidget::draw_labels_and_colorbar() {
     title_font.setBold(true);
     title_font.setPixelSize(kTitlePixelSize);
     painter.setFont(title_font);
-    painter.drawText(QRect(kOuterMargin, 6, width() - 2 * kOuterMargin, 38),
-                     Qt::AlignCenter, definition_.title);
+    ui_math_text::draw(
+        painter, QRectF(kOuterMargin, 4, width() - 2 * kOuterMargin, 44),
+        definition_.title, Qt::AlignCenter, title_font,
+        QColor(QStringLiteral("#1f2937")));
     QFont label_font = painter.font();
     label_font.setBold(true);
     label_font.setPixelSize(kPanelLabelPixelSize);
     painter.setFont(label_font);
-    painter.drawText(left_logical_viewport().adjusted(4, 3, -4, -3),
-                     Qt::AlignLeft | Qt::AlignTop,
-                     QStringLiteral("%1 orbital + fixed %2 plane")
-                         .arg(definition_.orbital, plane_name(definition_.plane)));
-    painter.drawText(right_logical_viewport().adjusted(4, 3, -4, -3),
-                     Qt::AlignLeft | Qt::AlignTop,
-                     QStringLiteral("signed ψ contour (%1)").arg(definition_.colormap));
-
-    if (renderer_ready_ && volume_.is_valid()) {
-        QFont axis_font = painter.font();
-        axis_font.setBold(true);
-        axis_font.setPixelSize(22);
-        painter.setFont(axis_font);
-        const std::array<QString, 3> axis_names{{
-            QStringLiteral("x"), QStringLiteral("y"), QStringLiteral("z")}};
-        for (int index = 0; index < int(axis_names.size()); ++index) {
-            const QPointF position = axis_label_positions_[index];
-            const QRectF label_rect(
-                position.x() - 13.0, position.y() - 13.0, 26.0, 26.0);
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(QColor(255, 255, 255, 210));
-            painter.drawEllipse(label_rect.adjusted(1.0, 1.0, -1.0, -1.0));
-            painter.setPen(QColor(6, 6, 6));
-            painter.setBrush(Qt::NoBrush);
-            painter.drawText(label_rect, Qt::AlignCenter, axis_names[index]);
-        }
-    }
+    ui_math_text::draw(
+        painter, left_logical_viewport().adjusted(6, 2, -4, -3),
+        QStringLiteral("%1 orbital + fixed $%2$ plane")
+            .arg(orbital_math_label(definition_.orbital), plane_name(definition_.plane)),
+        Qt::AlignLeft | Qt::AlignTop, label_font, QColor(QStringLiteral("#1f2937")));
+    ui_math_text::draw(
+        painter, right_logical_viewport().adjusted(6, 2, -4, -3),
+        QStringLiteral("Signed $\\psi$ contour"),
+        Qt::AlignLeft | Qt::AlignTop, label_font, QColor(QStringLiteral("#1f2937")));
 
     painter.setPen(QPen(QColor(75, 85, 99), 1.0));
     painter.drawRect(left_logical_viewport().adjusted(0, 0, -1, -1));
@@ -704,27 +737,35 @@ void AtomicOrbitalWidget::create_controls() {
     controls_panel_ = new QFrame(this);
     controls_panel_->setObjectName(QStringLiteral("atomicOrbitalControls"));
     controls_panel_->setStyleSheet(QStringLiteral(
-        "#atomicOrbitalControls { background: rgba(248,250,252,238);"
-        " border: 1px solid #94a3b8; border-radius: 6px; }"
+        "#atomicOrbitalControls { background: #f1f5f9;"
+        " border: 1px solid #cbd5e1; }"
         "#atomicOrbitalControls QLabel { color: #111827; background: transparent;"
-        " font-size: 20px; font-weight: 600; }"
-        "#atomicOrbitalControls QPushButton { color: white; background: #008c8c;"
-        " border: 0; border-radius: 3px; font-size: 19px; font-weight: 600;"
-        " padding: 7px 12px; }"
-        "#atomicOrbitalControls QPushButton:hover { background: #007777; }"));
+        " border: none; padding: 0 3px; font-size: 26px; font-weight: 600; }"
+        "QSlider#atomicOrbitalOffsetSlider { background: transparent; }"
+        "QSlider#atomicOrbitalOffsetSlider::groove:horizontal {"
+        " height: 9px; background: #cbd5e1; border-radius: 4px; }"
+        "QSlider#atomicOrbitalOffsetSlider::sub-page:horizontal {"
+        " background: #0891b2; border-radius: 2px; }"
+        "QSlider#atomicOrbitalOffsetSlider::handle:horizontal {"
+        " width: 24px; margin: -9px 0; background: #0e7490;"
+        " border: 1px solid #155e75; border-radius: 12px; }"
+        "#atomicOrbitalControls QPushButton { color: white; background: #0f766e;"
+        " border: 1px solid #0f766e; font-size: 24px; font-weight: 600;"
+        " padding: 9px 16px; min-width: 112px; }"
+        "#atomicOrbitalControls QPushButton:hover { background: #0d9488;"
+        " border-color: #0d9488; }"));
     auto* layout = new QHBoxLayout(controls_panel_);
-    layout->setContentsMargins(10, 5, 8, 5);
-    layout->setSpacing(8);
+    layout->setContentsMargins(16, 8, 16, 12);
+    layout->setSpacing(14);
     offset_label_ = new QLabel(controls_panel_);
     offset_label_->setObjectName(QStringLiteral("atomicOrbitalOffsetLabel"));
-    offset_label_->setMinimumWidth(230);
+    offset_label_->setMinimumWidth(270);
     offset_slider_ = new QSlider(Qt::Horizontal, controls_panel_);
     offset_slider_->setObjectName(QStringLiteral("atomicOrbitalOffsetSlider"));
     offset_slider_->setRange(0, kSliderSteps);
     reset_button_ = new QPushButton(QStringLiteral("Reset"), controls_panel_);
     reset_button_->setObjectName(QStringLiteral("atomicOrbitalResetButton"));
     reset_button_->setFocusPolicy(Qt::NoFocus);
-    reset_button_->setFixedWidth(96);
     layout->addWidget(offset_label_);
     layout->addWidget(offset_slider_, 1);
     layout->addWidget(reset_button_);
@@ -803,7 +844,7 @@ void AtomicOrbitalWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton
         && left_logical_viewport().contains(event->position().toPoint())) {
         rotating_ = true;
-        last_mouse_position_ = event->position();
+        last_trackball_point_ = trackball_point(event->position());
         setCursor(Qt::ClosedHandCursor);
         event->accept();
         return;
@@ -813,18 +854,46 @@ void AtomicOrbitalWidget::mousePressEvent(QMouseEvent* event) {
 
 void AtomicOrbitalWidget::mouseMoveEvent(QMouseEvent* event) {
     if (rotating_ && (event->buttons() & Qt::LeftButton)) {
-        const QPointF delta = event->position() - last_mouse_position_;
-        last_mouse_position_ = event->position();
-        const QQuaternion yaw = QQuaternion::fromAxisAndAngle(
-            0, 0, 1, float(delta.x()) * 0.65f);
-        const QQuaternion pitch = QQuaternion::fromAxisAndAngle(
-            0, 1, 0, float(delta.y()) * 0.65f);
-        rotation_ = (yaw * pitch * rotation_).normalized();
+        const QVector3D current = trackball_point(event->position());
+        QVector3D axis_camera = QVector3D::crossProduct(last_trackball_point_, current);
+        const float sine = axis_camera.length();
+        const float cosine = std::clamp(
+            QVector3D::dotProduct(last_trackball_point_, current), -1.0f, 1.0f);
+        last_trackball_point_ = current;
+        if (sine > 1.0e-6f) {
+            axis_camera /= sine;
+            const QVector3D eye_direction = QVector3D(2.8f, -3.2f, 2.35f).normalized();
+            const QVector3D forward = -eye_direction;
+            const QVector3D right = QVector3D::crossProduct(
+                forward, QVector3D(0, 0, 1)).normalized();
+            const QVector3D up = QVector3D::crossProduct(right, forward).normalized();
+            const QVector3D axis_world = (
+                right * axis_camera.x() + up * axis_camera.y()
+                + eye_direction * axis_camera.z()).normalized();
+            const float angle = float(std::atan2(double(sine), double(cosine))
+                                      * 180.0 / 3.14159265358979323846);
+            rotation_ = (QQuaternion::fromAxisAndAngle(axis_world, angle)
+                         * rotation_).normalized();
+        }
         update();
         event->accept();
         return;
     }
     QOpenGLWidget::mouseMoveEvent(event);
+}
+
+QVector3D AtomicOrbitalWidget::trackball_point(const QPointF& position) const {
+    const QRect viewport = left_logical_viewport();
+    const QPointF center = viewport.center();
+    const double radius = std::max(1.0, 0.5 * double(std::min(
+        viewport.width(), viewport.height())));
+    const float x = float((position.x() - center.x()) / radius);
+    const float y = float((center.y() - position.y()) / radius);
+    const float radius_squared = x * x + y * y;
+    const float z = radius_squared <= 0.5f
+        ? std::sqrt(std::max(0.0f, 1.0f - radius_squared))
+        : 0.5f / std::sqrt(radius_squared);
+    return QVector3D(x, y, z).normalized();
 }
 
 void AtomicOrbitalWidget::mouseReleaseEvent(QMouseEvent* event) {
