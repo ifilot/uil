@@ -37,6 +37,9 @@ public:
 
     /** @brief Rebuilds the sampled volume and phase isosurfaces. */
     void set_definition(const AtomicOrbitalDefinition& definition);
+    /** @brief Installs precomputed geometry without sampling or meshing on the UI thread. */
+    void set_prepared_definition(const AtomicOrbitalDefinition& definition,
+                                 const AtomicOrbitalVolume& volume, const QString& error = {});
     /** @brief Returns the currently displayed definition. */
     const AtomicOrbitalDefinition& definition() const;
     /** @brief Receives right-clicks that should open the audience feature menu. */
@@ -51,8 +54,10 @@ public:
     QString renderer_error() const;
     /** @brief Captures the OpenGL frame together with the child controls. */
     QImage capture_frame();
+    /** @brief Captures a clean, fitted atlas poster, restoring the interactive view afterward. */
+    QImage capture_poster(bool surface_only = false);
 
-protected:
+   protected:
     void initializeGL() override;
     void paintGL() override;
     void resizeGL(int width, int height) override;
@@ -70,6 +75,8 @@ private:
     bool create_renderer();
     void destroy_renderer();
     bool upload_volume();
+    /** @brief Updates only the small palette texture when geometry can be reused. */
+    void upload_colormap();
     void update_plane_buffer();
     void draw_surface(const Mesh& mesh, const QColor& color,
                       const QMatrix4x4& model, const QMatrix4x4& view,
@@ -94,6 +101,8 @@ private:
     QVector3D last_trackball_point_;
     float zoom_factor_ = 1.0f;
     bool rotating_ = false;
+    bool poster_mode_ = false;
+    bool poster_surface_only_ = false;
     bool renderer_ready_ = false;
     bool volume_dirty_ = false;
     GLuint volume_texture_ = 0;

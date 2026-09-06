@@ -1,43 +1,39 @@
 \documentclass[aspectratio=169]{beamer}
-
-\usepackage{tikz}
 \usepackage{uilorbital}
 \setbeamertemplate{navigation symbols}{}
-\setbeamercolor{frametitle}{fg=white,bg=teal!65!black}
-
-% Each fallback is captured from AtomicOrbitalWidget itself, keeping the PDF
-% preview faithful to the live renderer. The badge remains a PDF-only overlay.
-\newcommand{\orbitalposter}[1]{%
-  \begin{tikzpicture}
-    \node[inner sep=0] (render)
-      {\includegraphics[width=12cm,height=5.4cm]{previews/#1.png}};
-    \node[anchor=north east,rounded corners=1.5pt,fill=cyan!55!blue,text=white,
-      font=\scriptsize\bfseries,inner xsep=5pt,inner ysep=2.5pt]
-      at ([xshift=-2mm,yshift=-2mm]render.north east)
-      {$\blacktriangleright$\ INTERACTIVE};
-  \end{tikzpicture}%
-}
+\definecolor{garnet}{HTML}{8E1B3E}
+\setbeamercolor{frametitle}{fg=white,bg=garnet}
+\uilorbitalsetup{palette=garnet_slate}
 
 \begin{document}
+\begin{frame}{Atomic orbitals: compare $1s$ and $2s$}
+  \begin{columns}[c,onlytextwidth]
+    \begin{column}{0.49\textwidth}
+      \atomicorbital[orbital=1s,width=\linewidth]
+    \end{column}
+    \begin{column}{0.49\textwidth}
+      \atomicorbital[orbital=2s,width=\linewidth]
+    \end{column}
+  \end{columns}
+\end{frame}
 
 \begin{frame}{Atomic orbitals: radial node in $2s$}
   \centering
-  \atomicorbital[width=12cm,height=5.4cm]{\orbitalposter{2s}}{2s.uilorb}
+  \atomicorbital[orbital=2s,width=12cm,height=5.4cm]
 \end{frame}
 
 \begin{frame}{Atomic orbitals: angular node in $2p_z$}
   \centering
-  \atomicorbital[width=12cm,height=5.4cm]{\orbitalposter{2pz}}{2pz.uilorb}
+  \atomicorbital[orbital=2pz,width=12cm,height=5.4cm]
 \end{frame}
 
 \begin{frame}{Atomic orbitals: $3d_{z^2}$}
   \centering
-  \atomicorbital[width=12cm,height=5.4cm]{\orbitalposter{3dz2}}{3dz2.uilorb}
+  \atomicorbital[orbital=3dz2,width=12cm,height=5.4cm]
 \end{frame}
 
 \begin{frame}{Atomic orbitals: $4f_{z^3}$}
   \centering
-  \atomicorbital[width=12cm,height=5.4cm]{\orbitalposter{4fz3}}{4fz3.uilorb}
+  \atomicorbital[orbital=4fz(5z2-3r2),width=12cm,height=5.4cm]
 \end{frame}
-
 \end{document}

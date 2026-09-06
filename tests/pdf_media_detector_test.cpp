@@ -149,6 +149,8 @@ private slots:
 
     /** @brief Verifies the bundled atomic-orbital presentation end to end. */
     void bundled_atomic_orbital_example_loads();
+    /** @brief Checks every embedded orbital in the generated Garnet-Slate atlas. */
+    void bundled_orbital_atlas_loads();
 
 #if defined(UIL_HAVE_FFMPEG)
     /** @brief Verifies that the optional FFmpeg runtime can be loaded on first use. */
@@ -398,17 +400,34 @@ void PdfMediaDetectorTest::bundled_atomic_orbital_example_loads() {
     QVERIFY2(QFileInfo::exists(pdf_path), qPrintable(pdf_path));
 
     const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
-    QCOMPARE(result.atomic_orbital_annotations.size(), 4);
-    const QStringList expected_names{
-        QStringLiteral("2s"), QStringLiteral("2pz"), QStringLiteral("3dz2"),
-        QStringLiteral("4fz(5z2-3r2)")};
+    QCOMPARE(result.atomic_orbital_annotations.size(), 6);
+    const QStringList expected_names{QStringLiteral("1s"),   QStringLiteral("2s"),
+                                     QStringLiteral("2s"),   QStringLiteral("2pz"),
+                                     QStringLiteral("3dz2"), QStringLiteral("4fz(5z2-3r2)")};
     for (int index = 0; index < expected_names.size(); ++index) {
         const PdfAtomicOrbitalAnnotation& orbital =
             result.atomic_orbital_annotations.at(index);
-        QCOMPARE(orbital.page_index, index);
+        QCOMPARE(orbital.page_index, std::max(0, index - 1));
         QVERIFY2(orbital.is_ready(), qPrintable(orbital.error_message));
         QCOMPARE(orbital.definition.orbital, expected_names.at(index));
     }
+}
+
+void PdfMediaDetectorTest::bundled_orbital_atlas_loads() {
+  const auto result = scan_pdf_media_annotations(
+      QStringLiteral(UIL_TEST_SOURCE_DIR "/examples/bundled/orbital-atlas.pdf"));
+  const auto catalog = atomic_orbital_catalog();
+  QCOMPARE(result.atomic_orbital_annotations.size(), catalog.size());
+  for (int index = 0; index < catalog.size(); ++index) {
+    const auto& annotation = result.atomic_orbital_annotations.at(index);
+    QVERIFY2(annotation.is_ready(), qPrintable(annotation.error_message));
+    QCOMPARE(annotation.page_index, index / 4);
+    QCOMPARE(annotation.definition.orbital, catalog.at(index).name);
+    QCOMPARE(annotation.definition.colormap, QStringLiteral("garnet_slate"));
+    for (int other = index / 4 * 4; other < index; ++other) {
+      QVERIFY(!annotation.rect.intersects(result.atomic_orbital_annotations.at(other).rect));
+    }
+  }
 }
 
 void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {

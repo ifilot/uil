@@ -247,6 +247,7 @@ qt_add_executable(${UIL_VIEWER_TARGET}
     src/molecule/molecule_camera.hpp
     src/molecule/molecule_camera.cpp
     src/orbital/atomic_orbital.hpp
+    src/orbital/atomic_orbital_cache.cpp
     src/orbital/atomic_orbital.cpp
     src/ui/molecule_widget.hpp
     src/ui/molecule_widget.cpp

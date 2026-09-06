@@ -2,17 +2,17 @@ ENGINE ?= pdflatex
 ENGINE_FLAGS := -interaction=nonstopmode -halt-on-error -file-line-error
 BUILD_DIR := build
 SOURCE := atomic-orbitals-example.tex
-ORBITALS := 2s.uilorb 2pz.uilorb 3dz2.uilorb 4fz3.uilorb
-PREVIEWS := previews/2s.png previews/2pz.png previews/3dz2.png previews/4fz3.png
+ATLAS_DIR := ../../latex/uilorbital-atlas
+ATLAS_FILES := $(shell find $(ATLAS_DIR) -type f)
 PDF := $(BUILD_DIR)/atomic-orbitals-example.pdf
 BUNDLED_PDF := ../bundled/atomic-orbitals.pdf
 UIL_LATEX_DIR := $(abspath ../../latex)
 
 export TEXINPUTS := .:$(UIL_LATEX_DIR)//:
 
-.PHONY: all pdf bundle clean check
+.PHONY: all pdf bundle atlas clean check
 
-all: bundle
+all: bundle atlas
 
 pdf: $(PDF)
 
@@ -23,13 +23,23 @@ check:
 		echo "error: $(ENGINE) was not found" >&2; exit 1; \
 	}
 
-$(PDF): $(SOURCE) $(ORBITALS) $(PREVIEWS) $(UIL_LATEX_DIR)/uilorbital.sty | check
+$(PDF): $(SOURCE) $(ATLAS_FILES) $(UIL_LATEX_DIR)/uilorbital.sty | check
 	@mkdir -p "$(BUILD_DIR)"
 	$(ENGINE) $(ENGINE_FLAGS) -output-directory="$(BUILD_DIR)" "$(SOURCE)"
 
 $(BUNDLED_PDF): $(PDF)
 	@cmake -E copy "$(PDF)" "$(BUNDLED_PDF)"
-	@echo "Built $(BUNDLED_PDF) with four embedded atomic orbitals"
+	@echo "Built $(BUNDLED_PDF) with six embedded atomic orbital plots"
 
 clean:
 	rm -rf "$(BUILD_DIR)"
+
+# The complete, browsable Garnet-Slate catalog (55 independently embedded plots).
+atlas: ../bundled/orbital-atlas.pdf
+
+$(BUILD_DIR)/orbital-atlas.pdf: orbital-atlas.tex $(ATLAS_FILES) $(UIL_LATEX_DIR)/uilorbital.sty | check
+	@mkdir -p "$(BUILD_DIR)"
+	$(ENGINE) $(ENGINE_FLAGS) -output-directory="$(BUILD_DIR)" orbital-atlas.tex
+
+../bundled/orbital-atlas.pdf: $(BUILD_DIR)/orbital-atlas.pdf
+	@cmake -E copy "$<" "$@"

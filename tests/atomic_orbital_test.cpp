@@ -12,6 +12,8 @@ private slots:
     void hydrogenic_values_have_expected_nodes_and_orientation();
     void payload_parses_rendering_and_sampling_options();
     void invalid_orbital_and_colormap_are_rejected();
+    /** @brief Checks themed phase colors, reversal, and payload acceptance. */
+    void garnet_colormaps_match_surface_phases();
     void signed_isosurfaces_are_generated();
     void entire_catalog_generates_at_preview_resolution();
 };
@@ -104,6 +106,35 @@ void AtomicOrbitalTest::invalid_orbital_and_colormap_are_rejected() {
         })"),
         &definition, &error));
     QVERIFY(error.contains(QStringLiteral("invalid")));
+}
+
+void AtomicOrbitalTest::garnet_colormaps_match_surface_phases() {
+  for (const QString& name : {QStringLiteral("garnet_teal"), QStringLiteral("garnet_slate")}) {
+    const auto colors = atomic_orbital_colormap(name);
+    const auto reversed = atomic_orbital_colormap(name + QStringLiteral("_r"));
+    QCOMPARE(colors.size(), 256);
+    QCOMPARE(reversed.size(), colors.size());
+    QCOMPARE(colors.constFirst(),
+             QColor(name == QStringLiteral("garnet_teal") ? "#177e72" : "#426b86"));
+    QCOMPARE(colors.constLast(), QColor("#8e1b3e"));
+    for (int index = 0; index < colors.size(); ++index) {
+      QCOMPARE(colors.at(index), reversed.at(255 - index));
+    }
+    QVERIFY(colors.at(127).lightnessF() > 0.95);
+    QVERIFY(colors.at(128).lightnessF() > 0.95);
+    for (const QString& variant : {name, name + QStringLiteral("_r")}) {
+      AtomicOrbitalDefinition definition;
+      QString error;
+      const QByteArray payload =
+          QStringLiteral(
+              "{\"format\":\"uil.atomic-orbital\",\"version\":1,\"orbital\":\"2s\","
+              "\"contour\":{\"colormap\":\"%1\"}}")
+              .arg(variant)
+              .toUtf8();
+      QVERIFY2(parse_atomic_orbital(payload, &definition, &error), qPrintable(error));
+      QCOMPARE(definition.colormap, variant);
+    }
+  }
 }
 
 void AtomicOrbitalTest::signed_isosurfaces_are_generated() {

@@ -1,11 +1,15 @@
 #include "app_controller.hpp"
-#include "pdf/qt_pdf_backend.hpp"
 
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QPainter>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include "pdf/qt_pdf_backend.hpp"
+#include "ui/atomic_orbital_widget.hpp"
+#include "ui/audience_window.hpp"
 
 namespace {
 QString example_path(const QString& file_name) {
@@ -29,6 +33,8 @@ private slots:
     void opens_renders_and_navigates_bundled_document();
     void opens_bundled_molecule_presentation();
     void opens_bundled_atomic_orbital_presentation();
+    /** @brief Exercises rapid atlas jumps and measures responsive navigation with four orbitals. */
+    void orbital_atlas_navigation();
     void failed_open_preserves_current_document();
     void saves_and_reopens_annotation_package();
     void exports_annotated_pdf();
@@ -143,20 +149,85 @@ void AppControllerTest::opens_bundled_atomic_orbital_presentation() {
 
     const QString path = example_path(QStringLiteral("atomic-orbitals.pdf"));
     QVERIFY(controller.open_pdf(path));
-    QCOMPARE(controller.page_count(), 4);
+    QCOMPARE(controller.page_count(), 5);
     QVERIFY(controller.current_package_path().isEmpty());
-    QTRY_COMPARE_WITH_TIMEOUT(scan_result.atomic_orbital_annotations.size(), 4, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(scan_result.atomic_orbital_annotations.size(), 6, 5000);
 
-    const QStringList expected_names{
-        QStringLiteral("2s"), QStringLiteral("2pz"), QStringLiteral("3dz2"),
-        QStringLiteral("4fz(5z2-3r2)")};
+    const QStringList expected_names{QStringLiteral("1s"),   QStringLiteral("2s"),
+                                     QStringLiteral("2s"),   QStringLiteral("2pz"),
+                                     QStringLiteral("3dz2"), QStringLiteral("4fz(5z2-3r2)")};
     for (int index = 0; index < expected_names.size(); ++index) {
         const PdfAtomicOrbitalAnnotation& orbital =
             scan_result.atomic_orbital_annotations.at(index);
-        QCOMPARE(orbital.page_index, index);
+        QCOMPARE(orbital.page_index, std::max(0, index - 1));
         QVERIFY2(orbital.is_ready(), qPrintable(orbital.error_message));
         QCOMPARE(orbital.definition.orbital, expected_names.at(index));
     }
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen")) return;
+    AudienceWindow window;
+    window.resize(1280, 720);
+    controller.set_audience_window(&window);
+    window.show();
+    QTRY_COMPARE_WITH_TIMEOUT(window.findChildren<AtomicOrbitalWidget*>().size(), 2, 5000);
+    const auto orbitals = window.findChildren<AtomicOrbitalWidget*>();
+    QTRY_VERIFY_WITH_TIMEOUT(orbitals[0]->isVisible() && orbitals[1]->isVisible(), 5000);
+    QCOMPARE(orbitals[0]->definition().orbital, QStringLiteral("1s"));
+    QCOMPARE(orbitals[1]->definition().orbital, QStringLiteral("2s"));
+    controller.next_page();
+    QTRY_VERIFY_WITH_TIMEOUT(orbitals[0]->isVisible() && orbitals[1]->isHidden(), 5000);
+    QCOMPARE(orbitals[0]->definition().orbital, QStringLiteral("2s"));
+    controller.previous_page();
+    QTRY_VERIFY_WITH_TIMEOUT(orbitals[0]->isVisible() && orbitals[1]->isVisible(), 5000);
+}
+
+void AppControllerTest::orbital_atlas_navigation() {
+  if (QGuiApplication::platformName() == QStringLiteral("offscreen"))
+    QSKIP("Requires QOpenGLWidget");
+  AppController controller;
+  AudienceWindow window;
+  PdfMediaScanResult scan;
+  connect(&controller, &AppController::media_scan_changed, this,
+          [&](const PdfMediaScanResult& result) { scan = result; });
+  controller.set_audience_window(&window);
+  window.show();
+  QVERIFY(controller.open_pdf(example_path("orbital-atlas.pdf")));
+  QTRY_COMPARE_WITH_TIMEOUT(scan.atomic_orbital_annotations.size(), 55, 10000);
+  const auto matches_page = [&](int page) {
+    QVector<AtomicOrbitalDefinition> expected;
+    for (const auto& annotation : scan.atomic_orbital_annotations)
+      if (annotation.page_index == page) expected.push_back(annotation.definition);
+    const auto widgets = window.findChildren<AtomicOrbitalWidget*>();
+    if (widgets.size() < expected.size()) return false;
+    for (int i = 0; i < widgets.size(); ++i) {
+      if (i < expected.size()) {
+        if (!widgets[i]->isVisible() || widgets[i]->definition() != expected[i]) return false;
+      } else if (widgets[i]->isVisible())
+        return false;
+    }
+    return true;
+  };
+  QTRY_VERIFY_WITH_TIMEOUT(matches_page(0), 15000);
+  QElapsedTimer timer;
+  timer.start();
+  controller.go_to_page(13);
+  controller.go_to_page(7);
+  controller.go_to_page(12);
+  const double jump_ms = timer.nsecsElapsed() / 1e6;
+  QTRY_VERIFY_WITH_TIMEOUT(matches_page(12), 15000);
+  controller.go_to_page(0);
+  QTRY_VERIFY_WITH_TIMEOUT(matches_page(0), 15000);
+  timer.restart();
+  controller.go_to_page(12);
+  const double warm_ms = timer.nsecsElapsed() / 1e6;
+  QTRY_VERIFY_WITH_TIMEOUT(matches_page(12), 15000);
+  qInfo(
+      "Atlas: three cold navigation requests %.3f ms total; cached four-orbital transition %.3f ms",
+      jump_ms, warm_ms);
+  // Opening an unrelated document while work is in flight cannot revive old orbitals.
+  controller.go_to_page(8);
+  QVERIFY(controller.open_pdf(example_path("getting-started.pdf")));
+  QTRY_VERIFY(scan.atomic_orbital_annotations.isEmpty());
+  for (auto* widget : window.findChildren<AtomicOrbitalWidget*>()) QVERIFY(widget->isHidden());
 }
 
 void AppControllerTest::failed_open_preserves_current_document() {

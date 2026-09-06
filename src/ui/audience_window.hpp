@@ -28,6 +28,7 @@ class QWheelEvent;
 class MoleculeWidget;
 class InteractiveFigureWidget;
 class AtomicOrbitalWidget;
+class AtomicOrbitalCache;
 
 class AudienceWindow : public QWidget {
     Q_OBJECT
@@ -69,7 +70,15 @@ public:
     void set_atomic_orbital_overlay(
         const AtomicOrbitalDefinition& definition,
         QRectF slide_rect);
-    /** @brief Clears the active embedded atomic orbital. */
+    struct AtomicOrbitalOverlay {
+      AtomicOrbitalDefinition definition;
+      QRectF slide_rect;
+    };
+    /** @brief Replaces all embedded orbitals using normalized slide rectangles. */
+    void set_atomic_orbital_overlays(const QVector<AtomicOrbitalOverlay>& overlays,
+                                     const QVector<AtomicOrbitalDefinition>& nearby = {},
+                                     const QString& texture_key = {});
+    /** @brief Clears all active embedded atomic orbitals. */
     void clear_atomic_orbital_overlay();
     /** @brief Selects the screen on which the audience window appears. */
     void set_audience_screen(QScreen* screen);
@@ -263,9 +272,9 @@ private:
     void update_interactive_figure_overlay_geometry();
     /** @brief Saves the current figure frame before disabling interaction. */
     void capture_interactive_figure_frame();
-    /** @brief Repositions and shows or hides the active atomic orbital. */
+    /** @brief Repositions and shows or hides all active atomic orbitals. */
     void update_atomic_orbital_overlay_geometry();
-    /** @brief Saves the current atomic-orbital frame before disabling interaction. */
+    /** @brief Saves each current atomic-orbital frame before disabling interaction. */
     void capture_atomic_orbital_frame();
 
     QString current_texture_key_;
@@ -279,9 +288,17 @@ private:
     std::unique_ptr<InteractiveFigureWidget> interactive_figure_widget_;
     QRectF interactive_figure_rect_;
     QImage interactive_figure_snapshot_frame_;
-    std::unique_ptr<AtomicOrbitalWidget> atomic_orbital_widget_;
-    QRectF atomic_orbital_rect_;
-    QImage atomic_orbital_snapshot_frame_;
+    struct AtomicOrbitalOverlayState {
+      std::unique_ptr<AtomicOrbitalWidget> widget;
+      QRectF slide_rect;
+      QImage snapshot_frame;
+      AtomicOrbitalDefinition definition;
+      QByteArray geometry_key;
+      bool ready = false;
+    };
+    std::vector<AtomicOrbitalOverlayState> atomic_orbital_overlays_;
+    std::unique_ptr<AtomicOrbitalCache> atomic_orbital_cache_;
+    QString atomic_orbital_slide_identity_;
     QHash<int, QImage> deck_overview_images_;
     QSize deck_overview_image_size_;
     QHash<QString, QImage> annotation_images_;

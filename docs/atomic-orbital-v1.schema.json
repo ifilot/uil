@@ -61,7 +61,8 @@
           "enum": [
             "coolwarm", "coolwarm_r", "seismic", "seismic_r", "bwr", "bwr_r",
             "RdBu", "RdBu_r", "PuOr", "PuOr_r", "BrBG", "BrBG_r",
-            "PiYG", "PiYG_r", "PRGn", "PRGn_r", "RdGy", "RdGy_r"
+            "PiYG", "PiYG_r", "PRGn", "PRGn_r", "RdGy", "RdGy_r",
+            "garnet_teal", "garnet_teal_r", "garnet_slate", "garnet_slate_r"
           ],
           "default": "coolwarm"
         },

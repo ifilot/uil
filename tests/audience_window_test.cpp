@@ -50,6 +50,8 @@ private slots:
     void molecule_tool_switch_restores_interaction_without_extra_click();
     void interactive_figure_controls_and_tool_switching();
     void atomic_orbital_controls_and_tool_switching();
+    /** @brief Verifies independent controls and lifecycle of multiple orbital overlays. */
+    void multiple_atomic_orbitals();
     void harmonic_wavepacket_controls_update_status();
     void harmonic_basis_controls_update_phase_status();
     void particle_in_box_basis_slider_updates_fit_status();
@@ -399,7 +401,7 @@ void AudienceWindowTest::atomic_orbital_controls_and_tool_switching() {
     auto* orbital = window.findChild<AtomicOrbitalWidget*>(
         QStringLiteral("atomicOrbitalWidget"));
     QVERIFY(orbital);
-    QVERIFY(orbital->isVisible());
+    QTRY_VERIFY(orbital->isVisible());
     QCOMPARE(orbital->definition().orbital, QStringLiteral("2pz"));
     auto* slider = orbital->findChild<QSlider*>(
         QStringLiteral("atomicOrbitalOffsetSlider"));
@@ -412,7 +414,80 @@ void AudienceWindowTest::atomic_orbital_controls_and_tool_switching() {
     window.set_pen_tool();
     QVERIFY(orbital->isHidden());
     window.set_cursor_tool();
-    QVERIFY(orbital->isVisible());
+    QTRY_VERIFY(orbital->isVisible());
+}
+
+void AudienceWindowTest::multiple_atomic_orbitals() {
+  if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+    QSKIP("The offscreen Qt platform cannot safely expose QOpenGLWidget");
+  }
+  AudienceWindow window;
+  window.resize(1280, 720);
+  QImage slide(1600, 900, QImage::Format_RGB32);
+  slide.fill(Qt::white);
+  window.set_slide_image(QStringLiteral("comparison"), slide);
+  AtomicOrbitalDefinition first;
+  first.grid_size = 33;
+  AtomicOrbitalDefinition second = first;
+  second.orbital = QStringLiteral("2s");
+  second.n = 2;
+  window.set_atomic_orbital_overlays(
+      {{first, QRectF(0.02, 0.2, 0.46, 0.5)}, {second, QRectF(0.52, 0.2, 0.46, 0.5)}});
+  window.show();
+  QCoreApplication::processEvents();
+  const auto orbitals = window.findChildren<AtomicOrbitalWidget*>();
+  QCOMPARE(orbitals.size(), 2);
+  for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isVisible());
+  QVERIFY(!orbitals[0]->geometry().intersects(orbitals[1]->geometry()));
+  QCOMPARE(orbitals[0]->definition().orbital, QStringLiteral("1s"));
+  QCOMPARE(orbitals[1]->definition().orbital, QStringLiteral("2s"));
+  const double second_offset = orbitals[1]->plane_offset();
+  auto* slider = orbitals[0]->findChild<QSlider*>(QStringLiteral("atomicOrbitalOffsetSlider"));
+  QVERIFY(slider);
+  slider->setValue(slider->maximum());
+  QVERIFY(orbitals[0]->plane_offset() > second_offset);
+  QCOMPARE(orbitals[1]->plane_offset(), second_offset);
+  QTest::mouseClick(orbitals[1], Qt::RightButton, Qt::NoModifier, orbitals[1]->rect().center());
+  QPointer<QWidget> menu = window.findChild<QWidget*>(QStringLiteral("featureMenuPanel"));
+  QVERIFY(menu);
+  QVERIFY(menu->isVisible());
+  for (auto* orbital : orbitals) QVERIFY(orbital->isHidden());
+  QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
+  QTRY_VERIFY(menu.isNull());
+  for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isVisible());
+  window.set_pen_tool();
+  for (auto* orbital : orbitals) QVERIFY(orbital->isHidden());
+  window.set_cursor_tool();
+  for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isVisible());
+  window.toggle_black_screen();
+  for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isHidden());
+  window.toggle_black_screen();
+  for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isVisible());
+  window.resize(1000, 600);
+  QCoreApplication::processEvents();
+  QVERIFY(!orbitals[0]->geometry().intersects(orbitals[1]->geometry()));
+  window.set_atomic_orbital_overlay(first, QRectF(0.1, 0.1, 0.8, 0.8));
+  QVERIFY(orbitals[0]->isVisible());
+  QVERIFY(orbitals[1]->isHidden());
+  // Cached definitions preserve the user's controls across controller refreshes.
+  const double offset = orbitals[0]->plane_offset();
+  window.set_atomic_orbital_overlay(first, QRectF(0.1, 0.1, 0.8, 0.8));
+  QCOMPARE(orbitals[0]->plane_offset(), offset);
+  // Even ready geometry must wait for the correct PDF page; resize keys share identity.
+  window.set_atomic_orbital_overlays({{second, QRectF(0.1, 0.1, 0.8, 0.8)}}, {},
+                                     "deck:2:1600x900:0");
+  QVERIFY(orbitals[0]->isHidden());
+  window.set_slide_image("deck:1:1600x900:0", slide);
+  QVERIFY(orbitals[0]->isHidden());
+  window.set_slide_image("deck:2:800x450:0", slide);
+  QTRY_VERIFY(orbitals[0]->isVisible());
+  QCOMPARE(orbitals[0]->definition().n, 2);
+  // A completion after clearing must never resurrect an overlay.
+  auto pending = first;
+  pending.n = 5;
+  window.set_atomic_orbital_overlay(pending, QRectF(0.1, 0.1, 0.8, 0.8));
+  window.clear_slide_image();
+  for (auto* orbital : orbitals) QVERIFY(orbital->isHidden());
 }
 
 void AudienceWindowTest::harmonic_wavepacket_controls_update_status() {

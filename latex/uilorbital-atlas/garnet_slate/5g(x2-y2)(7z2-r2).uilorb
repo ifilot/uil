@@ -1,0 +1,25 @@
+{
+    "contour": {
+        "colormap": "garnet_slate",
+        "levels": 12,
+        "maximum": 0.1
+    },
+    "format": "uil.atomic-orbital",
+    "orbital": "5g(x2-y2)(7z2-r2)",
+    "sampling_plane": {
+        "offset": {
+            "max": 1,
+            "min": -1,
+            "value": 0
+        },
+        "type": "xz"
+    },
+    "surface": {
+        "grid_size": 81,
+        "isovalue": 0,
+        "negative_color": "#426B86",
+        "positive_color": "#8E1B3E"
+    },
+    "title": "Hydrogen-like $5g_{(x^2-y^2)(7z^2-r^2)}$ orbital",
+    "version": 1
+}

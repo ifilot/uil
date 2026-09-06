@@ -1,0 +1,25 @@
+{
+  "format": "uil.atomic-orbital",
+  "version": 1,
+  "title": "2pz \u2014 Garnet / Slate",
+  "orbital": "2pz",
+  "surface": {
+    "isovalue": 0.0,
+    "positive_color": "#8E1B3E",
+    "negative_color": "#426B86",
+    "grid_size": 65
+  },
+  "sampling_plane": {
+    "type": "xz",
+    "offset": {
+      "min": -1.0,
+      "max": 1.0,
+      "value": 0.0
+    }
+  },
+  "contour": {
+    "colormap": "garnet_slate",
+    "maximum": 0.1,
+    "levels": 12
+  }
+}

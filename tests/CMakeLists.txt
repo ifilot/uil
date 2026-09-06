@@ -63,6 +63,7 @@ add_uil_unit_test(audience_window_test
     ${PROJECT_SOURCE_DIR}/src/figure/particle_in_box_basis.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital_cache.cpp
     ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
 )
 target_link_libraries(audience_window_test PRIVATE
@@ -91,6 +92,7 @@ add_uil_unit_test(app_controller_test
     ${PROJECT_SOURCE_DIR}/src/media/video_frame_buffer.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital_cache.cpp
     ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
     ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
@@ -262,3 +264,9 @@ if(WIN32)
     )
     set_tests_properties(native_launcher_test PROPERTIES LABELS unit TIMEOUT 30)
 endif()
+
+add_uil_unit_test(atomic_orbital_cache_test
+    atomic_orbital_cache_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital_cache.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+)

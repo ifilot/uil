@@ -39,6 +39,9 @@ struct AtomicOrbitalDefinition {
     int contour_levels = 12;
     int grid_size = 65;
 
+    /** @brief Compares geometry and presentation settings for unchanged-overlay reuse. */
+    bool operator==(const AtomicOrbitalDefinition&) const = default;
+
     /** @brief Returns whether all parsed values are safe and internally consistent. */
     bool is_valid() const;
 };

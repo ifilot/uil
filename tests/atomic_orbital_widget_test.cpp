@@ -45,6 +45,34 @@ void AtomicOrbitalWidgetTest::renders_and_resamples_when_opengl_is_available() {
     const QImage offset = widget.capture_frame();
     QVERIFY(!offset.isNull());
     QVERIFY(offset != centered);
+    const double saved_offset = widget.plane_offset();
+    for (const bool surface_only : {false, true}) {
+      const QImage poster = widget.capture_poster(surface_only);
+      QVERIFY(!poster.isNull());
+      QCOMPARE(poster.pixelColor(0, 0), QColor(Qt::white));
+      QVERIFY(poster != offset);
+      QVERIFY(slider->isVisible());
+      QCOMPARE(widget.plane_offset(), saved_offset);
+      QCOMPARE(widget.capture_frame(), offset);
+    }
+    // A presentation-only change reuses the shared mesh/volume buffers, but must
+    // refresh palette and sampling-plane resources and still produce a valid frame.
+    const auto prepared = build_atomic_orbital_volume(definition);
+    widget.set_prepared_definition(definition, prepared);
+    auto themed = definition;
+    themed.colormap = QStringLiteral("garnet_slate");
+    themed.positive_color = QColor("#9d2235");
+    themed.negative_color = QColor("#536878");
+    widget.set_prepared_definition(themed, prepared);
+    const auto themed_frame = widget.capture_frame();
+    QVERIFY(widget.renderer_available());
+    QVERIFY(!themed_frame.isNull());
+    QVERIFY(themed_frame != centered);
+    auto other_plane = themed;
+    other_plane.plane = AtomicOrbitalDefinition::Plane::YZ;
+    widget.set_prepared_definition(other_plane, prepared);
+    QVERIFY(widget.renderer_available());
+    QVERIFY(widget.capture_frame() != themed_frame);
 }
 
 QTEST_MAIN(AtomicOrbitalWidgetTest)

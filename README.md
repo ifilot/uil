@@ -26,12 +26,12 @@ tool settings; browse all slides; or close the presentation. The laser pointer
 automatically disappears after three seconds without movement and reappears as
 soon as it moves again.
 
-Five sample decks are included with the Windows distribution. They are all
+Six sample decks are included with the Windows distribution. They are all
 ordinary `.pdf` files, so the same files can also be opened in a regular PDF
 reader. Open them from
 **File > Examples** for tours of navigation, pointer and annotation features,
 the interactive molecule visualizer, embedded interactive-figure examples,
-and atomic orbitals.
+and atomic orbitals, including the complete Garnet–Slate orbital atlas.
 
 | Action | Key |
 |---|---|

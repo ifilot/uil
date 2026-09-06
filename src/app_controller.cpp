@@ -986,16 +986,24 @@ void AppController::update_active_interactive_figure() {
 
 void AppController::update_active_atomic_orbital() {
     if (!audience_window_) return;
+    QVector<AudienceWindow::AtomicOrbitalOverlay> overlays;
     for (const PdfAtomicOrbitalAnnotation& annotation
          : media_scan_result_.atomic_orbital_annotations) {
         if (annotation.page_index == current_page_index_ && annotation.is_ready()) {
-            audience_window_->set_atomic_orbital_overlay(
-                annotation.definition,
-                normalized_pdf_rect(annotation.page_index, annotation.rect));
-            return;
+          overlays.push_back(
+              {annotation.definition, normalized_pdf_rect(annotation.page_index, annotation.rect)});
         }
     }
-    audience_window_->clear_atomic_orbital_overlay();
+    QVector<AtomicOrbitalDefinition> nearby;
+    // Keep speculative work local; navigating again replaces any unstarted builds.
+    for (const int offset : {1, -1, 2}) {
+      for (const auto& annotation : media_scan_result_.atomic_orbital_annotations) {
+        if (annotation.page_index == current_page_index_ + offset && annotation.is_ready())
+          nearby.push_back(annotation.definition);
+      }
+    }
+    audience_window_->set_atomic_orbital_overlays(
+        overlays, nearby, texture_key_for_cache_key(cache_key_for_page(current_page_index_)));
 }
 
 void AppController::start_media_playback() {

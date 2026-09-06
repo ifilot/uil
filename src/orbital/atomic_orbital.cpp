@@ -307,32 +307,68 @@ QVector<ColorStop> color_stops(const QString& requested_name) {
     const bool reversed = name.endsWith(QStringLiteral("_r"));
     if (reversed) name.chop(2);
     QVector<ColorStop> stops;
-    if (name == QStringLiteral("seismic")) {
-        stops = {{0.0, "#00004c"}, {0.25, "#0000ff"}, {0.5, "#ffffff"},
-                 {0.75, "#ff0000"}, {1.0, "#4c0000"}};
+    if (name == QStringLiteral("garnet_teal")) {
+      stops = {{0.0, "#177e72"},
+               {0.25, "#91c9bf"},
+               {0.5, "#fff8fa"},
+               {0.75, "#d795aa"},
+               {1.0, "#8e1b3e"}};
+    } else if (name == QStringLiteral("garnet_slate")) {
+      stops = {{0.0, "#426b86"},
+               {0.25, "#a5c1d2"},
+               {0.5, "#fff8fa"},
+               {0.75, "#d795aa"},
+               {1.0, "#8e1b3e"}};
+    } else if (name == QStringLiteral("seismic")) {
+      stops = {{0.0, "#00004c"},
+               {0.25, "#0000ff"},
+               {0.5, "#ffffff"},
+               {0.75, "#ff0000"},
+               {1.0, "#4c0000"}};
     } else if (name == QStringLiteral("bwr")) {
-        stops = {{0.0, "#0000ff"}, {0.5, "#ffffff"}, {1.0, "#ff0000"}};
+      stops = {{0.0, "#0000ff"}, {0.5, "#ffffff"}, {1.0, "#ff0000"}};
     } else if (name == QStringLiteral("RdBu")) {
-        stops = {{0.0, "#67001f"}, {0.25, "#d6604d"}, {0.5, "#f7f7f7"},
-                 {0.75, "#4393c3"}, {1.0, "#053061"}};
+      stops = {{0.0, "#67001f"},
+               {0.25, "#d6604d"},
+               {0.5, "#f7f7f7"},
+               {0.75, "#4393c3"},
+               {1.0, "#053061"}};
     } else if (name == QStringLiteral("PuOr")) {
-        stops = {{0.0, "#7f3b08"}, {0.25, "#fdb863"}, {0.5, "#f7f7f7"},
-                 {0.75, "#b2abd2"}, {1.0, "#2d004b"}};
+      stops = {{0.0, "#7f3b08"},
+               {0.25, "#fdb863"},
+               {0.5, "#f7f7f7"},
+               {0.75, "#b2abd2"},
+               {1.0, "#2d004b"}};
     } else if (name == QStringLiteral("BrBG")) {
-        stops = {{0.0, "#543005"}, {0.25, "#bf812d"}, {0.5, "#f5f5f5"},
-                 {0.75, "#35978f"}, {1.0, "#003c30"}};
+      stops = {{0.0, "#543005"},
+               {0.25, "#bf812d"},
+               {0.5, "#f5f5f5"},
+               {0.75, "#35978f"},
+               {1.0, "#003c30"}};
     } else if (name == QStringLiteral("PiYG")) {
-        stops = {{0.0, "#8e0152"}, {0.25, "#de77ae"}, {0.5, "#f7f7f7"},
-                 {0.75, "#7fbc41"}, {1.0, "#276419"}};
+      stops = {{0.0, "#8e0152"},
+               {0.25, "#de77ae"},
+               {0.5, "#f7f7f7"},
+               {0.75, "#7fbc41"},
+               {1.0, "#276419"}};
     } else if (name == QStringLiteral("PRGn")) {
-        stops = {{0.0, "#40004b"}, {0.25, "#9970ab"}, {0.5, "#f7f7f7"},
-                 {0.75, "#5aae61"}, {1.0, "#00441b"}};
+      stops = {{0.0, "#40004b"},
+               {0.25, "#9970ab"},
+               {0.5, "#f7f7f7"},
+               {0.75, "#5aae61"},
+               {1.0, "#00441b"}};
     } else if (name == QStringLiteral("RdGy")) {
-        stops = {{0.0, "#67001f"}, {0.25, "#d6604d"}, {0.5, "#ffffff"},
-                 {0.75, "#878787"}, {1.0, "#1a1a1a"}};
+      stops = {{0.0, "#67001f"},
+               {0.25, "#d6604d"},
+               {0.5, "#ffffff"},
+               {0.75, "#878787"},
+               {1.0, "#1a1a1a"}};
     } else {
-        stops = {{0.0, "#3b4cc0"}, {0.25, "#8db0fe"}, {0.5, "#dddddd"},
-                 {0.75, "#f4987a"}, {1.0, "#b40426"}};
+      stops = {{0.0, "#3b4cc0"},
+               {0.25, "#8db0fe"},
+               {0.5, "#dddddd"},
+               {0.75, "#f4987a"},
+               {1.0, "#b40426"}};
     }
     if (reversed) {
         std::reverse(stops.begin(), stops.end());
@@ -539,8 +575,18 @@ AtomicOrbitalVolume build_atomic_orbital_volume(
 bool is_supported_atomic_orbital_colormap(const QString& requested_name) {
     QString name = requested_name;
     if (name.endsWith(QStringLiteral("_r"))) name.chop(2);
-    static const std::array<const char*, 9> supported{{
-        "coolwarm", "seismic", "bwr", "RdBu", "PuOr", "BrBG", "PiYG", "PRGn", "RdGy",
+    static const std::array<const char*, 11> supported{{
+        "coolwarm",
+        "seismic",
+        "bwr",
+        "RdBu",
+        "PuOr",
+        "BrBG",
+        "PiYG",
+        "PRGn",
+        "RdGy",
+        "garnet_teal",
+        "garnet_slate",
     }};
     return std::any_of(supported.begin(), supported.end(), [&name](const char* candidate) {
         return name == QString::fromLatin1(candidate);
