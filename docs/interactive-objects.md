@@ -1,10 +1,10 @@
 # Interactive objects
 
-UIL supports three presentation-object families that replace a rectangular
+UIL supports four presentation-object families that replace a rectangular
 piece of ordinary PDF content while the audience view is active: interactive
-figures, interactive molecules, and atomic orbitals. In every case the LaTeX
-document supplies a static poster, so the slide remains useful in an ordinary
-PDF reader.
+figures, interactive molecules, atomic orbitals, and molecular symmetry
+players. In every case the LaTeX document supplies a static poster, so the
+slide remains useful in an ordinary PDF reader.
 
 ## Object inventory
 
@@ -175,18 +175,20 @@ rotatable orbital and a translucent sampling plane on the left, with the
 corresponding signed-$\psi$ contour map and colorbar on the right. All 3D
 renderers use OpenGL 3.3 as their baseline.
 
-Interaction follows a fixed world-coordinate model:
+Interaction treats the orbital, axes, and contour plane as one rigid local
+coordinate system:
 
-- drag over the left panel to rotate only the orbital with a camera-relative
-  virtual trackball (quaternion arcball), avoiding Euler-axis gimbal behavior;
-- use the world-fixed black x/y/z triad to read the scene orientation; its
+- drag over the left panel to rotate the orbital, x/y/z triad, and sampling
+  plane together with a camera-relative virtual trackball (quaternion arcball);
+- use the black x/y/z triad to read the rotated local orientation; its
   endpoint labels are billboarded 3D glyphs, and both lines and letters are
   depth-tested so the orbital correctly obscures them;
 - use the mouse wheel to move the orthographic camera closer or farther away;
-- move the slider to translate the fixed `xy`, `xz`, or `yz` sampling plane;
+- choose `xy`, `xz`, or `yz`; changing planes resets it to the origin;
+- move the slider to translate the selected plane within the local system;
 - double-click or press **Reset** to restore rotation, zoom, and plane offset;
-- the right contour panel remains screen-aligned while it updates to show the
-  rotated orbital sampled by the world-fixed plane.
+- the right contour panel remains screen-aligned while it updates from the
+  selected local plane.
 
 The implementation follows Managlyph's real-orbital convention and ordering
 through 4f, using an independent mathematical implementation of the hydrogenic
@@ -275,7 +277,7 @@ The shipped atlas covers every supported orbital, in Garnet–Slate and
 Garnet–Teal. It also provides a `surface` layout, plus `static=true` for an
 ordinary poster without an annotation. Optional `height` constrains the card
 without stretching it. See the [package guide](../latex/README.md) for setup
-and every option, or browse [the complete atlas](../examples/bundled/orbital-atlas.pdf).
+and every option.
 
 For a custom definition, reference the payload from `slides.tex`:
 
@@ -318,9 +320,58 @@ phase keys, node counts, and the **INTERACTIVE** badge. The live widget uses the
 same orbital definitions but opens its normal dual-panel interactive view.
 The make target also builds the 14-page Garnet–Slate catalog with all 55 orbitals.
 
+### Molecular symmetry
+
+Molecular symmetry players use `\molecularsymmetry` from
+`latex/uilsymmetry.sty`. A self-contained `.uilsym` JSON payload combines XYZ
+coordinates, a point-group label, and the complete operation list. UIL renders
+the molecule beside clickable buttons; selecting a button animates the proper
+rotation, reflection, inversion, or improper rotation and then restores the
+starting geometry. The selected symmetry element remains in the 3D scene:
+proper rotations show their axis, reflections show a translucent mirror plane,
+inversion shows its center, and improper rotations show both axis and plane.
+Symmetry operations and the molecule-fixed Cartesian axes use `(0,0,0)` from
+the embedded XYZ coordinates as their common origin. Place the central atom at
+the origin when that atom is the point-group center.
+Buttons and rendered symmetry elements are color-coded by operation class. The
+optional `operation_colors` object accepts `#RRGGBB` values for `identity`,
+`rotation`, `reflection`, `inversion`, and `improper_rotation`; omitted entries
+use UIL's default palette.
+
+```json
+"operation_colors": {
+  "identity": "#5f6b78",
+  "rotation": "#9b2f4f",
+  "reflection": "#277d83",
+  "inversion": "#7a5aa6",
+  "improper_rotation": "#c06a2b"
+}
+```
+
+```latex
+\documentclass[aspectratio=169]{beamer}
+\usepackage{uilsymmetry}
+\begin{document}
+\begin{frame}{Water symmetry}
+  \molecularsymmetry[width=12cm,height=6cm]
+    {\fbox{\parbox[c][6cm][c]{12cm}{\centering Static $C_{2v}$ poster}}}
+    {water.uilsym}
+\end{frame}
+\end{document}
+```
+
+The payload format is documented by
+[`molecular-symmetry-v1.schema.json`](molecular-symmetry-v1.schema.json). The
+bundled five-slide example covers water (`C2v`), ammonia (`C3v`), boron
+trifluoride (`D3h`), ethylene (`D2h`), and methane (`Td`):
+
+```sh
+make -C examples/molecular-symmetry bundle
+```
+
 ## Poster and sizing arguments
 
-All three commands have the same basic shape:
+All four commands have the same basic shape:
 
 ```latex
 \interactivefigure[width=...,height=...,depth=...,borderwidth=...]
@@ -331,6 +382,9 @@ All three commands have the same basic shape:
 
 \atomicorbital[width=...,height=...,depth=...,borderwidth=...]
   {poster material}{orbital.uilorb}
+
+\molecularsymmetry[width=...,height=...,borderwidth=...]
+  {poster material}{symmetry.uilsym}
 ```
 
 If explicit dimensions are omitted, the interactive rectangle follows the

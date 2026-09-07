@@ -155,6 +155,8 @@ private:
     void update_active_interactive_figure();
     /** @brief Shows all ready embedded atomic orbitals on the current page. */
     void update_active_atomic_orbital();
+    /** @brief Shows the embedded molecular-symmetry player on the current page. */
+    void update_active_molecular_symmetry();
     /** @brief Starts playback of the current slide's media. */
     void start_media_playback();
     /** @brief Stops active media playback and clears its frame overlay. */

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ifilot/uil/docs/molecular-symmetry-v1.schema.json",
+  "title": "UIL molecular symmetry object",
+  "type": "object",
+  "required": ["format", "version", "point_group", "molecule", "operations"],
+  "properties": {
+    "format": { "const": "uil.molecular-symmetry" },
+    "version": { "const": 1 },
+    "title": { "type": "string" },
+    "point_group": { "type": "string", "minLength": 1 },
+    "animation_duration_ms": { "type": "integer", "minimum": 200, "maximum": 5000 },
+    "operation_colors": {
+      "type": "object",
+      "properties": {
+        "identity": { "$ref": "#/$defs/color" },
+        "rotation": { "$ref": "#/$defs/color" },
+        "reflection": { "$ref": "#/$defs/color" },
+        "inversion": { "$ref": "#/$defs/color" },
+        "improper_rotation": { "$ref": "#/$defs/color" }
+      },
+      "additionalProperties": false
+    },
+    "molecule": {
+      "type": "object",
+      "required": ["xyz"],
+      "properties": { "xyz": { "type": "string", "minLength": 1 } },
+      "additionalProperties": false
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 96,
+      "items": {
+        "type": "object",
+        "required": ["label", "type"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "type": {
+            "enum": ["identity", "rotation", "reflection", "inversion", "improper-rotation"]
+          },
+          "order": { "type": "integer", "minimum": 1, "maximum": 24 },
+          "power": { "type": "integer", "minimum": -23, "maximum": 23 },
+          "axis": {
+            "type": "array", "minItems": 3, "maxItems": 3,
+            "items": { "type": "number" }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+  },
+  "additionalProperties": false
+}

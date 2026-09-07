@@ -1,5 +1,6 @@
 #include "molecule/molecule_geometry.hpp"
 
+#include <QBuffer>
 #include <QFile>
 #include <QHash>
 #include <QRegularExpression>
@@ -108,7 +109,33 @@ bool load_xyz_molecule(const QString& path, MoleculeGeometry* geometry, QString*
     return false;
   }
 
-  QTextStream stream(&file);
+  const QByteArray contents = file.readAll();
+  if (file.error() != QFileDevice::NoError) {
+    set_error(error_message, QStringLiteral("Could not read XYZ geometry: %1").arg(file.errorString()));
+    return false;
+  }
+  return parse_xyz_molecule(contents, geometry, error_message);
+}
+
+bool parse_xyz_molecule(const QByteArray& contents, MoleculeGeometry* geometry,
+                        QString* error_message) {
+  if (!geometry) {
+    set_error(error_message, QStringLiteral("Missing molecule output object"));
+    return false;
+  }
+  *geometry = {};
+  if (contents.isEmpty() || contents.size() > kMaximumXyzBytes) {
+    set_error(error_message, QStringLiteral("XYZ geometry is empty or exceeds the 4 MiB size limit"));
+    return false;
+  }
+
+  QBuffer buffer;
+  buffer.setData(contents);
+  if (!buffer.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    set_error(error_message, QStringLiteral("Could not read XYZ geometry"));
+    return false;
+  }
+  QTextStream stream(&buffer);
   bool count_ok = false;
   const int atom_count = stream.readLine().trimmed().toInt(&count_ok);
   if (!count_ok || atom_count <= 0 || atom_count > kMaximumAtoms) {

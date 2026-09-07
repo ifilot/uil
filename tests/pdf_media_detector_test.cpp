@@ -152,6 +152,9 @@ private slots:
     /** @brief Checks every embedded orbital in the generated Garnet-Slate atlas. */
     void bundled_orbital_atlas_loads();
 
+    /** @brief Verifies all five bundled molecular-symmetry players end to end. */
+    void bundled_molecular_symmetry_example_loads();
+
 #if defined(UIL_HAVE_FFMPEG)
     /** @brief Verifies that the optional FFmpeg runtime can be loaded on first use. */
     void ffmpeg_runtime_loads_lazily();
@@ -430,6 +433,28 @@ void PdfMediaDetectorTest::bundled_orbital_atlas_loads() {
   }
 }
 
+void PdfMediaDetectorTest::bundled_molecular_symmetry_example_loads() {
+    const QString pdf_path = QStringLiteral(
+        UIL_TEST_SOURCE_DIR "/examples/bundled/molecular-symmetry.pdf");
+    QVERIFY2(QFileInfo::exists(pdf_path), qPrintable(pdf_path));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.molecular_symmetry_annotations.size(), 5);
+    const QStringList expected_groups{
+        QStringLiteral("C2v"), QStringLiteral("C3v"), QStringLiteral("D3h"),
+        QStringLiteral("D2h"), QStringLiteral("Td")};
+    const QList<int> expected_counts{4, 6, 12, 8, 24};
+    for (int index = 0; index < expected_groups.size(); ++index) {
+        const PdfMolecularSymmetryAnnotation& annotation =
+            result.molecular_symmetry_annotations.at(index);
+        QCOMPARE(annotation.page_index, index);
+        QVERIFY2(annotation.is_ready(), qPrintable(annotation.error_message));
+        QCOMPARE(annotation.definition.point_group, expected_groups.at(index));
+        QCOMPARE(annotation.definition.operations.size(), expected_counts.at(index));
+    }
+    QVERIFY(result.summary().contains(QStringLiteral("embedded symmetry ready")));
+}
+
 void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -440,6 +465,7 @@ void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {
     QVERIFY(result.annotations.isEmpty());
     QVERIFY(result.molecule_annotations.isEmpty());
     QVERIFY(result.interactive_figure_annotations.isEmpty());
+    QVERIFY(result.molecular_symmetry_annotations.isEmpty());
 }
 
 #if defined(UIL_HAVE_FFMPEG)

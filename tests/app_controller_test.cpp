@@ -10,6 +10,7 @@
 #include "pdf/qt_pdf_backend.hpp"
 #include "ui/atomic_orbital_widget.hpp"
 #include "ui/audience_window.hpp"
+#include "ui/molecular_symmetry_widget.hpp"
 
 namespace {
 QString example_path(const QString& file_name) {
@@ -33,6 +34,7 @@ private slots:
     void opens_renders_and_navigates_bundled_document();
     void opens_bundled_molecule_presentation();
     void opens_bundled_atomic_orbital_presentation();
+    void opens_bundled_molecular_symmetry_presentation();
     /** @brief Exercises rapid atlas jumps and measures responsive navigation with four orbitals. */
     void orbital_atlas_navigation();
     void failed_open_preserves_current_document();
@@ -178,6 +180,44 @@ void AppControllerTest::opens_bundled_atomic_orbital_presentation() {
     QCOMPARE(orbitals[0]->definition().orbital, QStringLiteral("2s"));
     controller.previous_page();
     QTRY_VERIFY_WITH_TIMEOUT(orbitals[0]->isVisible() && orbitals[1]->isVisible(), 5000);
+}
+
+void AppControllerTest::opens_bundled_molecular_symmetry_presentation() {
+    AppController controller;
+    PdfMediaScanResult scan_result;
+    connect(&controller, &AppController::media_scan_changed, this,
+            [&scan_result](const PdfMediaScanResult& result) {
+                scan_result = result;
+            });
+
+    const QString path = example_path(QStringLiteral("molecular-symmetry.pdf"));
+    QVERIFY(controller.open_pdf(path));
+    QCOMPARE(controller.page_count(), 5);
+    QTRY_COMPARE_WITH_TIMEOUT(scan_result.molecular_symmetry_annotations.size(), 5, 5000);
+    const QList<int> expected_counts{4, 6, 12, 8, 24};
+    for (int index = 0; index < expected_counts.size(); ++index) {
+        const auto& symmetry = scan_result.molecular_symmetry_annotations.at(index);
+        QCOMPARE(symmetry.page_index, index);
+        QVERIFY2(symmetry.is_ready(), qPrintable(symmetry.error_message));
+        QCOMPARE(symmetry.definition.operations.size(), expected_counts.at(index));
+    }
+
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen")) return;
+    AudienceWindow window;
+    window.resize(1280, 720);
+    controller.set_audience_window(&window);
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(
+        window.findChild<MolecularSymmetryWidget*>(
+            QStringLiteral("molecularSymmetryWidget")) != nullptr,
+        5000);
+    auto* player = window.findChild<MolecularSymmetryWidget*>(
+        QStringLiteral("molecularSymmetryWidget"));
+    QTRY_VERIFY_WITH_TIMEOUT(player->isVisible(), 5000);
+    QCOMPARE(player->definition().point_group, QStringLiteral("C2v"));
+    controller.next_page();
+    QTRY_COMPARE_WITH_TIMEOUT(player->definition().point_group, QStringLiteral("C3v"), 5000);
+    QVERIFY(player->isVisible());
 }
 
 void AppControllerTest::orbital_atlas_navigation() {

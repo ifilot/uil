@@ -246,11 +246,15 @@ qt_add_executable(${UIL_VIEWER_TARGET}
     src/molecule/molecule_geometry.cpp
     src/molecule/molecule_camera.hpp
     src/molecule/molecule_camera.cpp
+    src/symmetry/molecular_symmetry.hpp
+    src/symmetry/molecular_symmetry.cpp
     src/orbital/atomic_orbital.hpp
     src/orbital/atomic_orbital_cache.cpp
     src/orbital/atomic_orbital.cpp
     src/ui/molecule_widget.hpp
     src/ui/molecule_widget.cpp
+    src/ui/molecular_symmetry_widget.hpp
+    src/ui/molecular_symmetry_widget.cpp
     src/ui/atomic_orbital_widget.hpp
     src/ui/atomic_orbital_widget.cpp
     src/ui/interactive_figure_widget.hpp

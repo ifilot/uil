@@ -89,6 +89,7 @@ void AppController::set_audience_window(AudienceWindow* audience_window) {
         update_active_molecule();
         update_active_interactive_figure();
         update_active_atomic_orbital();
+        update_active_molecular_symmetry();
     }
 }
 
@@ -315,6 +316,7 @@ void AppController::schedule_media_scan(
                 self->update_active_molecule();
                 self->update_active_interactive_figure();
                 self->update_active_atomic_orbital();
+                self->update_active_molecular_symmetry();
             }
             emit self->media_scan_changed(self->media_scan_result_);
             if (self->media_scan_result_.has_media()) {
@@ -325,7 +327,8 @@ void AppController::schedule_media_scan(
                  self->media_scan_result_.annotations.size()
                      + self->media_scan_result_.molecule_annotations.size()
                      + self->media_scan_result_.interactive_figure_annotations.size()
-                     + self->media_scan_result_.atomic_orbital_annotations.size()},
+                     + self->media_scan_result_.atomic_orbital_annotations.size()
+                     + self->media_scan_result_.molecular_symmetry_annotations.size()},
                 {QStringLiteral("generation"), generation}
             });
         }, Qt::QueuedConnection);
@@ -900,6 +903,7 @@ void AppController::commit_audience_slide(
     update_active_molecule();
     update_active_interactive_figure();
     update_active_atomic_orbital();
+    update_active_molecular_symmetry();
     window->prepare_interactive_overlays_for_display();
     audience_slide_transition_pending_ = false;
     window->repaint();
@@ -1051,6 +1055,20 @@ void AppController::update_active_atomic_orbital() {
     }
     audience_window_->set_atomic_orbital_overlays(
         overlays, nearby, texture_key_for_cache_key(cache_key_for_page(current_page_index_)));
+}
+
+void AppController::update_active_molecular_symmetry() {
+    if (!audience_window_) return;
+    for (const PdfMolecularSymmetryAnnotation& annotation
+         : media_scan_result_.molecular_symmetry_annotations) {
+      if (annotation.page_index == current_page_index_ && annotation.is_ready()) {
+        audience_window_->set_molecular_symmetry_overlay(
+            annotation.definition,
+            normalized_pdf_rect(annotation.page_index, annotation.rect));
+        return;
+      }
+    }
+    audience_window_->clear_molecular_symmetry_overlay();
 }
 
 void AppController::start_media_playback() {

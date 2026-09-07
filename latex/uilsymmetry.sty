@@ -1,0 +1,70 @@
+%% uilsymmetry.sty -- self-contained molecular-symmetry annotations
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{uilsymmetry}[2026/09/07 v0.1 UIL molecular symmetry]
+
+\RequirePackage{embedfile}
+\RequirePackage{graphicx}
+\RequirePackage{iftex}
+\RequirePackage{keyval}
+
+\newif\ifuilsym@supported
+\uilsym@supportedfalse
+\ifPDFTeX
+  \let\uilsym@pdfannot\pdfannot
+  \uilsym@supportedtrue
+\fi
+\ifLuaTeX
+  \protected\def\uilsym@pdfannot{\pdfextension annot }
+  \uilsym@supportedtrue
+\fi
+
+\newcounter{uilsym@asset}
+\newif\ifuilsym@widthset
+\newif\ifuilsym@heightset
+\newdimen\uilsym@width
+\newdimen\uilsym@height
+\newdimen\uilsym@depth
+\define@key{uilsymmetry}{width}{\uilsym@width=#1\relax\uilsym@widthsettrue}
+\define@key{uilsymmetry}{height}{\uilsym@height=#1\relax\uilsym@heightsettrue}
+\define@key{uilsymmetry}{borderwidth}{\def\uilsym@borderwidth{#1}}
+
+%% Usage: \molecularsymmetry[width=...,height=...]{poster}{molecule.uilsym}
+\newcommand\molecularsymmetry[3][]{%
+  \leavevmode
+  \IfFileExists{#3}{}{\PackageError{uilsymmetry}{Symmetry definition `#3' not found}{}}%
+  \setbox\@tempboxa=\hbox{#2}%
+  \uilsym@width=\wd\@tempboxa
+  \uilsym@height=\ht\@tempboxa
+  \uilsym@depth=\dp\@tempboxa
+  \def\uilsym@borderwidth{0}%
+  \uilsym@widthsetfalse
+  \uilsym@heightsetfalse
+  \setkeys{uilsymmetry}{#1}%
+  \ifuilsym@widthset
+    \ifuilsym@heightset
+      \setbox\@tempboxa=\hbox{\resizebox*{\uilsym@width}{\uilsym@height}{\box\@tempboxa}}%
+    \else
+      \setbox\@tempboxa=\hbox{\resizebox{\uilsym@width}{!}{\box\@tempboxa}}%
+    \fi
+  \else\ifuilsym@heightset
+    \setbox\@tempboxa=\hbox{\resizebox*{!}{\uilsym@height}{\box\@tempboxa}}%
+  \fi\fi
+  \uilsym@width=\wd\@tempboxa
+  \uilsym@height=\ht\@tempboxa
+  \uilsym@depth=\dp\@tempboxa
+  \stepcounter{uilsym@asset}%
+  \edef\uilsym@id{uilsymmetry-\arabic{uilsym@asset}}%
+  \ifuilsym@supported
+    \embedfile[id=\uilsym@id,filespec=#3,ucfilespec=#3,
+      mimetype=application/vnd.uil.molecular-symmetry,
+      desc={UIL molecular symmetry},afrelationship=Supplement]{#3}%
+    \uilsym@pdfannot width \uilsym@width height \uilsym@height depth \uilsym@depth {%
+      /Subtype /UILMolecularSymmetry /Border [0 0 \uilsym@borderwidth]
+      /UIL << /Version 1 /Asset \embedfilegetobject{\uilsym@id}{Filespec} >>}%
+  \else
+    \PackageError{uilsymmetry}{Only pdfLaTeX and LuaLaTeX are currently supported}{}%
+  \fi
+  \box\@tempboxa
+}
+
+\endinput

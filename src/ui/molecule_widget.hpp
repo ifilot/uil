@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLWidget>
@@ -32,6 +33,15 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   /** @brief Stereo output modes supported by the embedded renderer. */
   enum class StereoMode { Mono, RedCyanAnaglyph };
 
+  /** @brief Symmetry element drawn with the molecule in its local coordinates. */
+  enum class SymmetryElement {
+    None,
+    RotationAxis,
+    MirrorPlane,
+    InversionCenter,
+    ImproperAxisAndPlane,
+  };
+
   /** @brief Constructs a molecular rendering surface. */
   explicit MoleculeWidget(QWidget* parent = nullptr);
   ~MoleculeWidget() override;
@@ -46,6 +56,10 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   void set_axes_visible(bool visible);
   /** @brief Returns whether the orientation-axis gizmo is visible. */
   bool axes_visible() const;
+  /** @brief Shows Cartesian axes through the molecular origin in scene coordinates. */
+  void set_world_axes_visible(bool visible);
+  /** @brief Returns whether molecule-fixed Cartesian axes are visible. */
+  bool world_axes_visible() const;
   /** @brief Starts or pauses normal-mode animation when displacement data exists. */
   void set_vibration_playing(bool playing);
   /** @brief Returns whether normal-mode animation is running. */
@@ -58,6 +72,31 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   void set_toolbar_expanded(bool expanded);
   /** @brief Returns whether the floating molecule toolbar is expanded. */
   bool toolbar_expanded() const;
+  /** @brief Sets the molecule-coordinate origin used by operations and world axes. */
+  void set_coordinate_origin(const QVector3D& origin);
+  /** @brief Returns the configured molecule-coordinate origin. */
+  QVector3D coordinate_origin() const;
+  /** @brief Applies a temporary origin-centered transform to atom coordinates. */
+  void set_coordinate_transform(const QMatrix4x4& transform);
+  /** @brief Restores untransformed atom coordinates. */
+  void clear_coordinate_transform();
+  /** @brief Shows or hides the built-in molecule toolbar and toggle. */
+  void set_builtin_controls_visible(bool visible);
+  /** @brief Sets and applies the orientation restored by reset interactions. */
+  void set_default_view_rotation(const QQuaternion& rotation);
+  /** @brief Sets and applies the camera-distance factor restored by reset interactions. */
+  void set_default_camera_distance_factor(float factor);
+  /** @brief Returns the current camera-distance factor. */
+  float camera_distance_factor() const;
+  /** @brief Shows a symmetry element whose axis is expressed in molecule coordinates. */
+  void set_symmetry_element(SymmetryElement element, QVector3D axis = {},
+                            QColor color = QColor(145, 43, 67));
+  /** @brief Returns the currently displayed symmetry element. */
+  SymmetryElement symmetry_element() const;
+  /** @brief Returns the normalized rotation axis or mirror-plane normal. */
+  QVector3D symmetry_element_axis() const;
+  /** @brief Returns the configured symmetry-element color. */
+  QColor symmetry_element_color() const;
   /** @brief Delegates right-click menu requests to the presentation window. */
   void set_context_menu_handler(std::function<void(const QPoint&)> handler);
 
@@ -96,7 +135,8 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   void destroy_renderer();
   /** @brief Draws one transformed and colored mesh. */
   void draw_mesh(Mesh& mesh, const QMatrix4x4& model, const QVector3D& color,
-                 const QMatrix4x4& view, const QMatrix4x4& projection);
+                 const QMatrix4x4& view, const QMatrix4x4& projection,
+                 float opacity = 1.0f, bool unlit = false);
   /** @brief Draws one eye into the supplied framebuffer viewport. */
   void draw_eye(const QRect& pixel_viewport, float eye_offset, const QVector<QVector3D>& positions);
   /** @brief Paints a Blender-style orientation gizmo over the OpenGL scene. */
@@ -110,21 +150,32 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
 
   MoleculeGeometry geometry_;
   QVector3D center_;
+  QVector3D coordinate_origin_;
+  QQuaternion default_rotation_ =
+      QQuaternion::fromEulerAngles(0.0f, 0.0f, 18.0f).normalized();
   QQuaternion rotation_;
+  QMatrix4x4 coordinate_transform_;
+  SymmetryElement symmetry_element_ = SymmetryElement::None;
+  QVector3D symmetry_element_axis_{0.0f, 0.0f, 1.0f};
+  QColor symmetry_element_color_{145, 43, 67};
   QPointF last_mouse_position_;
   float bounding_radius_ = 1.0f;
   float camera_distance_factor_ = 1.0f;
+  float default_camera_distance_factor_ = 1.0f;
   float vibration_phase_ = 0.0f;
   bool rotating_ = false;
   bool renderer_ready_ = false;
   bool axes_visible_ = true;
+  bool world_axes_visible_ = false;
   bool toolbar_expanded_ = true;
+  bool builtin_controls_visible_ = true;
   bool auto_rotation_enabled_ = false;
   StereoMode stereo_mode_ = StereoMode::Mono;
   QString renderer_error_;
   std::unique_ptr<QOpenGLShaderProgram> shader_program_;
   std::unique_ptr<Mesh> sphere_mesh_;
   std::unique_ptr<Mesh> cylinder_mesh_;
+  std::unique_ptr<Mesh> disc_mesh_;
   QFrame* toolbar_panel_ = nullptr;
   QToolButton* toolbar_toggle_button_ = nullptr;
   QToolButton* stereo_button_ = nullptr;

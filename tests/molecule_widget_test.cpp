@@ -22,7 +22,12 @@ void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
   MoleculeWidget widget;
   QCOMPARE(widget.stereo_mode(), MoleculeWidget::StereoMode::Mono);
   QVERIFY(widget.axes_visible());
+  QVERIFY(!widget.world_axes_visible());
+  widget.set_world_axes_visible(true);
+  QVERIFY(widget.world_axes_visible());
   QVERIFY(widget.toolbar_expanded());
+  widget.set_default_camera_distance_factor(2.0f);
+  QCOMPARE(widget.camera_distance_factor(), 2.0f);
   QVERIFY(widget.findChild<QToolButton*>(QStringLiteral("moleculeStereoButton")));
   QVERIFY(widget.findChild<QToolButton*>(QStringLiteral("moleculeAxesButton")));
   QVERIFY(widget.findChild<QToolButton*>(QStringLiteral("moleculeAutoRotationButton")));
@@ -77,6 +82,17 @@ void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
   QVERIFY(widget.findChild<QFrame*>(QStringLiteral("moleculeToolbarPanel"))->isHidden());
   widget.set_toolbar_expanded(true);
   QVERIFY(widget.toolbar_expanded());
+
+  widget.set_symmetry_element(
+      MoleculeWidget::SymmetryElement::MirrorPlane, QVector3D(0.0f, 2.0f, 0.0f),
+      QColor(QStringLiteral("#277d83")));
+  QCOMPARE(widget.symmetry_element(), MoleculeWidget::SymmetryElement::MirrorPlane);
+  QCOMPARE(widget.symmetry_element_axis(), QVector3D(0.0f, 1.0f, 0.0f));
+  QCOMPARE(widget.symmetry_element_color(), QColor(QStringLiteral("#277d83")));
+  widget.set_symmetry_element(MoleculeWidget::SymmetryElement::None);
+  QCOMPARE(widget.symmetry_element(), MoleculeWidget::SymmetryElement::None);
+  widget.set_coordinate_origin(QVector3D(0.25f, -0.5f, 0.75f));
+  QCOMPARE(widget.coordinate_origin(), QVector3D(0.25f, -0.5f, 0.75f));
 }
 
 void MoleculeWidgetTest::vibration_control_tracks_geometry_capability() {
@@ -138,6 +154,26 @@ void MoleculeWidgetTest::renders_supported_modes_when_opengl_is_available() {
 
   widget.set_stereo_mode(MoleculeWidget::StereoMode::Mono);
   const QImage before_rotation = widget.grabFramebuffer();
+  widget.set_symmetry_element(
+      MoleculeWidget::SymmetryElement::RotationAxis, QVector3D(0.0f, 0.0f, 1.0f));
+  QTest::qWait(50);
+  const QImage with_rotation_axis = widget.grabFramebuffer();
+  QVERIFY(with_rotation_axis != before_rotation);
+  widget.set_symmetry_element(
+      MoleculeWidget::SymmetryElement::MirrorPlane, QVector3D(0.0f, 1.0f, 0.0f));
+  QTest::qWait(50);
+  const QImage with_mirror_plane = widget.grabFramebuffer();
+  QVERIFY(with_mirror_plane != with_rotation_axis);
+  widget.set_symmetry_element(MoleculeWidget::SymmetryElement::InversionCenter);
+  QTest::qWait(50);
+  const QImage with_inversion_center = widget.grabFramebuffer();
+  QVERIFY(with_inversion_center != with_mirror_plane);
+  widget.set_symmetry_element(
+      MoleculeWidget::SymmetryElement::ImproperAxisAndPlane,
+      QVector3D(0.0f, 0.0f, 1.0f));
+  QTest::qWait(50);
+  QVERIFY(widget.grabFramebuffer() != with_inversion_center);
+  widget.set_symmetry_element(MoleculeWidget::SymmetryElement::None);
   widget.set_auto_rotation_enabled(true);
   QTest::qWait(180);
   const QImage after_rotation = widget.grabFramebuffer();

@@ -2,7 +2,8 @@
 
 `uilorbital.sty` provides self-contained interactive atomic orbitals and a
 pre-rendered atlas. `uilfigure.sty` embeds interactive numerical figures;
-`uilmolecule.sty` provides molecule annotations.
+`uilmolecule.sty` provides molecule annotations; and `uilsymmetry.sty` embeds
+clickable molecular-symmetry players.
 
 ## Atomic orbitals: quick start
 
@@ -67,8 +68,8 @@ with a surrounding `minipage` or Beamer column.
 See `uilorbital-atlas/catalog.tex` for every accepted identifier and
 `uilorbital-atlas/manifest.json` for the generated inventory. The bundled
 `examples/orbital-atlas.pdf` provides a browsable Garnet–Slate catalog;
-`examples/atomic-orbitals.pdf` demonstrates two plots on a slide. In UIL, both
-are available through **File > Examples**.
+`examples/atomic-orbitals.pdf` demonstrates two plots on a slide. The latter is
+available through **File > Examples** in UIL.
 
 ## Custom orbital definitions and posters
 
@@ -185,3 +186,22 @@ audience window. Select the classic cursor tool to interact with it; the widget
 is temporarily hidden for the laser pointer, pencil, and eraser so those slide
 tools continue to receive mouse input. Presenter previews, exported PDFs, and
 other PDF viewers show the poster instead of the live view.
+
+## Molecular symmetry annotations
+
+`uilsymmetry.sty` embeds a complete `.uilsym` definition and overlays a static
+poster with UIL's molecule-and-operation player:
+
+```latex
+\usepackage{uilsymmetry}
+
+\molecularsymmetry[width=12cm,height=6cm]
+  {\fbox{\parbox[c][6cm][c]{12cm}{\centering Static symmetry poster}}}
+  {water.uilsym}
+```
+
+The JSON contains inline XYZ text plus every point-group operation. It remains
+self-contained after compilation; no sidecar is needed when presenting the
+PDF. See `docs/molecular-symmetry-v1.schema.json` and the five molecules in
+`examples/molecular-symmetry/`. Interactive annotations support pdfLaTeX and
+LuaLaTeX.

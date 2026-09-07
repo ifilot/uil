@@ -748,6 +748,7 @@ copy_example_presentations() {
         benzene-inline.xyz
         interactive-figure.pdf
         atomic-orbitals.pdf
+        molecular-symmetry.pdf
     )
     local example_file
 

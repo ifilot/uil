@@ -3,6 +3,7 @@
 #include "figure/interactive_figure.hpp"
 #include "molecule/molecule_geometry.hpp"
 #include "orbital/atomic_orbital.hpp"
+#include "symmetry/molecular_symmetry.hpp"
 
 #include <QColor>
 #include <QHash>
@@ -26,6 +27,7 @@ class QPaintEvent;
 class QResizeEvent;
 class QWheelEvent;
 class MoleculeWidget;
+class MolecularSymmetryWidget;
 class InteractiveFigureWidget;
 class AtomicOrbitalWidget;
 class AtomicOrbitalCache;
@@ -84,6 +86,11 @@ public:
                                      const QString& texture_key = {});
     /** @brief Clears all active embedded atomic orbitals. */
     void clear_atomic_orbital_overlay();
+    /** @brief Displays an embedded molecular-symmetry player. */
+    void set_molecular_symmetry_overlay(
+        const MolecularSymmetryDefinition& definition, QRectF slide_rect);
+    /** @brief Clears the active molecular-symmetry player. */
+    void clear_molecular_symmetry_overlay();
     /** @brief Selects the screen on which the audience window appears. */
     void set_audience_screen(QScreen* screen);
     /** @brief Enters full-screen presentation mode. */
@@ -180,6 +187,8 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
     /** @brief Handles Qt keyboard events for presentation controls. */
     void keyPressEvent(QKeyEvent* event) override;
+    /** @brief Keeps pointer activity over native OpenGL children visible. */
+    bool eventFilter(QObject* watched, QEvent* event) override;
     /** @brief Handles Qt pointer-leave events. */
     void leaveEvent(QEvent* event) override;
     /** @brief Handles Qt pointer-press events. */
@@ -222,6 +231,8 @@ private:
     void hide_cursor();
     /** @brief Updates the cursor shape for the active interaction tool. */
     void update_cursor_appearance();
+    /** @brief Returns whether the live symmetry surface requires a visible cursor. */
+    bool molecular_symmetry_surface_is_active() const;
     /** @brief Calculates the slide rectangle in logical window coordinates. */
     QRectF slide_logical_rect(QSize texture_size) const;
     /** @brief Maps a window point into slide-image coordinates. */
@@ -282,6 +293,10 @@ private:
     void capture_atomic_orbital_frame();
     /** @brief Creates a reusable orbital widget attached to the audience window. */
     std::unique_ptr<AtomicOrbitalWidget> create_atomic_orbital_widget();
+    /** @brief Repositions and shows or hides the molecular-symmetry player. */
+    void update_molecular_symmetry_overlay_geometry();
+    /** @brief Saves the current molecular-symmetry frame before disabling interaction. */
+    void capture_molecular_symmetry_frame();
 
     QString current_texture_key_;
     QImage current_slide_image_;
@@ -305,6 +320,9 @@ private:
     std::vector<AtomicOrbitalOverlayState> atomic_orbital_overlays_;
     std::unique_ptr<AtomicOrbitalCache> atomic_orbital_cache_;
     QString atomic_orbital_slide_identity_;
+    std::unique_ptr<MolecularSymmetryWidget> molecular_symmetry_widget_;
+    QRectF molecular_symmetry_rect_;
+    QImage molecular_symmetry_snapshot_frame_;
     QHash<int, QImage> deck_overview_images_;
     QSize deck_overview_image_size_;
     QHash<QString, QImage> annotation_images_;
@@ -335,6 +353,7 @@ private:
     bool molecule_suspended_for_feature_menu_ = false;
     bool interactive_figure_suspended_for_feature_menu_ = false;
     bool atomic_orbital_suspended_for_feature_menu_ = false;
+    bool molecular_symmetry_suspended_for_feature_menu_ = false;
     bool resume_molecule_vibration_after_menu_ = false;
     bool slide_transition_active_ = false;
 };

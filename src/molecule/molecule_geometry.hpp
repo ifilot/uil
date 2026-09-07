@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QString>
 #include <QVector3D>
 #include <QVector>
@@ -39,3 +40,7 @@ struct MoleculeGeometry {
  */
 bool load_xyz_molecule(const QString& path, MoleculeGeometry* geometry,
                        QString* error_message = nullptr);
+
+/** @brief Parses an XYZ geometry already held in memory. */
+bool parse_xyz_molecule(const QByteArray& contents, MoleculeGeometry* geometry,
+                        QString* error_message = nullptr);

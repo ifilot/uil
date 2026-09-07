@@ -26,12 +26,12 @@ tool settings; browse all slides; or close the presentation. The laser pointer
 automatically disappears after three seconds without movement and reappears as
 soon as it moves again.
 
-Five sample decks are included with the Windows distribution. They are all
+Six sample decks are included with the Windows distribution. They are all
 ordinary `.pdf` files, so the same files can also be opened in a regular PDF
 reader. Open them from
 **File > Examples** for tours of navigation, pointer and annotation features,
 the interactive molecule visualizer, embedded interactive-figure examples,
-and atomic orbitals.
+atomic orbitals, and clickable molecular symmetry operations.
 
 | Action | Key |
 |---|---|
@@ -51,8 +51,8 @@ page. Use **File > Save** to preserve the presentation and annotations as a
 
 ## Interactive objects
 
-UIL supports interactive figures, molecule visualizations, and atomic-orbital
-visualizations in presentations.
+UIL supports interactive figures, molecule visualizations, atomic-orbital
+visualizations, and molecular-symmetry operation players in presentations.
 See [`docs/interactive-objects.md`](docs/interactive-objects.md) for the complete
 object inventory, authoring examples, and build instructions.
 

@@ -2,6 +2,7 @@
 #include "ui/atomic_orbital_widget.hpp"
 #include "ui/interactive_figure_widget.hpp"
 #include "ui/molecule_widget.hpp"
+#include "ui/molecular_symmetry_widget.hpp"
 
 #include <QApplication>
 #include <QContextMenuEvent>
@@ -51,6 +52,8 @@ private slots:
     void molecule_tool_switch_restores_interaction_without_extra_click();
     void interactive_figure_controls_and_tool_switching();
     void atomic_orbital_controls_and_tool_switching();
+    /** @brief Guards symmetry masking, world axes, cursor, and focus-independent navigation. */
+    void molecular_symmetry_overlay_preserves_presentation_controls();
     /** @brief Verifies independent controls and lifecycle of multiple orbital overlays. */
     void multiple_atomic_orbitals();
     void harmonic_wavepacket_controls_update_status();
@@ -474,6 +477,68 @@ void AudienceWindowTest::atomic_orbital_controls_and_tool_switching() {
     QVERIFY(orbital->isHidden());
     window.set_cursor_tool();
     QTRY_VERIFY(orbital->isVisible());
+}
+
+void AudienceWindowTest::molecular_symmetry_overlay_preserves_presentation_controls() {
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+        QSKIP("The offscreen Qt platform cannot safely expose QOpenGLWidget");
+    }
+
+    AudienceWindow window;
+    window.resize(900, 520);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(QColor(20, 150, 120));
+    window.set_slide_image(QStringLiteral("symmetry-slide"), slide);
+
+    MolecularSymmetryDefinition definition;
+    definition.title = QStringLiteral("Atom");
+    definition.point_group = QStringLiteral("C1");
+    definition.geometry.atoms = {
+        MoleculeAtom{QStringLiteral("H"), QVector3D(), QVector3D()},
+    };
+    definition.operations = {
+        MolecularSymmetryOperation{QStringLiteral("E"),
+                                   MolecularSymmetryOperationType::Identity},
+    };
+    QVERIFY(definition.is_valid());
+    const QRectF overlay_rect(0.08, 0.1, 0.84, 0.8);
+    window.set_molecular_symmetry_overlay(definition, overlay_rect);
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* symmetry = window.findChild<MolecularSymmetryWidget*>(
+        QStringLiteral("molecularSymmetryWidget"));
+    auto* molecule = dynamic_cast<MoleculeWidget*>(window.findChild<QWidget*>(
+        QStringLiteral("symmetryMoleculeOpenGLWidget")));
+    QVERIFY(symmetry);
+    QVERIFY(molecule);
+    QTRY_VERIFY(symmetry->isVisible());
+    QVERIFY(molecule->world_axes_visible());
+
+    const QPoint transparent_margin = symmetry->geometry().topLeft() + QPoint(2, 2);
+    const QImage frame = window.grab().toImage();
+    QCOMPARE(frame.pixelColor(transparent_margin), QColor(Qt::white));
+
+    QSignalSpy next_spy(&window, &AudienceWindow::next_requested);
+    QSignalSpy previous_spy(&window, &AudienceWindow::previous_requested);
+    window.activateWindow();
+    window.setFocus();
+    QTest::keyClick(molecule, Qt::Key_Right);
+    QTest::keyClick(molecule, Qt::Key_Down);
+    QTest::keyClick(molecule, Qt::Key_PageDown);
+    QTest::keyClick(molecule, Qt::Key_Left);
+    QTest::keyClick(molecule, Qt::Key_Up);
+    QTest::keyClick(molecule, Qt::Key_PageUp);
+    QCOMPARE(next_spy.size(), 3);
+    QCOMPARE(previous_spy.size(), 3);
+
+    window.setCursor(QCursor(Qt::BlankCursor));
+    const QPointF local_position(5.0, 5.0);
+    QMouseEvent move_event(QEvent::MouseMove, local_position,
+                           molecule->mapToGlobal(local_position.toPoint()),
+                           Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(molecule, &move_event);
+    QVERIFY(window.cursor().shape() != Qt::BlankCursor);
 }
 
 void AudienceWindowTest::multiple_atomic_orbitals() {

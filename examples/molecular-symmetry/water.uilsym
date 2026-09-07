@@ -1,0 +1,45 @@
+{
+  "format": "uil.molecular-symmetry",
+  "version": 1,
+  "title": "Water",
+  "point_group": "C2v",
+  "animation_duration_ms": 1000,
+  "operation_colors": {"identity":"#5f6b78","rotation":"#9b2f4f","reflection":"#277d83","inversion":"#7a5aa6","improper_rotation":"#c06a2b"},
+  "molecule": {
+    "xyz": "3\nWater\nO 0 0 0\nH 0 0.757 0.58605\nH 0 -0.757 0.58605\n"
+  },
+  "operations": [
+    {
+      "label": "E",
+      "type": "identity"
+    },
+    {
+      "label": "C₂(z)",
+      "type": "rotation",
+      "order": 2,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "σᵥ(xz)",
+      "type": "reflection",
+      "axis": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "σᵥ(yz)",
+      "type": "reflection",
+      "axis": [
+        1,
+        0,
+        0
+      ]
+    }
+  ]
+}

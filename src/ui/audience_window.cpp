@@ -23,6 +23,7 @@
 #include <QPixmap>
 #include <QResizeEvent>
 #include <QSettings>
+#include <QShortcut>
 #include <QSizePolicy>
 #include <QSlider>
 #include <QSpinBox>
@@ -45,6 +46,7 @@
 #include "ui/font_awesome.hpp"
 #include "ui/interactive_figure_widget.hpp"
 #include "ui/molecule_widget.hpp"
+#include "ui/molecular_symmetry_widget.hpp"
 
 Q_LOGGING_CATEGORY(logUi, "ui")
 
@@ -765,6 +767,37 @@ AudienceWindow::AudienceWindow()
   cursor_hide_timer_.setInterval(2000);
   connect(&cursor_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_cursor);
 
+  // Presentation navigation must not depend on keyboard focus. In particular,
+  // native QOpenGLWidget surfaces can consume key delivery even when every
+  // embedded control has Qt::NoFocus. Window-scoped shortcuts are therefore
+  // the durable navigation path; keep this when adding future live widgets.
+  const auto add_navigation_shortcut = [this](Qt::Key key, bool forward) {
+    auto* shortcut = new QShortcut(QKeySequence(key), this);
+    shortcut->setContext(Qt::WindowShortcut);
+    connect(shortcut, &QShortcut::activated, this, [this, key, forward] {
+      show_cursor_temporarily();
+      if (deck_overview_visible_ && key == Qt::Key_PageDown) {
+        scroll_deck_overview_by(deck_overview_viewport_rect().height());
+      } else if (deck_overview_visible_ && key == Qt::Key_PageUp) {
+        scroll_deck_overview_by(-deck_overview_viewport_rect().height());
+      } else if (deck_overview_visible_ && key == Qt::Key_Down) {
+        scroll_deck_overview_by(80);
+      } else if (deck_overview_visible_ && key == Qt::Key_Up) {
+        scroll_deck_overview_by(-80);
+      } else if (forward) {
+        emit next_requested();
+      } else {
+        emit previous_requested();
+      }
+    });
+  };
+  add_navigation_shortcut(Qt::Key_Right, true);
+  add_navigation_shortcut(Qt::Key_Down, true);
+  add_navigation_shortcut(Qt::Key_PageDown, true);
+  add_navigation_shortcut(Qt::Key_Left, false);
+  add_navigation_shortcut(Qt::Key_Up, false);
+  add_navigation_shortcut(Qt::Key_PageUp, false);
+
   pointer_hide_timer_.setSingleShot(true);
   pointer_hide_timer_.setInterval(kPointerInactivityTimeoutMs);
   connect(&pointer_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_pointer);
@@ -789,6 +822,7 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
         slide_transition_active_ = false;
         molecule_snapshot_frame_ = {};
         interactive_figure_snapshot_frame_ = {};
+        molecular_symmetry_snapshot_frame_ = {};
         for (auto& overlay : atomic_orbital_overlays_) overlay.snapshot_frame = {};
     }
     current_texture_key_ = texture_key;
@@ -798,6 +832,7 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
     update_atomic_orbital_overlay_geometry();
+    update_molecular_symmetry_overlay_geometry();
     update();
 }
 
@@ -818,6 +853,9 @@ void AudienceWindow::prepare_interactive_overlays_for_display() {
             overlay.widget->capture_frame();
         }
     }
+    if (molecular_symmetry_widget_ && molecular_symmetry_widget_->isVisible()) {
+        molecular_symmetry_widget_->capture_frame();
+    }
 }
 
 void AudienceWindow::clear_slide_image() {
@@ -832,6 +870,8 @@ void AudienceWindow::clear_slide_image() {
     interactive_figure_snapshot_frame_ = {};
     clear_interactive_figure_overlay();
     clear_atomic_orbital_overlay();
+    molecular_symmetry_snapshot_frame_ = {};
+    clear_molecular_symmetry_overlay();
     emit annotation_overlay_changed({});
     update();
 }
@@ -1035,6 +1075,34 @@ void AudienceWindow::clear_atomic_orbital_overlay() {
   update();
 }
 
+void AudienceWindow::set_molecular_symmetry_overlay(
+    const MolecularSymmetryDefinition& definition, QRectF slide_rect) {
+  if (!definition.is_valid() || !slide_rect.isValid()) {
+    clear_molecular_symmetry_overlay();
+    return;
+  }
+  if (!molecular_symmetry_widget_) {
+    molecular_symmetry_widget_ = std::make_unique<MolecularSymmetryWidget>(this);
+    molecular_symmetry_widget_->set_context_menu_handler(
+        [this](const QPoint& position) { show_feature_menu(position); });
+    if (auto* surface = dynamic_cast<MoleculeWidget*>(
+            molecular_symmetry_widget_->findChild<QWidget*>(
+                QStringLiteral("symmetryMoleculeOpenGLWidget")))) {
+      surface->installEventFilter(this);
+    }
+  }
+  molecular_symmetry_snapshot_frame_ = {};
+  molecular_symmetry_rect_ = slide_rect;
+  molecular_symmetry_widget_->set_definition(definition);
+  update_molecular_symmetry_overlay_geometry();
+}
+
+void AudienceWindow::clear_molecular_symmetry_overlay() {
+  molecular_symmetry_rect_ = {};
+  molecular_symmetry_snapshot_frame_ = {};
+  if (molecular_symmetry_widget_) molecular_symmetry_widget_->hide();
+}
+
 void AudienceWindow::set_audience_screen(QScreen* screen) {
     if (!screen) {
         return;
@@ -1122,6 +1190,7 @@ void AudienceWindow::set_cursor_tool() {
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
     update_atomic_orbital_overlay_geometry();
+    update_molecular_symmetry_overlay_geometry();
     update();
 }
 
@@ -1129,6 +1198,7 @@ void AudienceWindow::set_pointer_tool() {
     capture_molecule_frame();
     capture_interactive_figure_frame();
     capture_atomic_orbital_frame();
+    capture_molecular_symmetry_frame();
     interaction_tool_ = InteractionTool::Pointer;
     hide_pointer();
     eraser_cursor_visible_ = false;
@@ -1137,6 +1207,7 @@ void AudienceWindow::set_pointer_tool() {
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
     update_atomic_orbital_overlay_geometry();
+    update_molecular_symmetry_overlay_geometry();
     update();
 }
 
@@ -1144,6 +1215,7 @@ void AudienceWindow::set_pen_tool() {
     capture_molecule_frame();
     capture_interactive_figure_frame();
     capture_atomic_orbital_frame();
+    capture_molecular_symmetry_frame();
     interaction_tool_ = InteractionTool::Pen;
     hide_pointer();
     eraser_cursor_visible_ = false;
@@ -1152,6 +1224,7 @@ void AudienceWindow::set_pen_tool() {
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
     update_atomic_orbital_overlay_geometry();
+    update_molecular_symmetry_overlay_geometry();
     update();
 }
 
@@ -1159,6 +1232,7 @@ void AudienceWindow::set_eraser_tool() {
     capture_molecule_frame();
     capture_interactive_figure_frame();
     capture_atomic_orbital_frame();
+    capture_molecular_symmetry_frame();
     interaction_tool_ = InteractionTool::Eraser;
     hide_pointer();
     eraser_cursor_visible_ = false;
@@ -1167,6 +1241,7 @@ void AudienceWindow::set_eraser_tool() {
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
     update_atomic_orbital_overlay_geometry();
+    update_molecular_symmetry_overlay_geometry();
     update();
 }
 
@@ -1359,6 +1434,7 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
     update_atomic_orbital_overlay_geometry();
+    update_molecular_symmetry_overlay_geometry();
 
     if (blank_mode_ != BlankMode::None) {
         return;
@@ -1437,6 +1513,31 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
                           image_source_rect(overlay.snapshot_frame));
       }
     }
+    const bool symmetry_is_interactive = molecular_symmetry_widget_
+        && molecular_symmetry_widget_->isVisible()
+        && interaction_tool_ == InteractionTool::Cursor
+        && !molecular_symmetry_suspended_for_feature_menu_;
+    if (symmetry_is_interactive && molecular_symmetry_rect_.isValid()) {
+      // The PDF contains a static fallback poster at this location. The live
+      // widget intentionally has transparent spacing, so blank the fallback
+      // first or its border pixels show through between child panels.
+      const QRectF target(
+          slide_rect.left() + molecular_symmetry_rect_.left() * slide_rect.width(),
+          slide_rect.top() + molecular_symmetry_rect_.top() * slide_rect.height(),
+          molecular_symmetry_rect_.width() * slide_rect.width(),
+          molecular_symmetry_rect_.height() * slide_rect.height());
+      painter.fillRect(target.adjusted(-1.0, -1.0, 1.0, 1.0), Qt::white);
+    }
+    if (!symmetry_is_interactive && !molecular_symmetry_snapshot_frame_.isNull()
+        && molecular_symmetry_rect_.isValid()) {
+      const QRectF target(
+          slide_rect.left() + molecular_symmetry_rect_.left() * slide_rect.width(),
+          slide_rect.top() + molecular_symmetry_rect_.top() * slide_rect.height(),
+          molecular_symmetry_rect_.width() * slide_rect.width(),
+          molecular_symmetry_rect_.height() * slide_rect.height());
+      painter.drawImage(target, molecular_symmetry_snapshot_frame_,
+                        image_source_rect(molecular_symmetry_snapshot_frame_));
+    }
 
     if (molecule_is_interactive && molecule_rect_.isValid()) {
         const QRectF target(
@@ -1461,6 +1562,7 @@ void AudienceWindow::resizeEvent(QResizeEvent* event) {
     update_molecule_overlay_geometry();
     update_interactive_figure_overlay_geometry();
     update_atomic_orbital_overlay_geometry();
+    update_molecular_symmetry_overlay_geometry();
 }
 
 void AudienceWindow::keyPressEvent(QKeyEvent* event) {
@@ -1575,6 +1677,18 @@ void AudienceWindow::keyPressEvent(QKeyEvent* event) {
     }
 
     QWidget::keyPressEvent(event);
+}
+
+bool AudienceWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (molecular_symmetry_widget_ && event
+        && (event->type() == QEvent::Enter || event->type() == QEvent::MouseMove)) {
+        auto* widget = qobject_cast<QWidget*>(watched);
+        if (widget && (widget == molecular_symmetry_widget_.get()
+                       || molecular_symmetry_widget_->isAncestorOf(widget))) {
+            show_cursor_temporarily();
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void AudienceWindow::leaveEvent(QEvent* event) {
@@ -1775,8 +1889,18 @@ void AudienceWindow::show_cursor_temporarily() {
 
 void AudienceWindow::hide_cursor() {
     if (is_fullscreen_ && interaction_tool_ == InteractionTool::Cursor) {
+        if (molecular_symmetry_surface_is_active()) {
+            unsetCursor();
+            return;
+        }
         setCursor(QCursor(Qt::BlankCursor));
     }
+}
+
+bool AudienceWindow::molecular_symmetry_surface_is_active() const {
+    return molecular_symmetry_widget_ && molecular_symmetry_widget_->isVisible()
+        && interaction_tool_ == InteractionTool::Cursor
+        && !molecular_symmetry_suspended_for_feature_menu_;
 }
 
 void AudienceWindow::update_cursor_appearance() {
@@ -1949,6 +2073,41 @@ void AudienceWindow::capture_atomic_orbital_frame() {
     const QImage snapshot = overlay.widget->capture_frame();
     if (!snapshot.isNull()) overlay.snapshot_frame = snapshot;
   }
+}
+
+void AudienceWindow::update_molecular_symmetry_overlay_geometry() {
+  if (!molecular_symmetry_widget_) return;
+  if (molecular_symmetry_suspended_for_feature_menu_ || !molecular_symmetry_rect_.isValid()
+      || current_slide_image_.isNull() || blank_mode_ != BlankMode::None
+      || deck_overview_visible_ || interaction_tool_ != InteractionTool::Cursor) {
+    molecular_symmetry_widget_->hide();
+    return;
+  }
+  const QRectF slide_rect = slide_logical_rect(current_slide_image_.size());
+  if (!slide_rect.isValid()) {
+    molecular_symmetry_widget_->hide();
+    return;
+  }
+  const QRect target = QRectF(
+      slide_rect.left() + molecular_symmetry_rect_.left() * slide_rect.width(),
+      slide_rect.top() + molecular_symmetry_rect_.top() * slide_rect.height(),
+      molecular_symmetry_rect_.width() * slide_rect.width(),
+      molecular_symmetry_rect_.height() * slide_rect.height()).toAlignedRect();
+  if (target.width() < 2 || target.height() < 2) {
+    molecular_symmetry_widget_->hide();
+    return;
+  }
+  molecular_symmetry_widget_->setGeometry(target);
+  molecular_symmetry_widget_->show();
+  molecular_symmetry_widget_->raise();
+  molecular_symmetry_snapshot_frame_ = {};
+  show_cursor_temporarily();
+}
+
+void AudienceWindow::capture_molecular_symmetry_frame() {
+  if (!molecular_symmetry_widget_ || !molecular_symmetry_widget_->isVisible()) return;
+  const QImage snapshot = molecular_symmetry_widget_->capture_frame();
+  if (!snapshot.isNull()) molecular_symmetry_snapshot_frame_ = snapshot;
 }
 
 std::unique_ptr<AtomicOrbitalWidget> AudienceWindow::create_atomic_orbital_widget() {
@@ -2372,6 +2531,12 @@ void AudienceWindow::show_feature_menu(const QPoint& global_position) {
     atomic_orbital_suspended_for_feature_menu_ = true;
     update_atomic_orbital_overlay_geometry();
     repaint();
+    if (molecular_symmetry_widget_ && molecular_symmetry_widget_->isVisible()) {
+        capture_molecular_symmetry_frame();
+        molecular_symmetry_suspended_for_feature_menu_ = true;
+        molecular_symmetry_widget_->hide();
+        repaint();
+    }
 
     auto* menu = new FeatureMenuPanel(this);
     feature_menu_ = menu;
@@ -2390,9 +2555,11 @@ void AudienceWindow::show_feature_menu(const QPoint& global_position) {
         molecule_suspended_for_feature_menu_ = false;
         interactive_figure_suspended_for_feature_menu_ = false;
         atomic_orbital_suspended_for_feature_menu_ = false;
+        molecular_symmetry_suspended_for_feature_menu_ = false;
         update_molecule_overlay_geometry();
         update_interactive_figure_overlay_geometry();
         update_atomic_orbital_overlay_geometry();
+        update_molecular_symmetry_overlay_geometry();
         if (resume_molecule_vibration_after_menu_ && molecule_widget_
             && molecule_widget_->isVisible()) {
             molecule_widget_->set_vibration_playing(true);
