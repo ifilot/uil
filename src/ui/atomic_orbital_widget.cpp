@@ -1,6 +1,7 @@
 #include "ui/atomic_orbital_widget.hpp"
 #include "ui/math_text.hpp"
 
+#include <QButtonGroup>
 #include <QContextMenuEvent>
 #include <QDebug>
 #include <QFrame>
@@ -188,6 +189,7 @@ void AtomicOrbitalWidget::set_prepared_definition(const AtomicOrbitalDefinition&
                               uploaded_bytes_ > 0 &&
                               same_geometry(uploaded_definition_, definition);
   definition_ = definition;
+  update_plane_buttons();
   volume_ = volume;
   renderer_error_ = error;
   volume_dirty_ = volume_.is_valid() && !reuse_geometry;
@@ -344,11 +346,11 @@ void main() {
 })glsl";
     static constexpr char plane_vertex[] = R"glsl(#version 330 core
 layout(location = 0) in vec3 vertex_position;
-uniform mat4 view_projection;
-out vec3 world_position;
+uniform mat4 model_view_projection;
+out vec3 object_position;
 void main() {
-    world_position = vertex_position;
-    gl_Position = view_projection * vec4(vertex_position, 1.0);
+    object_position = vertex_position;
+    gl_Position = model_view_projection * vec4(vertex_position, 1.0);
 })glsl";
     static constexpr char sampling_functions[] = R"glsl(
 vec3 plane_world(vec2 uv, int plane, float offset, float extent) {
@@ -357,10 +359,9 @@ vec3 plane_world(vec2 uv, int plane, float offset, float extent) {
     if (plane == 1) return vec3(p.x, offset * extent, p.y);
     return vec3(offset * extent, p.x, p.y);
 }
-vec4 sampled_color(vec3 world, sampler3D volume_texture, sampler1D color_texture,
-                   mat4 inverse_rotation, float extent, float minimum_value,
+vec4 sampled_color(vec3 object_position, sampler3D volume_texture,
+                   sampler1D color_texture, float extent, float minimum_value,
                    float maximum_value, int contour_levels) {
-    vec3 object_position = (inverse_rotation * vec4(world, 1.0)).xyz;
     vec3 tc = object_position / (2.0 * extent) + vec3(0.5);
     if (any(lessThan(tc, vec3(0.0))) || any(greaterThan(tc, vec3(1.0)))) {
         return vec4(0.97, 0.97, 0.98, 1.0);
@@ -384,18 +385,17 @@ vec4 sampled_color(vec3 world, sampler3D volume_texture, sampler1D color_texture
     const QByteArray plane_fragment = QByteArrayLiteral("#version 330 core\n")
         + QByteArray(sampling_functions)
         + QByteArrayLiteral(R"glsl(
-in vec3 world_position;
+in vec3 object_position;
 uniform sampler3D volume_texture;
 uniform sampler1D color_texture;
-uniform mat4 inverse_rotation;
 uniform float extent;
 uniform float minimum_value;
 uniform float maximum_value;
 uniform int contour_levels;
 out vec4 fragment_color;
 void main() {
-    vec4 color = sampled_color(world_position, volume_texture, color_texture,
-        inverse_rotation, extent, minimum_value, maximum_value, contour_levels);
+    vec4 color = sampled_color(object_position, volume_texture, color_texture,
+        extent, minimum_value, maximum_value, contour_levels);
     fragment_color = vec4(color.rgb, 0.58);
 })glsl");
     static constexpr char contour_vertex[] = R"glsl(#version 330 core
@@ -423,7 +423,6 @@ void main() {
 in vec2 uv;
 uniform sampler3D volume_texture;
 uniform sampler1D color_texture;
-uniform mat4 inverse_rotation;
 uniform float extent;
 uniform float plane_offset;
 uniform float minimum_value;
@@ -434,7 +433,7 @@ out vec4 fragment_color;
 void main() {
     vec3 world = plane_world(uv, plane, plane_offset, extent);
     fragment_color = sampled_color(world, volume_texture, color_texture,
-        inverse_rotation, extent, minimum_value, maximum_value, contour_levels);
+        extent, minimum_value, maximum_value, contour_levels);
 })glsl");
 
     const auto make_program = [this](const QByteArray& vertex, const QByteArray& fragment) {
@@ -701,7 +700,6 @@ void AtomicOrbitalWidget::paintGL() {
       projection.ortho(-fitted * aspect, fitted * aspect, -fitted, fitted,
                        -volume_.half_extent * 10.0f, volume_.half_extent * 10.0f);
     }
-    const QMatrix4x4 inverse_rotation = model.inverted();
     if (positive_mesh_ && positive_mesh_->vertex_count > 0) {
         draw_surface(*positive_mesh_, definition_.positive_color, model, view, projection);
     }
@@ -709,12 +707,12 @@ void AtomicOrbitalWidget::paintGL() {
         draw_surface(*negative_mesh_, definition_.negative_color, model, view, projection);
     }
     if (!poster_mode_) {
-      draw_sampling_plane(view, projection, inverse_rotation);
-      draw_world_axes(view, projection);
+      draw_sampling_plane(model, view, projection);
+      draw_world_axes(model, view, projection);
     }
 
     const QRect right_viewport = to_gl_viewport(right_logical_viewport());
-    if (!poster_mode_ || !poster_surface_only_) draw_contour(right_viewport, inverse_rotation);
+    if (!poster_mode_ || !poster_surface_only_) draw_contour(right_viewport);
     glViewport(0, 0, int(width() * devicePixelRatioF()), int(height() * devicePixelRatioF()));
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glDepthMask(GL_TRUE);
@@ -750,16 +748,16 @@ void AtomicOrbitalWidget::draw_surface(
 }
 
 void AtomicOrbitalWidget::draw_sampling_plane(
+    const QMatrix4x4& model,
     const QMatrix4x4& view,
-    const QMatrix4x4& projection,
-    const QMatrix4x4& inverse_rotation) {
+    const QMatrix4x4& projection) {
     update_plane_buffer();
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
     plane_program_->bind();
-    plane_program_->setUniformValue("view_projection", projection * view);
-    plane_program_->setUniformValue("inverse_rotation", inverse_rotation);
+    plane_program_->setUniformValue(
+        "model_view_projection", projection * view * model);
     plane_program_->setUniformValue("extent", volume_.half_extent);
     plane_program_->setUniformValue(
         "minimum_value", float(kAtomicOrbitalContourMinimum));
@@ -778,14 +776,11 @@ void AtomicOrbitalWidget::draw_sampling_plane(
     glDisable(GL_BLEND);
 }
 
-void AtomicOrbitalWidget::draw_contour(
-    const QRect& pixel_viewport,
-    const QMatrix4x4& inverse_rotation) {
+void AtomicOrbitalWidget::draw_contour(const QRect& pixel_viewport) {
     glViewport(pixel_viewport.x(), pixel_viewport.y(),
                pixel_viewport.width(), pixel_viewport.height());
     glDisable(GL_DEPTH_TEST);
     contour_program_->bind();
-    contour_program_->setUniformValue("inverse_rotation", inverse_rotation);
     contour_program_->setUniformValue("extent", volume_.half_extent);
     contour_program_->setUniformValue("plane_offset", float(plane_offset()));
     contour_program_->setUniformValue(
@@ -806,6 +801,7 @@ void AtomicOrbitalWidget::draw_contour(
 }
 
 void AtomicOrbitalWidget::draw_world_axes(
+    const QMatrix4x4& model,
     const QMatrix4x4& view,
     const QMatrix4x4& projection) {
     if (!axis_program_ || !axis_vao_.isCreated()) return;
@@ -856,7 +852,8 @@ void AtomicOrbitalWidget::draw_world_axes(
     glEnable(GL_DEPTH_TEST);
     glLineWidth(std::max(1.0f, float(devicePixelRatioF()) * 2.0f));
     axis_program_->bind();
-    axis_program_->setUniformValue("model_view_projection", projection * view);
+    axis_program_->setUniformValue(
+        "model_view_projection", projection * view * model);
     {
         QOpenGLVertexArrayObject::Binder binder(&axis_vao_);
         glDrawArrays(GL_LINES, 0, vertices.size());
@@ -957,7 +954,11 @@ void AtomicOrbitalWidget::create_controls() {
         " border: 1px solid #0f766e; font-size: 24px; font-weight: 600;"
         " padding: 9px 16px; min-width: 112px; }"
         "#atomicOrbitalControls QPushButton:hover { background: #0d9488;"
-        " border-color: #0d9488; }"));
+        " border-color: #0d9488; }"
+        "#atomicOrbitalControls QPushButton[planeSelector=\"true\"] {"
+        " min-width: 52px; max-width: 52px; padding: 9px 4px; }"
+        "#atomicOrbitalControls QPushButton[planeSelector=\"true\"]:checked {"
+        " background: #164e63; border-color: #083344; }"));
     auto* layout = new QHBoxLayout(controls_panel_);
     layout->setContentsMargins(16, 8, 16, 12);
     layout->setSpacing(14);
@@ -966,13 +967,40 @@ void AtomicOrbitalWidget::create_controls() {
     offset_label_->setMinimumWidth(270);
     offset_slider_ = new QSlider(Qt::Horizontal, controls_panel_);
     offset_slider_->setObjectName(QStringLiteral("atomicOrbitalOffsetSlider"));
+    // The slider is pointer-controlled. Keeping keyboard focus on the audience
+    // window lets arrow and page keys continue to navigate the presentation.
+    offset_slider_->setFocusPolicy(Qt::NoFocus);
     offset_slider_->setRange(0, kSliderSteps);
+    plane_button_group_ = new QButtonGroup(controls_panel_);
+    plane_button_group_->setExclusive(true);
+    const auto add_plane_button = [this, layout](
+                                      const QString& text,
+                                      const QString& object_name,
+                                      AtomicOrbitalDefinition::Plane plane) {
+        auto* button = new QPushButton(text, controls_panel_);
+        button->setObjectName(object_name);
+        button->setProperty("planeSelector", true);
+        button->setCheckable(true);
+        button->setFocusPolicy(Qt::NoFocus);
+        plane_button_group_->addButton(button, int(plane));
+        layout->addWidget(button);
+    };
     reset_button_ = new QPushButton(QStringLiteral("Reset"), controls_panel_);
     reset_button_->setObjectName(QStringLiteral("atomicOrbitalResetButton"));
     reset_button_->setFocusPolicy(Qt::NoFocus);
     layout->addWidget(offset_label_);
     layout->addWidget(offset_slider_, 1);
+    add_plane_button(
+        QStringLiteral("XY"), QStringLiteral("atomicOrbitalPlaneXYButton"),
+        AtomicOrbitalDefinition::Plane::XY);
+    add_plane_button(
+        QStringLiteral("XZ"), QStringLiteral("atomicOrbitalPlaneXZButton"),
+        AtomicOrbitalDefinition::Plane::XZ);
+    add_plane_button(
+        QStringLiteral("YZ"), QStringLiteral("atomicOrbitalPlaneYZButton"),
+        AtomicOrbitalDefinition::Plane::YZ);
     layout->addWidget(reset_button_);
+    update_plane_buttons();
     connect(offset_slider_, &QSlider::valueChanged, this, [this] {
         update_offset_label();
         if (context()) {
@@ -982,10 +1010,43 @@ void AtomicOrbitalWidget::create_controls() {
         }
         update();
     });
+    connect(plane_button_group_, &QButtonGroup::idClicked, this, [this](int id) {
+        set_plane(AtomicOrbitalDefinition::Plane(id));
+    });
     connect(reset_button_, &QPushButton::clicked, this, [this] {
         reset_view();
         update();
     });
+}
+
+void AtomicOrbitalWidget::set_plane(AtomicOrbitalDefinition::Plane plane) {
+    if (definition_.plane == plane) {
+        return;
+    }
+
+    definition_.plane = plane;
+    update_plane_buttons();
+    const double origin = std::clamp(
+        0.0, definition_.offset_min, definition_.offset_max);
+    offset_slider_->setValue(int(std::lround(
+        (origin - definition_.offset_min)
+        / (definition_.offset_max - definition_.offset_min) * kSliderSteps)));
+    update_offset_label();
+    if (context()) {
+        makeCurrent();
+        update_plane_buffer();
+        doneCurrent();
+    }
+    update();
+}
+
+void AtomicOrbitalWidget::update_plane_buttons() {
+    if (!plane_button_group_) {
+        return;
+    }
+    if (QAbstractButton* button = plane_button_group_->button(int(definition_.plane))) {
+        button->setChecked(true);
+    }
 }
 
 void AtomicOrbitalWidget::position_controls() {

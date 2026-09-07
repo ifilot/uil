@@ -46,6 +46,10 @@ public:
     void set_slide_image(const QString& texture_key, const QImage& image);
     /** @brief Clears the currently displayed slide image. */
     void clear_slide_image();
+    /** @brief Freezes the composed slide while the next slide is prepared. */
+    void begin_slide_transition();
+    /** @brief Renders newly configured OpenGL overlays before they are presented. */
+    void prepare_interactive_overlays_for_display();
     /** @brief Adds a rendered slide image to the local texture cache. */
     void cache_slide_image(const QString& texture_key, const QImage& image);
     /** @brief Updates the page count and current page used by deck overview. */
@@ -276,6 +280,8 @@ private:
     void update_atomic_orbital_overlay_geometry();
     /** @brief Saves each current atomic-orbital frame before disabling interaction. */
     void capture_atomic_orbital_frame();
+    /** @brief Creates a reusable orbital widget attached to the audience window. */
+    std::unique_ptr<AtomicOrbitalWidget> create_atomic_orbital_widget();
 
     QString current_texture_key_;
     QImage current_slide_image_;
@@ -330,4 +336,5 @@ private:
     bool interactive_figure_suspended_for_feature_menu_ = false;
     bool atomic_orbital_suspended_for_feature_menu_ = false;
     bool resume_molecule_vibration_after_menu_ = false;
+    bool slide_transition_active_ = false;
 };

@@ -131,6 +131,10 @@ private:
     RenderRequest render_request_for_page(int page_index) const;
     /** @brief Updates the current and next slide images. */
     void update_visible_slides();
+    /** @brief Queues an atomic audience-frame swap after a short compositor grace period. */
+    void queue_audience_slide_commit(int page_index, const SlideCacheKey& key, const QImage& image);
+    /** @brief Atomically commits a rendered slide and its interactive overlays. */
+    void commit_audience_slide(const QString& texture_key, const QImage& image);
     /** @brief Schedules likely upcoming pages for background rendering. */
     void schedule_predictive_renders();
     /** @brief Queues a page render at an explicit size and priority. */
@@ -211,6 +215,8 @@ private:
     bool video_playing_ = false;
     bool loaded_overlays_globally_visible_ = true;
     bool awaiting_first_slide_image_ = false;
+    bool audience_slide_transition_pending_ = false;
+    quint64 audience_slide_commit_sequence_ = 0;
     int current_page_index_ = 0;
     int render_generation_ = 0;
     int media_scan_generation_ = 0;

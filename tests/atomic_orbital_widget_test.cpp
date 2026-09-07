@@ -1,6 +1,8 @@
 #include "ui/atomic_orbital_widget.hpp"
 
 #include <QGuiApplication>
+#include <QMouseEvent>
+#include <QPushButton>
 #include <QSlider>
 #include <QTest>
 
@@ -76,6 +78,60 @@ void AtomicOrbitalWidgetTest::renders_and_resamples_when_opengl_is_available() {
     widget.set_prepared_definition(other_plane, prepared);
     QVERIFY(widget.renderer_available());
     QVERIFY(widget.capture_frame() != themed_frame);
+
+    auto* xy_button = widget.findChild<QPushButton*>(
+        QStringLiteral("atomicOrbitalPlaneXYButton"));
+    auto* xz_button = widget.findChild<QPushButton*>(
+        QStringLiteral("atomicOrbitalPlaneXZButton"));
+    auto* yz_button = widget.findChild<QPushButton*>(
+        QStringLiteral("atomicOrbitalPlaneYZButton"));
+    QVERIFY(xy_button);
+    QVERIFY(xz_button);
+    QVERIFY(yz_button);
+    QVERIFY(yz_button->isChecked());
+
+    slider->setValue(700);
+    QVERIFY(!qFuzzyIsNull(widget.plane_offset()));
+    QTest::mouseClick(xy_button, Qt::LeftButton);
+    QCOMPARE(widget.definition().plane, AtomicOrbitalDefinition::Plane::XY);
+    QVERIFY(xy_button->isChecked());
+    QVERIFY(qFuzzyIsNull(widget.plane_offset()));
+    slider->setValue(700);
+    QTest::mouseClick(xz_button, Qt::LeftButton);
+    QCOMPARE(widget.definition().plane, AtomicOrbitalDefinition::Plane::XZ);
+    QVERIFY(xz_button->isChecked());
+    QVERIFY(qFuzzyIsNull(widget.plane_offset()));
+
+    // Rotation is a rigid transform of the orbital, axes, and sampling plane.
+    // It changes the left-hand 3D scene but not the plane-relative contour image.
+    slider->setValue(650);
+    const QImage before_rotation = widget.capture_frame();
+    const QPointF press_position(180.0, 180.0);
+    const QPointF move_position(300.0, 225.0);
+    QMouseEvent press_event(
+        QEvent::MouseButtonPress, press_position,
+        QPointF(widget.mapToGlobal(press_position.toPoint())),
+        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&widget, &press_event);
+    QMouseEvent move_event(
+        QEvent::MouseMove, move_position,
+        QPointF(widget.mapToGlobal(move_position.toPoint())),
+        Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&widget, &move_event);
+    QMouseEvent release_event(
+        QEvent::MouseButtonRelease, move_position,
+        QPointF(widget.mapToGlobal(move_position.toPoint())),
+        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&widget, &release_event);
+    const QImage after_rotation = widget.capture_frame();
+    const QRect left_crop(
+        before_rotation.width() * 3 / 100, before_rotation.height() * 15 / 100,
+        before_rotation.width() * 38 / 100, before_rotation.height() * 48 / 100);
+    const QRect right_crop(
+        before_rotation.width() * 53 / 100, before_rotation.height() * 15 / 100,
+        before_rotation.width() * 35 / 100, before_rotation.height() * 48 / 100);
+    QVERIFY(before_rotation.copy(left_crop) != after_rotation.copy(left_crop));
+    QCOMPARE(before_rotation.copy(right_crop), after_rotation.copy(right_crop));
 }
 
 void AtomicOrbitalWidgetTest::gpu_cache_reuses_and_evicts_geometry() {

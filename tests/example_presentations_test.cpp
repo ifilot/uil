@@ -49,11 +49,13 @@ void ExamplePresentationsTest::discovers_known_examples_in_menu_order() {
     QVERIFY(write_fixture(
         examples_directory.filePath(QStringLiteral("atomic-orbitals.pdf"))));
 
-    QVERIFY(write_fixture(examples_directory.filePath(QStringLiteral("orbital-atlas.pdf"))));
+    // The orbital atlas is a documentation artifact, not a bundled menu example.
+    QVERIFY(write_fixture(
+        examples_directory.filePath(QStringLiteral("orbital-atlas.pdf"))));
 
     const QVector<ExamplePresentation> examples =
         installed_example_presentations(application_directory.absolutePath());
-    QCOMPARE(examples.size(), 6);
+    QCOMPARE(examples.size(), 5);
     QCOMPARE(examples.at(0).title, QStringLiteral("Getting Started with uil"));
     QCOMPARE(examples.at(0).file_name, QStringLiteral("getting-started.pdf"));
     QCOMPARE(
@@ -74,7 +76,6 @@ void ExamplePresentationsTest::discovers_known_examples_in_menu_order() {
         QStringLiteral("interactive-figure.pdf"));
     QCOMPARE(examples.at(4).title, QStringLiteral("Atomic Orbitals"));
     QCOMPARE(examples.at(4).file_name, QStringLiteral("atomic-orbitals.pdf"));
-    QCOMPARE(examples.at(5).file_name, QStringLiteral("orbital-atlas.pdf"));
 }
 
 void ExamplePresentationsTest::ignores_unknown_files_and_directories() {

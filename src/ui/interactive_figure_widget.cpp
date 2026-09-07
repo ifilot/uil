@@ -1096,6 +1096,7 @@ InteractiveFigureWidget::InteractiveFigureWidget(QWidget* parent)
     amplitude_label_->setObjectName(QStringLiteral("figureAmplitudeLabel"));
     amplitude_slider_ = new QSlider(Qt::Horizontal, controls_row);
     amplitude_slider_->setObjectName(QStringLiteral("figureAmplitudeSlider"));
+    amplitude_slider_->setFocusPolicy(Qt::NoFocus);
     amplitude_slider_->setRange(0, kSliderSteps);
     amplitude_slider_->setSingleStep(1);
     amplitude_slider_->setPageStep(10);
@@ -1104,6 +1105,7 @@ InteractiveFigureWidget::InteractiveFigureWidget(QWidget* parent)
     frequency_label_->setObjectName(QStringLiteral("figureFrequencyLabel"));
     frequency_slider_ = new QSlider(Qt::Horizontal, controls_row);
     frequency_slider_->setObjectName(QStringLiteral("figureFrequencySlider"));
+    frequency_slider_->setFocusPolicy(Qt::NoFocus);
     frequency_slider_->setRange(0, kSliderSteps);
     animation_button_ = new QPushButton(controls_row);
     animation_button_->setObjectName(QStringLiteral("figureAnimationButton"));

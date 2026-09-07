@@ -15,6 +15,7 @@
 #include "orbital/atomic_orbital.hpp"
 
 class QContextMenuEvent;
+class QButtonGroup;
 class QFrame;
 class QLabel;
 class QMouseEvent;
@@ -25,7 +26,7 @@ class QResizeEvent;
 class QSlider;
 class QWheelEvent;
 
-/** @brief Renders a rotatable atomic orbital beside a fixed contour panel. */
+/** @brief Renders an atomic orbital, coordinate frame, and movable contour plane. */
 class AtomicOrbitalWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core {
   Q_OBJECT
 
@@ -83,12 +84,15 @@ class AtomicOrbitalWidget final : public QOpenGLWidget, protected QOpenGLFunctio
   /** @brief Updates only the small palette texture when geometry can be reused. */
   void upload_colormap();
   void update_plane_buffer();
+  void set_plane(AtomicOrbitalDefinition::Plane plane);
+  void update_plane_buttons();
   void draw_surface(const Mesh& mesh, const QColor& color, const QMatrix4x4& model,
                     const QMatrix4x4& view, const QMatrix4x4& projection);
-  void draw_sampling_plane(const QMatrix4x4& view, const QMatrix4x4& projection,
-                           const QMatrix4x4& inverse_rotation);
-  void draw_contour(const QRect& pixel_viewport, const QMatrix4x4& inverse_rotation);
-  void draw_world_axes(const QMatrix4x4& view, const QMatrix4x4& projection);
+  void draw_sampling_plane(const QMatrix4x4& model, const QMatrix4x4& view,
+                           const QMatrix4x4& projection);
+  void draw_contour(const QRect& pixel_viewport);
+  void draw_world_axes(const QMatrix4x4& model, const QMatrix4x4& view,
+                       const QMatrix4x4& projection);
   void draw_labels_and_colorbar();
   void create_controls();
   void position_controls();
@@ -131,6 +135,7 @@ class AtomicOrbitalWidget final : public QOpenGLWidget, protected QOpenGLFunctio
   QFrame* controls_panel_ = nullptr;
   QLabel* offset_label_ = nullptr;
   QSlider* offset_slider_ = nullptr;
+  QButtonGroup* plane_button_group_ = nullptr;
   QPushButton* reset_button_ = nullptr;
   std::function<void(const QPoint&)> context_menu_handler_;
 };

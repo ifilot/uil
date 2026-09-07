@@ -33,6 +33,7 @@ Q_LOGGING_CATEGORY(logScreens, "screens")
 namespace {
 constexpr int kMaximumOverlayDimension = 8192;
 constexpr qint64 kMaximumOverlayPixels = 34LL * 1024LL * 1024LL;
+constexpr int kAudienceSlideSwapDelayMs = 10;
 
 /** @brief Decodes a bounded PNG overlay from an extracted package. */
 QImage read_safe_package_overlay(const QString& path) {
@@ -208,6 +209,8 @@ bool AppController::open_pdf(const QString& path) {
     slide_cache_.clear();
     render_scheduler_.clear();
     render_generation_ = render_scheduler_.generation();
+    audience_slide_transition_pending_ = false;
+    ++audience_slide_commit_sequence_;
     deck_overview_render_size_ = {};
     deck_overview_first_page_ = -1;
     deck_overview_last_page_ = -1;
@@ -308,9 +311,11 @@ void AppController::schedule_media_scan(
                 self->package_movie_asset_paths_.removeDuplicates();
                 self->package_molecule_asset_paths_.removeDuplicates();
             }
-            self->update_active_molecule();
-            self->update_active_interactive_figure();
-            self->update_active_atomic_orbital();
+            if (!self->audience_slide_transition_pending_) {
+                self->update_active_molecule();
+                self->update_active_interactive_figure();
+                self->update_active_atomic_orbital();
+            }
             emit self->media_scan_changed(self->media_scan_result_);
             if (self->media_scan_result_.has_media()) {
                 emit self->status_message_changed(self->media_scan_result_.summary());
@@ -353,10 +358,11 @@ void AppController::go_to_page(int page_index) {
     }
 
     stop_media_playback();
+    if (audience_window_) {
+        audience_window_->begin_slide_transition();
+        audience_slide_transition_pending_ = true;
+    }
     current_page_index_ = clampedPage;
-    update_active_molecule();
-    update_active_interactive_figure();
-    update_active_atomic_orbital();
     request_page_render(current_page_index_, 1000);
     update_visible_slides();
     schedule_predictive_renders();
@@ -828,7 +834,7 @@ void AppController::update_visible_slides() {
     if (auto currentImage = slide_cache_.get(currentKey)) {
         emit current_slide_image_changed(*currentImage);
         if (audience_window_) {
-            audience_window_->set_slide_image(texture_key_for_cache_key(currentKey), *currentImage);
+            queue_audience_slide_commit(current_page_index_, currentKey, *currentImage);
             if (!video_playing_) {
                 audience_window_->clear_video_overlay();
             }
@@ -856,6 +862,47 @@ void AppController::update_visible_slides() {
     }
 
     emit page_changed(current_page_index_, page_count());
+}
+
+void AppController::queue_audience_slide_commit(
+    int page_index,
+    const SlideCacheKey& key,
+    const QImage& image) {
+    if (!audience_window_ || image.isNull()) {
+        return;
+    }
+
+    const quint64 sequence = ++audience_slide_commit_sequence_;
+    const QString texture_key = texture_key_for_cache_key(key);
+    QTimer::singleShot(
+        kAudienceSlideSwapDelayMs,
+        this,
+        [this, sequence, page_index, texture_key, image] {
+            if (sequence != audience_slide_commit_sequence_
+                || page_index != current_page_index_
+                || texture_key != texture_key_for_cache_key(cache_key_for_page(page_index))) {
+                return;
+            }
+            commit_audience_slide(texture_key, image);
+        });
+}
+
+void AppController::commit_audience_slide(
+    const QString& texture_key,
+    const QImage& image) {
+    if (!audience_window_) {
+        audience_slide_transition_pending_ = false;
+        return;
+    }
+
+    AudienceWindow* window = audience_window_;
+    window->set_slide_image(texture_key, image);
+    update_active_molecule();
+    update_active_interactive_figure();
+    update_active_atomic_orbital();
+    window->prepare_interactive_overlays_for_display();
+    audience_slide_transition_pending_ = false;
+    window->repaint();
 }
 
 void AppController::schedule_predictive_renders() {
@@ -1189,7 +1236,7 @@ void AppController::handle_render_finished(const RenderRequest& request, const Q
         }
         emit current_slide_image_changed(displayImage);
         if (audience_window_) {
-            audience_window_->set_slide_image(texture_key, displayImage);
+            queue_audience_slide_commit(request.page_index, key, displayImage);
         }
         emit status_message_changed(QStringLiteral("Rendered page %1 in %2 ms").arg(request.page_index + 1).arg(elapsed_ms));
     }

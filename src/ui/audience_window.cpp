@@ -741,6 +741,13 @@ AudienceWindow::AudienceWindow()
             update_atomic_orbital_overlay_geometry();
             update();
           });
+  // QOpenGLWidget changes a top-level widget to OpenGL-backed composition. If
+  // the first one is added after the audience window is visible, Qt may
+  // recreate the native window and briefly expose the desktop. Keep one
+  // hidden orbital widget in the hierarchy before the first show and reuse it.
+  AtomicOrbitalOverlayState initial_orbital;
+  initial_orbital.widget = create_atomic_orbital_widget();
+  atomic_orbital_overlays_.push_back(std::move(initial_orbital));
   QSettings settings;
   pointer_size_ = std::clamp(
       settings.value(QString::fromLatin1(kPointerSizeSettingsKey), kDefaultPointerSize).toInt(),
@@ -779,6 +786,7 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
     }
 
     if (texture_key != current_texture_key_) {
+        slide_transition_active_ = false;
         molecule_snapshot_frame_ = {};
         interactive_figure_snapshot_frame_ = {};
         for (auto& overlay : atomic_orbital_overlays_) overlay.snapshot_frame = {};
@@ -793,7 +801,27 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
     update();
 }
 
+void AudienceWindow::begin_slide_transition() {
+    if (slide_transition_active_ || current_slide_image_.isNull()) {
+        return;
+    }
+
+    slide_transition_active_ = true;
+}
+
+void AudienceWindow::prepare_interactive_overlays_for_display() {
+    if (molecule_widget_ && molecule_widget_->isVisible()) {
+        molecule_widget_->grabFramebuffer();
+    }
+    for (auto& overlay : atomic_orbital_overlays_) {
+        if (overlay.widget->isVisible()) {
+            overlay.widget->capture_frame();
+        }
+    }
+}
+
 void AudienceWindow::clear_slide_image() {
+    slide_transition_active_ = false;
     current_texture_key_.clear();
     current_slide_image_ = {};
     video_frame_ = {};
@@ -975,9 +1003,7 @@ void AudienceWindow::set_atomic_orbital_overlays(const QVector<AtomicOrbitalOver
     if (!overlay.definition.is_valid() || !overlay.slide_rect.isValid()) continue;
     if (index == atomic_orbital_overlays_.size()) {
       AtomicOrbitalOverlayState state;
-      state.widget = std::make_unique<AtomicOrbitalWidget>(this);
-      state.widget->set_context_menu_handler(
-          [this](const QPoint& global_position) { show_feature_menu(global_position); });
+      state.widget = create_atomic_orbital_widget();
       atomic_orbital_overlays_.push_back(std::move(state));
     }
     auto& state = atomic_orbital_overlays_[index++];
@@ -1001,9 +1027,9 @@ void AudienceWindow::clear_atomic_orbital_overlay() {
   atomic_orbital_slide_identity_.clear();
   for (auto& overlay : atomic_orbital_overlays_) {
     overlay.slide_rect = {};
+    overlay.snapshot_frame = {};
     overlay.ready = false;
     overlay.geometry_key.clear();
-    overlay.snapshot_frame = {};
     overlay.widget->hide();
   }
   update();
@@ -1483,12 +1509,14 @@ void AudienceWindow::keyPressEvent(QKeyEvent* event) {
 
     switch (event->key()) {
     case Qt::Key_Right:
+    case Qt::Key_Down:
     case Qt::Key_PageDown:
     case Qt::Key_Space:
         emit next_requested();
         event->accept();
         return;
     case Qt::Key_Left:
+    case Qt::Key_Up:
     case Qt::Key_PageUp:
     case Qt::Key_Backspace:
         emit previous_requested();
@@ -1921,6 +1949,14 @@ void AudienceWindow::capture_atomic_orbital_frame() {
     const QImage snapshot = overlay.widget->capture_frame();
     if (!snapshot.isNull()) overlay.snapshot_frame = snapshot;
   }
+}
+
+std::unique_ptr<AtomicOrbitalWidget> AudienceWindow::create_atomic_orbital_widget() {
+  auto widget = std::make_unique<AtomicOrbitalWidget>(this);
+  widget->set_context_menu_handler(
+      [this](const QPoint& global_position) { show_feature_menu(global_position); });
+  widget->hide();
+  return widget;
 }
 
 QPointF AudienceWindow::slide_image_point(QPointF window_point, QSize texture_size, bool* inside) const {

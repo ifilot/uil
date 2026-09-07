@@ -1215,6 +1215,7 @@ void PresenterWindow::create_actions() {
     next_action_->setIcon(bluecurve::icon(QStringLiteral("stock-go-forward")));
     next_action_->setShortcuts({
         QKeySequence(Qt::Key_Right),
+        QKeySequence(Qt::Key_Down),
         QKeySequence(Qt::Key_PageDown),
         QKeySequence(Qt::Key_Space)
     });
@@ -1223,6 +1224,7 @@ void PresenterWindow::create_actions() {
     previous_action_->setIcon(bluecurve::icon(QStringLiteral("stock-go-back")));
     previous_action_->setShortcuts({
         QKeySequence(Qt::Key_Left),
+        QKeySequence(Qt::Key_Up),
         QKeySequence(Qt::Key_PageUp),
         QKeySequence(Qt::Key_Backspace)
     });

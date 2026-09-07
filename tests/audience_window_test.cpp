@@ -39,6 +39,7 @@ class AudienceWindowTest final : public QObject {
 private slots:
     void initTestCase();
     void cleanup();
+    void opengl_compositor_is_primed_before_first_show();
     void navigation_and_tool_shortcuts();
     void shortcut_tooltips_are_exposed();
     void pointer_size_defaults_clamps_and_persists();
@@ -84,6 +85,13 @@ void AudienceWindowTest::cleanup() {
     QCoreApplication::processEvents();
 }
 
+void AudienceWindowTest::opengl_compositor_is_primed_before_first_show() {
+    AudienceWindow window;
+    const auto orbitals = window.findChildren<AtomicOrbitalWidget*>();
+    QCOMPARE(orbitals.size(), 1);
+    QVERIFY(orbitals.constFirst()->isHidden());
+}
+
 void AudienceWindowTest::navigation_and_tool_shortcuts() {
     AudienceWindow window;
     window.set_document_overview(8, 0);
@@ -94,12 +102,14 @@ void AudienceWindowTest::navigation_and_tool_shortcuts() {
     QSignalSpy media_spy(&window, &AudienceWindow::play_pause_requested);
 
     QTest::keyClick(&window, Qt::Key_Right);
+    QTest::keyClick(&window, Qt::Key_Down);
     QTest::keyClick(&window, Qt::Key_Left);
+    QTest::keyClick(&window, Qt::Key_Up);
     QTest::keyClick(&window, Qt::Key_Home);
     QTest::keyClick(&window, Qt::Key_End);
     QTest::keyClick(&window, Qt::Key_Return);
-    QCOMPARE(next_spy.size(), 1);
-    QCOMPARE(previous_spy.size(), 1);
+    QCOMPARE(next_spy.size(), 2);
+    QCOMPARE(previous_spy.size(), 2);
     QCOMPARE(first_spy.size(), 1);
     QCOMPARE(last_spy.size(), 1);
     QCOMPARE(media_spy.size(), 1);
@@ -364,15 +374,47 @@ void AudienceWindowTest::interactive_figure_controls_and_tool_switching() {
     QVERIFY(figure->font().pixelSize() >= 28);
     auto* amplitude = figure->findChild<QSlider*>(QStringLiteral("figureAmplitudeSlider"));
     QVERIFY(amplitude);
+    QCOMPARE(amplitude->focusPolicy(), Qt::NoFocus);
     QVERIFY(!figure->findChild<QWidget*>(QStringLiteral("figureColorButton")));
     const int initial_value = amplitude->value();
     amplitude->setValue(std::min(amplitude->maximum(), initial_value + 100));
     QVERIFY(amplitude->value() != initial_value);
 
+    QSignalSpy next_spy(&window, &AudienceWindow::next_requested);
+    QSignalSpy previous_spy(&window, &AudienceWindow::previous_requested);
+    window.setFocus();
+    QTRY_COMPARE(QApplication::focusWidget(), &window);
+    QTest::mouseClick(
+        amplitude, Qt::LeftButton, Qt::NoModifier, amplitude->rect().center());
+    QCOMPARE(QApplication::focusWidget(), &window);
+    const int clicked_value = amplitude->value();
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Right);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Down);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_PageDown);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Left);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Up);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_PageUp);
+    QCOMPARE(next_spy.size(), 3);
+    QCOMPARE(previous_spy.size(), 3);
+    QCOMPARE(amplitude->value(), clicked_value);
+
     window.set_pen_tool();
     QVERIFY(figure->isHidden());
     window.set_cursor_tool();
     QVERIFY(figure->isVisible());
+
+    const QPoint figure_center = figure->geometry().center();
+    window.begin_slide_transition();
+    QVERIFY(figure->isVisible());
+
+    QImage next_slide(1600, 900, QImage::Format_RGB32);
+    next_slide.fill(QColor(20, 120, 160));
+    window.set_slide_image(QStringLiteral("deck:1:1600x900:0"), next_slide);
+    window.clear_interactive_figure_overlay();
+    window.repaint();
+    QVERIFY(figure->isHidden());
+    const QImage swapped_frame = window.grab().toImage();
+    QCOMPARE(swapped_frame.pixelColor(figure_center), QColor(20, 120, 160));
 }
 
 void AudienceWindowTest::atomic_orbital_controls_and_tool_switching() {
@@ -406,10 +448,27 @@ void AudienceWindowTest::atomic_orbital_controls_and_tool_switching() {
     auto* slider = orbital->findChild<QSlider*>(
         QStringLiteral("atomicOrbitalOffsetSlider"));
     QVERIFY(slider);
+    QCOMPARE(slider->focusPolicy(), Qt::NoFocus);
     const int initial_value = slider->value();
     slider->setValue(std::min(slider->maximum(), initial_value + 125));
     QVERIFY(slider->value() != initial_value);
     QVERIFY(orbital->plane_offset() > 0.0);
+
+    QSignalSpy next_spy(&window, &AudienceWindow::next_requested);
+    QSignalSpy previous_spy(&window, &AudienceWindow::previous_requested);
+    window.setFocus();
+    QTRY_COMPARE(QApplication::focusWidget(), &window);
+    QTest::mouseClick(
+        slider, Qt::LeftButton, Qt::NoModifier, slider->rect().center());
+    QCOMPARE(QApplication::focusWidget(), &window);
+    const int clicked_value = slider->value();
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Right);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_PageDown);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Left);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_PageUp);
+    QCOMPARE(next_spy.size(), 2);
+    QCOMPARE(previous_spy.size(), 2);
+    QCOMPARE(slider->value(), clicked_value);
 
     window.set_pen_tool();
     QVERIFY(orbital->isHidden());
