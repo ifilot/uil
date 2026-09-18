@@ -5,6 +5,14 @@
 #include "ui/molecular_symmetry_widget.hpp"
 
 #include <QApplication>
+#include <QAbstractItemView>
+#include <QListWidget>
+#include <QTabWidget>
+#include <QTabBar>
+#include <QCheckBox>
+#include <QFile>
+#include <QMenu>
+#include <QTimer>
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QGuiApplication>
@@ -55,6 +63,7 @@ private slots:
     /** @brief Guards symmetry masking, world axes, cursor, and focus-independent navigation. */
     void molecular_symmetry_overlay_preserves_presentation_controls();
     /** @brief Verifies independent controls and lifecycle of multiple orbital overlays. */
+    void molecular_symmetry_settings_tabs_accept_mouse_clicks();
     void multiple_atomic_orbitals();
     void harmonic_wavepacket_controls_update_status();
     void harmonic_basis_controls_update_phase_status();
@@ -539,6 +548,69 @@ void AudienceWindowTest::molecular_symmetry_overlay_preserves_presentation_contr
                            Qt::NoButton, Qt::NoButton, Qt::NoModifier);
     QApplication::sendEvent(molecule, &move_event);
     QVERIFY(window.cursor().shape() != Qt::BlankCursor);
+}
+
+void AudienceWindowTest::molecular_symmetry_settings_tabs_accept_mouse_clicks() {
+    if (QGuiApplication::platformName() == "offscreen")
+        QSKIP("OpenGL display required");
+    AudienceWindow window;
+    QFile theme(QStringLiteral(UIL_TEST_SOURCE_DIR "/resources/styles/vscode.qss"));
+    QVERIFY(theme.open(QIODevice::ReadOnly));
+    window.setStyleSheet(QString::fromUtf8(theme.readAll()));
+    QFile payload(QStringLiteral(UIL_TEST_SOURCE_DIR "/examples/molecular-symmetry/water.uilsym"));
+    QVERIFY(payload.open(QIODevice::ReadOnly));
+    MolecularSymmetryDefinition definition;
+    QString error;
+    QVERIFY(parse_molecular_symmetry(payload.readAll(), &definition, &error));
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image("orbital-menu", slide);
+    window.set_molecular_symmetry_overlay(definition, QRectF(0.08, 0.1, 0.84, 0.8));
+    window.enter_fullscreen();
+    QTest::qWait(200);
+    auto* tabs = window.findChild<QTabWidget*>(QStringLiteral("symmetryControlTabs"));
+    QVERIFY(tabs);
+    // The page must fill a wide tab pane; dark application backgrounds must
+    // not leak through the rounded corners or a leftover width constraint.
+    QVERIFY(tabs->width() >= 475);
+    QVERIFY(std::abs(tabs->currentWidget()->width() - tabs->contentsRect().width()) <= 4);
+    const QImage panel_image = tabs->grab().toImage();
+    int dark_pixels = 0;
+    for (int y = 0; y < panel_image.height(); ++y) {
+        for (int x = 0; x < panel_image.width(); ++x) {
+            const QColor color = panel_image.pixelColor(x, y);
+            if (color.red() < 33 && color.green() < 33 && color.blue() < 33) ++dark_pixels;
+        }
+    }
+    QCOMPARE(dark_pixels, 0);
+    auto click = [&](QWidget* target, QPoint point) {
+        QTest::mouseClick(window.windowHandle(), Qt::LeftButton, Qt::NoModifier,
+                          target->mapTo(&window, point));
+    };
+    click(tabs->tabBar(), tabs->tabBar()->tabRect(1).center());
+    QCOMPARE(tabs->currentIndex(), 1);
+    auto* atoms = window.findChild<QListWidget*>(QStringLiteral("symmetryOrbitalAtom"));
+    QVERIFY(atoms);
+    click(atoms->viewport(), atoms->visualItemRect(atoms->item(1)).center());
+    QCOMPARE(atoms->currentRow(), 1);
+    auto* s = window.findChild<QCheckBox*>(QStringLiteral("symmetryOrbital_1s"));
+    QVERIFY(s->isVisible());
+    QCoreApplication::processEvents();
+    click(s, QPoint(7, s->height() / 2));
+    auto* molecule = dynamic_cast<MoleculeWidget*>(window.findChild<QWidget*>(QStringLiteral("symmetryMoleculeOpenGLWidget")));
+    QVERIFY(molecule);
+    QCOMPARE(molecule->orbitals().last().atom, 2);
+    QCOMPARE(molecule->orbitals().last().orbital, QStringLiteral("1s"));
+    QTest::mouseClick(window.windowHandle(), Qt::LeftButton, Qt::NoModifier, QPoint(20, 20));
+    QCOMPARE(tabs->currentIndex(), 1);
+    QVERIFY(atoms->isVisible());
+    if (!qEnvironmentVariable("UIL_ORBITAL_TEST_IMAGES").isEmpty()) {
+        QVERIFY(window.grab().save(QDir(qEnvironmentVariable("UIL_ORBITAL_TEST_IMAGES")).filePath("orbital-settings-slide.png")));
+    }
+    click(tabs->tabBar(), tabs->tabBar()->tabRect(0).center());
+    QCOMPARE(tabs->currentIndex(), 0);
+    QCOMPARE(molecule->orbitals().size(), 2);
+
 }
 
 void AudienceWindowTest::multiple_atomic_orbitals() {

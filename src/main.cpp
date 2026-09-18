@@ -49,7 +49,7 @@ protected:
 
 /** @brief Creates the raster-only startup image without loading icon plugins. */
 QPixmap create_loading_splash_pixmap() {
-    constexpr int kSplashWidth = 420;
+    constexpr int kSplashWidth = 600;
     constexpr int kSplashHeight = 150;
     QPixmap pixmap(kSplashWidth, kSplashHeight);
     pixmap.fill(QColor(0x18, 0x18, 0x18));

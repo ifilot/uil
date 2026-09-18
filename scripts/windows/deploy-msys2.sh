@@ -947,7 +947,8 @@ copy_example_presentations
 
 log "Copying LaTeX packages and orbital atlas"
 [[ -f latex/uilorbital-atlas/manifest.json ]] || die "generate the orbital atlas before deploying"
-cp -R latex "$STAGE_DIR/latex"
+mkdir -p "$STAGE_DIR/latex"
+cp -R latex/. "$STAGE_DIR/latex/"
 
 if (( GENERATE_THIRD_PARTY_NOTICES )); then
     log "Writing exhaustive third-party notices"

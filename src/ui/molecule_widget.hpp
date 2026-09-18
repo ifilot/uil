@@ -10,10 +10,12 @@
 #include <QRect>
 #include <QString>
 #include <QVector>
+#include <array>
 #include <functional>
 #include <memory>
 
 #include "molecule/molecule_geometry.hpp"
+#include "orbital/symmetry_orbitals.hpp"
 
 class QMouseEvent;
 class QContextMenuEvent;
@@ -48,6 +50,10 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
 
   /** @brief Replaces the displayed molecular geometry and resets the view. */
   void set_geometry(const MoleculeGeometry& geometry);
+  /** @brief Selects atom-centered baked orbitals; invalid selections are ignored. */
+  void set_orbitals(const QVector<SymmetryOrbital>& orbitals);
+  /** @brief Returns the selected atom-centered orbitals. */
+  const QVector<SymmetryOrbital>& orbitals() const;
   /** @brief Selects mono or red/cyan anaglyph output. */
   void set_stereo_mode(StereoMode mode);
   /** @brief Returns the active stereo output mode. */
@@ -80,6 +86,16 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   void set_coordinate_transform(const QMatrix4x4& transform);
   /** @brief Restores untransformed atom coordinates. */
   void clear_coordinate_transform();
+  /** @brief Squashes atom surfaces along a mirror normal without moving their centers. */
+  void set_atom_reflection_shape(const QVector3D& normal, double progress);
+  /** @brief Shows the untransformed molecule as a translucent reference pose. */
+  void set_reference_geometry_visible(bool visible);
+  /** @brief Returns whether the translucent reference pose is enabled. */
+  bool reference_geometry_visible() const;
+  /** @brief Sets the opacity of the untransformed reference pose. */
+  void set_reference_geometry_opacity(float opacity);
+  /** @brief Returns the opacity of the untransformed reference pose. */
+  float reference_geometry_opacity() const;
   /** @brief Shows or hides the built-in molecule toolbar and toggle. */
   void set_builtin_controls_visible(bool visible);
   /** @brief Sets and applies the orientation restored by reset interactions. */
@@ -88,6 +104,8 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   void set_default_camera_distance_factor(float factor);
   /** @brief Returns the current camera-distance factor. */
   float camera_distance_factor() const;
+  /** @brief Restores the default view and zoom without changing molecular state. */
+  void reset_camera();
   /** @brief Shows a symmetry element whose axis is expressed in molecule coordinates. */
   void set_symmetry_element(SymmetryElement element, QVector3D axis = {},
                             QColor color = QColor(145, 43, 67));
@@ -135,8 +153,8 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   void destroy_renderer();
   /** @brief Draws one transformed and colored mesh. */
   void draw_mesh(Mesh& mesh, const QMatrix4x4& model, const QVector3D& color,
-                 const QMatrix4x4& view, const QMatrix4x4& projection,
-                 float opacity = 1.0f, bool unlit = false);
+                 const QMatrix4x4& view, const QMatrix4x4& projection, float opacity = 1.0f,
+                 bool unlit = false, bool cutaway = false, bool neon = false);
   /** @brief Draws one eye into the supplied framebuffer viewport. */
   void draw_eye(const QRect& pixel_viewport, float eye_offset, const QVector<QVector3D>& positions);
   /** @brief Paints a Blender-style orientation gizmo over the OpenGL scene. */
@@ -149,12 +167,14 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   void update_toolbar_state();
 
   MoleculeGeometry geometry_;
+  QVector<SymmetryOrbital> orbitals_;
+  std::array<std::unique_ptr<Mesh>, 20> orbital_meshes_;
   QVector3D center_;
   QVector3D coordinate_origin_;
-  QQuaternion default_rotation_ =
-      QQuaternion::fromEulerAngles(0.0f, 0.0f, 18.0f).normalized();
+  QQuaternion default_rotation_ = QQuaternion::fromEulerAngles(0.0f, 0.0f, 18.0f).normalized();
   QQuaternion rotation_;
   QMatrix4x4 coordinate_transform_;
+  QMatrix4x4 atom_shape_transform_;
   SymmetryElement symmetry_element_ = SymmetryElement::None;
   QVector3D symmetry_element_axis_{0.0f, 0.0f, 1.0f};
   QColor symmetry_element_color_{145, 43, 67};
@@ -170,6 +190,8 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   bool toolbar_expanded_ = true;
   bool builtin_controls_visible_ = true;
   bool auto_rotation_enabled_ = false;
+  bool reference_geometry_visible_ = false;
+  float reference_geometry_opacity_ = 0.5f;
   StereoMode stereo_mode_ = StereoMode::Mono;
   QString renderer_error_;
   std::unique_ptr<QOpenGLShaderProgram> shader_program_;

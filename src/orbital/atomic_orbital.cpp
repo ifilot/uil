@@ -444,8 +444,8 @@ double hydrogenic_atomic_orbital_value(
     const double polar = polar_normalization * associated_legendre(l, absolute_m, cos_theta);
     const double azimuthal_normalization = 1.0 / std::sqrt(4.0 * kPi);
     double azimuthal = azimuthal_normalization;
-    if (m > 0) azimuthal *= std::cos(double(m) * phi);
-    if (m < 0) azimuthal *= std::sin(double(-m) * phi);
+    if (m > 0) azimuthal *= std::sqrt(2.0) * std::cos(double(m) * phi);
+    if (m < 0) azimuthal *= std::sqrt(2.0) * std::sin(double(-m) * phi);
     return radial_value(n, l, radius) * polar * azimuthal;
 }
 

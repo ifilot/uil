@@ -205,6 +205,7 @@ struct MoleculeWidget::Mesh {
   QOpenGLBuffer index_buffer{QOpenGLBuffer::IndexBuffer};
   QOpenGLVertexArrayObject vao;
   int index_count = 0;
+  QVector3D orbital_centroid;
 
   bool create(QOpenGLShaderProgram* program, const QVector<MeshVertex>& vertices,
               const QVector<quint32>& indices) {
@@ -225,12 +226,10 @@ struct MoleculeWidget::Mesh {
       const int position_location = program->attributeLocation("vertex_position");
       const int normal_location = program->attributeLocation("vertex_normal");
       program->enableAttributeArray(position_location);
-      program->setAttributeBuffer(position_location, GL_FLOAT,
-                                  int(offsetof(MeshVertex, position)), 3,
-                                  int(sizeof(MeshVertex)));
+      program->setAttributeBuffer(position_location, GL_FLOAT, int(offsetof(MeshVertex, position)),
+                                  3, int(sizeof(MeshVertex)));
       program->enableAttributeArray(normal_location);
-      program->setAttributeBuffer(normal_location, GL_FLOAT,
-                                  int(offsetof(MeshVertex, normal)), 3,
+      program->setAttributeBuffer(normal_location, GL_FLOAT, int(offsetof(MeshVertex, normal)), 3,
                                   int(sizeof(MeshVertex)));
       vertex_buffer.release();
     }
@@ -281,7 +280,9 @@ MoleculeWidget::~MoleculeWidget() {
 void MoleculeWidget::set_geometry(const MoleculeGeometry& geometry) {
   set_vibration_playing(false);
   geometry_ = geometry;
+  orbitals_.clear();
   coordinate_transform_.setToIdentity();
+  atom_shape_transform_.setToIdentity();
   symmetry_element_ = SymmetryElement::None;
   vibration_phase_ = 0.0f;
   center_ = {};
@@ -303,6 +304,25 @@ void MoleculeWidget::set_geometry(const MoleculeGeometry& geometry) {
   update_toolbar_state();
   update();
 }
+
+void MoleculeWidget::set_orbitals(const QVector<SymmetryOrbital>& orbitals) {
+  if (!valid_symmetry_orbitals(orbitals, geometry_.atoms.size())) return;
+  orbitals_ = orbitals;
+  bounding_radius_ = 1.0f;
+  for (const auto& atom : geometry_.atoms) {
+    bounding_radius_ =
+        std::max(bounding_radius_, (atom.position - center_).length() + atom.vibration.length() +
+                                       element_display_radius(atom.element));
+  }
+  for (const auto& orbital : orbitals_) {
+    bounding_radius_ = std::max(
+        bounding_radius_,
+        (geometry_.atoms.at(orbital.atom - 1).position - center_).length() + orbital.scale);
+  }
+  update();
+}
+
+const QVector<SymmetryOrbital>& MoleculeWidget::orbitals() const { return orbitals_; }
 
 void MoleculeWidget::set_stereo_mode(StereoMode mode) {
   if (stereo_mode_ == mode) {
@@ -395,8 +415,40 @@ void MoleculeWidget::set_coordinate_transform(const QMatrix4x4& transform) {
 
 void MoleculeWidget::clear_coordinate_transform() {
   coordinate_transform_.setToIdentity();
+  atom_shape_transform_.setToIdentity();
   update();
 }
+
+void MoleculeWidget::set_atom_reflection_shape(const QVector3D& normal, double progress) {
+  atom_shape_transform_.setToIdentity();
+  const QVector3D axis = normal.normalized();
+  // Keep the normal matrix invertible at the midpoint. This visual cue changes
+  // atom surfaces only; the symmetry operation still determines all centers.
+  const float scale = std::max(0.12f, float(std::abs(1.0 - 2.0 * std::clamp(progress, 0.0, 1.0))));
+  for (int row = 0; row < 3; ++row) {
+    for (int column = 0; column < 3; ++column) {
+      atom_shape_transform_(row, column) -= (1.0f - scale) * axis[row] * axis[column];
+    }
+  }
+  update();
+}
+
+void MoleculeWidget::set_reference_geometry_visible(bool visible) {
+  if (reference_geometry_visible_ == visible) return;
+  reference_geometry_visible_ = visible;
+  update();
+}
+
+bool MoleculeWidget::reference_geometry_visible() const { return reference_geometry_visible_; }
+
+void MoleculeWidget::set_reference_geometry_opacity(float opacity) {
+  const float clamped_opacity = std::clamp(opacity, 0.0f, 1.0f);
+  if (qFuzzyCompare(reference_geometry_opacity_, clamped_opacity)) return;
+  reference_geometry_opacity_ = clamped_opacity;
+  update();
+}
+
+float MoleculeWidget::reference_geometry_opacity() const { return reference_geometry_opacity_; }
 
 void MoleculeWidget::set_builtin_controls_visible(bool visible) {
   if (builtin_controls_visible_ == visible) return;
@@ -419,8 +471,12 @@ void MoleculeWidget::set_default_camera_distance_factor(float factor) {
 
 float MoleculeWidget::camera_distance_factor() const { return camera_distance_factor_; }
 
-void MoleculeWidget::set_symmetry_element(SymmetryElement element, QVector3D axis,
-                                          QColor color) {
+void MoleculeWidget::reset_camera() {
+  reset_view();
+  update();
+}
+
+void MoleculeWidget::set_symmetry_element(SymmetryElement element, QVector3D axis, QColor color) {
   symmetry_element_ = element;
   if (color.isValid()) symmetry_element_color_ = color;
   if (axis.lengthSquared() > 1.0e-8f) {
@@ -435,9 +491,7 @@ MoleculeWidget::SymmetryElement MoleculeWidget::symmetry_element() const {
   return symmetry_element_;
 }
 
-QVector3D MoleculeWidget::symmetry_element_axis() const {
-  return symmetry_element_axis_;
-}
+QVector3D MoleculeWidget::symmetry_element_axis() const { return symmetry_element_axis_; }
 
 QColor MoleculeWidget::symmetry_element_color() const { return symmetry_element_color_; }
 
@@ -466,7 +520,9 @@ bool MoleculeWidget::create_renderer() {
         uniform mat3 normal_matrix;
         out vec3 view_position;
         out vec3 view_normal;
+        out vec3 local_position;
         void main() {
+            local_position = vertex_position;
             vec4 position = model_view * vec4(vertex_position, 1.0);
             view_position = position.xyz;
             view_normal = normalize(normal_matrix * vertex_normal);
@@ -477,19 +533,31 @@ bool MoleculeWidget::create_renderer() {
         uniform vec3 base_color;
         uniform float opacity;
         uniform bool unlit;
+        uniform bool cutaway;
+        uniform bool neon;
+        in vec3 local_position;
         in vec3 view_position;
         in vec3 view_normal;
         out vec4 fragment_color;
         void main() {
             vec3 normal = normalize(view_normal);
+            if (cutaway && local_position.x > 0.0 && local_position.z > 0.0) discard;
             vec3 light = normalize(vec3(-0.45, 0.65, 1.0));
             vec3 view_direction = normalize(-view_position);
+            // Shade only the near shell: drawing front and back at 50% each
+            // would make a nominally half-transparent orbital 75% opaque.
+            if (neon && dot(normal, view_direction) < 0.0) discard;
             vec3 half_direction = normalize(light + view_direction);
             float diffuse = max(dot(normal, light), 0.0);
             float specular = pow(max(dot(normal, half_direction), 0.0), 42.0);
             vec3 linear_rgb = unlit
                 ? base_color
                 : base_color * (0.25 + 0.72 * diffuse) + vec3(0.45 * specular);
+            if (neon) {
+                float rim = pow(1.0 - max(dot(normal, view_direction), 0.0), 2.5);
+                linear_rgb = base_color * (0.25 + 0.65 * diffuse + 0.55 * rim)
+                           + vec3(0.5 * specular);
+            }
             vec3 display_rgb = pow(clamp(linear_rgb, 0.0, 1.0), vec3(1.0 / 2.2));
             fragment_color = vec4(display_rgb, opacity);
         }
@@ -538,6 +606,10 @@ bool MoleculeWidget::create_renderer() {
 }
 
 void MoleculeWidget::destroy_renderer() {
+  for (auto& mesh : orbital_meshes_) {
+    if (mesh) mesh->destroy();
+    mesh.reset();
+  }
   if (sphere_mesh_) {
     sphere_mesh_->destroy();
     sphere_mesh_.reset();
@@ -586,8 +658,7 @@ void MoleculeWidget::paintGL() {
   const QRect full_viewport(0, 0, pixel_width, pixel_height);
   QVector<QVector3D> positions = geometry_.positions_at_phase(vibration_phase_);
   for (QVector3D& position : positions) {
-    position = coordinate_origin_
-        + coordinate_transform_.mapVector(position - coordinate_origin_);
+    position = coordinate_origin_ + coordinate_transform_.mapVector(position - coordinate_origin_);
   }
 
   if (stereo_mode_ == StereoMode::RedCyanAnaglyph) {
@@ -653,11 +724,10 @@ void MoleculeWidget::draw_eye(const QRect& pixel_viewport, float eye_offset,
       if (segment_length <= 1.0e-6f) return;
       QMatrix4x4 model = scene_model;
       model.translate(coordinate_origin_offset + from);
-      model.rotate(QQuaternion::rotationTo(QVector3D(0.0f, 0.0f, 1.0f),
-                                            direction / segment_length));
+      model.rotate(
+          QQuaternion::rotationTo(QVector3D(0.0f, 0.0f, 1.0f), direction / segment_length));
       model.scale(segment_radius, segment_radius, segment_length);
-      draw_mesh(*cylinder_mesh_, model, linear_color(color),
-                view, projection, 1.0f, true);
+      draw_mesh(*cylinder_mesh_, model, linear_color(color), view, projection, 1.0f, true);
     };
     struct CartesianAxis {
       QVector3D direction;
@@ -670,10 +740,8 @@ void MoleculeWidget::draw_eye(const QRect& pixel_viewport, float eye_offset,
         {QVector3D(0.0f, 0.0f, 1.0f), QColor(55, 105, 205), QLatin1Char('z')},
     };
     const QVector3D camera_forward = (camera.center - camera.eye).normalized();
-    const QVector3D camera_right =
-        QVector3D::crossProduct(camera_forward, camera.up).normalized();
-    const QVector3D camera_up =
-        QVector3D::crossProduct(camera_right, camera_forward).normalized();
+    const QVector3D camera_right = QVector3D::crossProduct(camera_forward, camera.up).normalized();
+    const QVector3D camera_up = QVector3D::crossProduct(camera_right, camera_forward).normalized();
     const QQuaternion inverse_rotation = rotation_.conjugated();
     const QVector3D glyph_right = inverse_rotation.rotatedVector(camera_right);
     const QVector3D glyph_up = inverse_rotation.rotatedVector(camera_up);
@@ -686,97 +754,182 @@ void MoleculeWidget::draw_eye(const QRect& pixel_viewport, float eye_offset,
       QMatrix4x4 endpoint = scene_model;
       endpoint.translate(coordinate_origin_offset + axis.direction * length);
       endpoint.scale(radius * 2.4f);
-      draw_mesh(*sphere_mesh_, endpoint, linear_color(axis.color),
-                view, projection, 1.0f, true);
+      draw_mesh(*sphere_mesh_, endpoint, linear_color(axis.color), view, projection, 1.0f, true);
 
       const QVector3D anchor = axis.direction * (length + label_gap);
       const auto glyph_point = [&](float x, float y) {
         return anchor + glyph_right * (x * glyph_size) + glyph_up * (y * glyph_size);
       };
       if (axis.label == QLatin1Char('x')) {
-        draw_axis_segment(glyph_point(-0.5f, -0.65f), glyph_point(0.5f, 0.65f),
-                          axis.color, glyph_radius);
-        draw_axis_segment(glyph_point(-0.5f, 0.65f), glyph_point(0.5f, -0.65f),
-                          axis.color, glyph_radius);
+        draw_axis_segment(glyph_point(-0.5f, -0.65f), glyph_point(0.5f, 0.65f), axis.color,
+                          glyph_radius);
+        draw_axis_segment(glyph_point(-0.5f, 0.65f), glyph_point(0.5f, -0.65f), axis.color,
+                          glyph_radius);
       } else if (axis.label == QLatin1Char('y')) {
-        draw_axis_segment(glyph_point(-0.5f, 0.65f), glyph_point(0.0f, 0.0f),
-                          axis.color, glyph_radius);
-        draw_axis_segment(glyph_point(0.5f, 0.65f), glyph_point(0.0f, 0.0f),
-                          axis.color, glyph_radius);
-        draw_axis_segment(glyph_point(0.0f, 0.0f), glyph_point(0.0f, -0.68f),
-                          axis.color, glyph_radius);
+        draw_axis_segment(glyph_point(-0.5f, 0.65f), glyph_point(0.0f, 0.0f), axis.color,
+                          glyph_radius);
+        draw_axis_segment(glyph_point(0.5f, 0.65f), glyph_point(0.0f, 0.0f), axis.color,
+                          glyph_radius);
+        draw_axis_segment(glyph_point(0.0f, 0.0f), glyph_point(0.0f, -0.68f), axis.color,
+                          glyph_radius);
       } else {
-        draw_axis_segment(glyph_point(-0.5f, 0.65f), glyph_point(0.5f, 0.65f),
-                          axis.color, glyph_radius);
-        draw_axis_segment(glyph_point(0.5f, 0.65f), glyph_point(-0.5f, -0.65f),
-                          axis.color, glyph_radius);
-        draw_axis_segment(glyph_point(-0.5f, -0.65f), glyph_point(0.5f, -0.65f),
-                          axis.color, glyph_radius);
+        draw_axis_segment(glyph_point(-0.5f, 0.65f), glyph_point(0.5f, 0.65f), axis.color,
+                          glyph_radius);
+        draw_axis_segment(glyph_point(0.5f, 0.65f), glyph_point(-0.5f, -0.65f), axis.color,
+                          glyph_radius);
+        draw_axis_segment(glyph_point(-0.5f, -0.65f), glyph_point(0.5f, -0.65f), axis.color,
+                          glyph_radius);
       }
     }
   }
-  const bool shows_rotation_axis =
-      symmetry_element_ == SymmetryElement::RotationAxis
-      || symmetry_element_ == SymmetryElement::ImproperAxisAndPlane;
-  const bool shows_mirror_plane =
-      symmetry_element_ == SymmetryElement::MirrorPlane
-      || symmetry_element_ == SymmetryElement::ImproperAxisAndPlane;
+  const bool shows_rotation_axis = symmetry_element_ == SymmetryElement::RotationAxis ||
+                                   symmetry_element_ == SymmetryElement::ImproperAxisAndPlane;
+  const bool shows_mirror_plane = symmetry_element_ == SymmetryElement::MirrorPlane ||
+                                  symmetry_element_ == SymmetryElement::ImproperAxisAndPlane;
   const float guide_span = std::max(1.0f, bounding_radius_);
   if (shows_rotation_axis && cylinder_mesh_) {
     const float half_length = guide_span * 1.14f;
     const float radius = std::clamp(guide_span * 0.018f, 0.025f, 0.055f);
     QMatrix4x4 model = scene_model;
     model.translate(coordinate_origin_offset - symmetry_element_axis_ * half_length);
-    model.rotate(QQuaternion::rotationTo(QVector3D(0.0f, 0.0f, 1.0f),
-                                         symmetry_element_axis_));
+    model.rotate(QQuaternion::rotationTo(QVector3D(0.0f, 0.0f, 1.0f), symmetry_element_axis_));
     model.scale(radius, radius, half_length * 2.0f);
-    draw_mesh(*cylinder_mesh_, model, linear_color(symmetry_element_color_),
-              view, projection, 1.0f, true);
+    draw_mesh(*cylinder_mesh_, model, linear_color(symmetry_element_color_), view, projection, 1.0f,
+              true);
   }
-  for (const MoleculeBond& bond : geometry_.bonds) {
-    if (bond.first_atom < 0 || bond.second_atom < 0 || bond.first_atom >= geometry_.atoms.size() ||
-        bond.second_atom >= geometry_.atoms.size()) {
-      continue;
-    }
-
-    const QVector3D first = positions.at(bond.first_atom) - center_;
-    const QVector3D second = positions.at(bond.second_atom) - center_;
-    const QVector3D midpoint = (first + second) * 0.5f;
-    const QVector3D segment_starts[] = {first, midpoint};
-    const QVector3D segment_ends[] = {midpoint, second};
-    const int atom_indices[] = {bond.first_atom, bond.second_atom};
-    for (int segment = 0; segment < 2; ++segment) {
-      const QVector3D direction = segment_ends[segment] - segment_starts[segment];
-      const float length = direction.length();
-      if (length <= 0.0001f) {
+  const auto draw_molecule = [&](const QVector<QVector3D>& molecule_positions, float opacity,
+                                 bool deform_atoms) {
+    for (const MoleculeBond& bond : geometry_.bonds) {
+      if (bond.first_atom < 0 || bond.second_atom < 0 ||
+          bond.first_atom >= geometry_.atoms.size() || bond.second_atom >= geometry_.atoms.size()) {
         continue;
       }
-      QMatrix4x4 model = scene_model;
-      model.translate(segment_starts[segment]);
-      model.rotate(QQuaternion::rotationTo(QVector3D(0.0f, 0.0f, 1.0f), direction / length));
-      model.scale(kBondRadius, kBondRadius, length);
-      draw_mesh(*cylinder_mesh_, model,
-                linear_color(element_color(geometry_.atoms.at(atom_indices[segment]).element)),
-                view, projection);
+
+      const QVector3D first = molecule_positions.at(bond.first_atom) - center_;
+      const QVector3D second = molecule_positions.at(bond.second_atom) - center_;
+      const QVector3D midpoint = (first + second) * 0.5f;
+      const QVector3D segment_starts[] = {first, midpoint};
+      const QVector3D segment_ends[] = {midpoint, second};
+      const int atom_indices[] = {bond.first_atom, bond.second_atom};
+      for (int segment = 0; segment < 2; ++segment) {
+        const QVector3D direction = segment_ends[segment] - segment_starts[segment];
+        const float length = direction.length();
+        if (length <= 0.0001f) continue;
+        QMatrix4x4 model = scene_model;
+        model.translate(segment_starts[segment]);
+        model.rotate(QQuaternion::rotationTo(QVector3D(0.0f, 0.0f, 1.0f), direction / length));
+        model.scale(kBondRadius, kBondRadius, length);
+        draw_mesh(*cylinder_mesh_, model,
+                  linear_color(element_color(geometry_.atoms.at(atom_indices[segment]).element)),
+                  view, projection, opacity);
+      }
     }
+
+    for (int atom_index = 0; atom_index < geometry_.atoms.size(); ++atom_index) {
+      const MoleculeAtom& atom = geometry_.atoms.at(atom_index);
+      QMatrix4x4 model = scene_model;
+      model.translate(molecule_positions.at(atom_index) - center_);
+      if (deform_atoms) model *= atom_shape_transform_;
+      const bool has_orbital =
+          std::any_of(orbitals_.begin(), orbitals_.end(),
+                      [atom_index](const auto& orbital) { return orbital.atom == atom_index + 1; });
+      const float radius = element_display_radius(atom.element) * (has_orbital ? 0.22f : 1.0f);
+      model.scale(radius, radius, radius);
+      draw_mesh(*sphere_mesh_, model, linear_color(element_color(atom.element)), view, projection,
+                opacity);
+    }
+  };
+
+  if (reference_geometry_visible_ && reference_geometry_opacity_ > 0.0f) {
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    // The moving, opaque pose must remain legible even when it passes behind
+    // the reference pose, so the translucent pass does not claim depth.
+    glDepthMask(GL_FALSE);
+    draw_molecule(geometry_.positions_at_phase(vibration_phase_), reference_geometry_opacity_,
+                  false);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
   }
 
-  for (int atom_index = 0; atom_index < geometry_.atoms.size(); ++atom_index) {
-    const MoleculeAtom& atom = geometry_.atoms.at(atom_index);
-    QMatrix4x4 model = scene_model;
-    model.translate(positions.at(atom_index) - center_);
-    const float radius = element_display_radius(atom.element);
-    model.scale(radius, radius, radius);
-    draw_mesh(*sphere_mesh_, model, linear_color(element_color(atom.element)), view, projection);
+  draw_molecule(positions, 1.0f, true);
+
+  // Signed lobe colors travel with their vertices. Applying the complete
+  // coordinate transform (not just an atom translation) preserves parity and
+  // phase under reflections and inversion, including atoms fixed by the operation.
+  struct OrbitalDraw {
+    Mesh* mesh;
+    QMatrix4x4 model;
+    QVector3D color;
+    float opacity;
+    bool cutaway;
+    float depth;
+  };
+  QVector<OrbitalDraw> orbital_draws;
+  const auto draw_orbitals = [&](bool reference) {
+    for (const auto& orbital : orbitals_) {
+      const int index = symmetry_orbital_names().indexOf(orbital.orbital);
+      const auto& baked = symmetry_orbital_mesh(orbital.orbital);
+      for (int phase = 0; phase < 2; ++phase) {
+        auto& mesh = orbital_meshes_[index * 2 + phase];
+        const auto& vertices = phase == 0 ? baked.positive : baked.negative;
+        if (vertices.isEmpty()) continue;
+        if (!mesh) {
+          QVector<MeshVertex> uploaded;
+          QVector<quint32> indices;
+          uploaded.reserve(vertices.size());
+          indices.reserve(vertices.size());
+          for (const auto& vertex : vertices) {
+            indices.push_back(quint32(indices.size()));
+            append_vertex(&uploaded, vertex.position, vertex.normal);
+          }
+          mesh = std::make_unique<Mesh>();
+          for (const auto& vertex : vertices) mesh->orbital_centroid += vertex.position;
+          mesh->orbital_centroid /= float(vertices.size());
+          if (!mesh->create(shader_program_.get(), uploaded, indices)) {
+            mesh.reset();
+            continue;
+          }
+        }
+        const QVector3D color = linear_color(phase == 0 ? QColor("#00f5ff") : QColor("#b026ff"));
+        QMatrix4x4 model = scene_model;
+        model.translate(coordinate_origin_offset);
+        if (!reference) model *= coordinate_transform_;
+        model.translate(geometry_.atoms.at(orbital.atom - 1).position - coordinate_origin_);
+        model.scale(orbital.scale);
+        // At the exactly singular midpoint of an interpolation the surface has
+        // zero volume; omit that frame instead of using an undefined normal matrix.
+        if (reference || std::abs(coordinate_transform_.determinant()) > 1.0e-6f) {
+          orbital_draws.push_back({mesh.get(), model, color, reference ? 0.18f : 0.5f,
+                                   orbital.orbital == QStringLiteral("2s") && phase == 1,
+                                   (view * model).map(mesh->orbital_centroid).z()});
+        }
+      }
+    }
+  };
+  if (reference_geometry_visible_) draw_orbitals(true);
+  draw_orbitals(false);
+  std::stable_sort(orbital_draws.begin(), orbital_draws.end(),
+                   [](const auto& a, const auto& b) { return a.depth < b.depth; });
+  glEnable(GL_BLEND);
+  glBlendEquation(GL_FUNC_ADD);
+  glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+  glDepthMask(GL_FALSE);
+  for (const auto& item : orbital_draws) {
+    draw_mesh(*item.mesh, item.model, item.color, view, projection, item.opacity, false,
+              item.cutaway, true);
   }
+  glDepthMask(GL_TRUE);
+  glDisable(GL_BLEND);
 
   if (symmetry_element_ == SymmetryElement::InversionCenter && sphere_mesh_) {
     glDisable(GL_DEPTH_TEST);
     QMatrix4x4 model = scene_model;
     model.translate(coordinate_origin_offset);
     model.scale(std::clamp(guide_span * 0.12f, 0.13f, 0.22f));
-    draw_mesh(*sphere_mesh_, model, linear_color(symmetry_element_color_),
-              view, projection, 1.0f, true);
+    draw_mesh(*sphere_mesh_, model, linear_color(symmetry_element_color_), view, projection, 1.0f,
+              true);
     glEnable(GL_DEPTH_TEST);
   }
 
@@ -786,16 +939,14 @@ void MoleculeWidget::draw_eye(const QRect& pixel_viewport, float eye_offset,
     // Keep the QOpenGLWidget framebuffer opaque while blending the plane.
     // A reduced destination alpha is interpreted again by Qt's compositor and
     // can produce bright chroma-key-like pixels at depth intersections.
-    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
-                        GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
     QMatrix4x4 model = scene_model;
     model.translate(coordinate_origin_offset);
-    model.rotate(QQuaternion::rotationTo(QVector3D(0.0f, 0.0f, 1.0f),
-                                         symmetry_element_axis_));
+    model.rotate(QQuaternion::rotationTo(QVector3D(0.0f, 0.0f, 1.0f), symmetry_element_axis_));
     model.scale(guide_span * 0.98f, guide_span * 0.98f, 1.0f);
-    draw_mesh(*disc_mesh_, model, linear_color(symmetry_element_color_),
-              view, projection, 0.30f, true);
+    draw_mesh(*disc_mesh_, model, linear_color(symmetry_element_color_), view, projection, 0.30f,
+              true);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
   }
@@ -852,8 +1003,8 @@ void MoleculeWidget::draw_axis_gizmo(QPainter* painter) {
 }
 
 void MoleculeWidget::draw_mesh(Mesh& mesh, const QMatrix4x4& model, const QVector3D& color,
-                               const QMatrix4x4& view, const QMatrix4x4& projection,
-                               float opacity, bool unlit) {
+                               const QMatrix4x4& view, const QMatrix4x4& projection, float opacity,
+                               bool unlit, bool cutaway, bool neon) {
   const QMatrix4x4 model_view = view * model;
   shader_program_->setUniformValue("model_view_projection", projection * model_view);
   shader_program_->setUniformValue("model_view", model_view);
@@ -861,6 +1012,8 @@ void MoleculeWidget::draw_mesh(Mesh& mesh, const QMatrix4x4& model, const QVecto
   shader_program_->setUniformValue("base_color", color);
   shader_program_->setUniformValue("opacity", opacity);
   shader_program_->setUniformValue("unlit", unlit);
+  shader_program_->setUniformValue("cutaway", cutaway);
+  shader_program_->setUniformValue("neon", neon);
 
   QOpenGLVertexArrayObject::Binder binder(&mesh.vao);
   glDrawElements(GL_TRIANGLES, mesh.index_count, GL_UNSIGNED_INT, nullptr);

@@ -4,6 +4,7 @@
   "title": "Water",
   "point_group": "C2v",
   "animation_duration_ms": 1000,
+  "orbitals": [{"atom": 1, "orbital": "2px", "scale": 0.85}],
   "operation_colors": {"identity":"#5f6b78","rotation":"#9b2f4f","reflection":"#277d83","inversion":"#7a5aa6","improper_rotation":"#c06a2b"},
   "molecule": {
     "xyz": "3\nWater\nO 0 0 0\nH 0 0.757 0.58605\nH 0 -0.757 0.58605\n"

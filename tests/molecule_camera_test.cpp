@@ -12,7 +12,22 @@ class MoleculeCameraTest final : public QObject {
   void trackpad_zoom_and_limits_are_supported();
   void stereo_eye_separation_tracks_camera_distance();
   void default_view_uses_negative_x_with_positive_z_up();
+  void isometric_view_has_z_up_and_equal_axis_depths();
 };
+
+void MoleculeCameraTest::isometric_view_has_z_up_and_equal_axis_depths() {
+  const auto rotation = molecule_camera::isometric_rotation();
+  const auto x = molecule_camera::camera_space_direction(rotation.rotatedVector({1, 0, 0}));
+  const auto y = molecule_camera::camera_space_direction(rotation.rotatedVector({0, 1, 0}));
+  const auto z = molecule_camera::camera_space_direction(rotation.rotatedVector({0, 0, 1}));
+  QVERIFY(x.x() < 0 && x.y() < 0);
+  QVERIFY(y.x() > 0 && y.y() < 0);
+  QVERIFY(std::abs(z.x()) < 1.e-6f && z.y() > 0);
+  QVERIFY(std::abs(x.x() + y.x()) < 1.e-6f);
+  QVERIFY(std::abs(x.y() - y.y()) < 1.e-6f);
+  QVERIFY(x.z() > 0 && std::abs(x.z() - y.z()) < 1.e-6f);
+  QVERIFY(std::abs(x.z() - z.z()) < 1.e-6f);
+}
 
 void MoleculeCameraTest::fit_distance_contains_centered_sphere() {
   const float radius = 2.0f;

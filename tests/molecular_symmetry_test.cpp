@@ -1,6 +1,9 @@
 #include "symmetry/molecular_symmetry.hpp"
 
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTest>
 
 namespace {
@@ -36,6 +39,10 @@ class MolecularSymmetryTest final : public QObject {
   void rejects_operation_that_does_not_preserve_molecule();
   void rejects_invalid_operation_color();
   void bundled_example_payloads_are_valid();
+  /** @brief Validates author-defined orbital selections and rejects unsafe/ambiguous entries. */
+  void parses_orbital_selections();
+  /** @brief Verifies baked signed meshes, including the radial node of 2s. */
+  void baked_orbitals_preserve_phase();
 };
 
 void MolecularSymmetryTest::parses_complete_operation_set() {
@@ -48,32 +55,30 @@ void MolecularSymmetryTest::parses_complete_operation_set() {
   QCOMPARE(definition.geometry.atoms.constFirst().element, QStringLiteral("O"));
   QCOMPARE(definition.geometry.atoms.constFirst().position, QVector3D());
   QCOMPARE(definition.operations.size(), 4);
-  QCOMPARE(definition.operations.at(1).type,
-           MolecularSymmetryOperationType::ProperRotation);
+  QCOMPARE(definition.operations.at(1).type, MolecularSymmetryOperationType::ProperRotation);
   QCOMPARE(definition.operation_colors.identity, QColor(QStringLiteral("#112233")));
   QCOMPARE(definition.operation_colors.rotation, QColor(QStringLiteral("#9b2f4f")));
   QCOMPARE(definition.operation_colors.inversion, QColor(122, 90, 166));
 }
 
 void MolecularSymmetryTest::computes_fractional_transforms() {
-  MolecularSymmetryOperation rotation{
-      QStringLiteral("C2(z)"), MolecularSymmetryOperationType::ProperRotation,
-      2, 1, QVector3D(0, 0, 1)};
+  MolecularSymmetryOperation rotation{QStringLiteral("C2(z)"),
+                                      MolecularSymmetryOperationType::ProperRotation, 2, 1,
+                                      QVector3D(0, 0, 1)};
   const QVector3D quarter = rotation.matrix_at(0.5).mapVector(QVector3D(1, 0, 0));
   QVERIFY(qAbs(quarter.x()) < 1.0e-5f);
   QVERIFY(qAbs(quarter.y() - 1.0f) < 1.0e-5f);
 
-  MolecularSymmetryOperation negative_rotation{
-      QStringLiteral("C3(-120)"), MolecularSymmetryOperationType::ProperRotation,
-      3, 2, QVector3D(0, 0, 1)};
-  const QVector3D signed_halfway =
-      negative_rotation.matrix_at(0.5).mapVector(QVector3D(1, 0, 0));
+  MolecularSymmetryOperation negative_rotation{QStringLiteral("C3(-120)"),
+                                               MolecularSymmetryOperationType::ProperRotation, 3, 2,
+                                               QVector3D(0, 0, 1)};
+  const QVector3D signed_halfway = negative_rotation.matrix_at(0.5).mapVector(QVector3D(1, 0, 0));
   QVERIFY(qAbs(signed_halfway.x() - 0.5f) < 1.0e-5f);
   QVERIFY(qAbs(signed_halfway.y() + 0.8660254f) < 1.0e-5f);
 
-  MolecularSymmetryOperation reflection{
-      QStringLiteral("sigma(yz)"), MolecularSymmetryOperationType::Reflection,
-      1, 1, QVector3D(1, 0, 0)};
+  MolecularSymmetryOperation reflection{QStringLiteral("sigma(yz)"),
+                                        MolecularSymmetryOperationType::Reflection, 1, 1,
+                                        QVector3D(1, 0, 0)};
   const QVector3D reflected = reflection.matrix_at(1.0).mapVector(QVector3D(2, 3, 4));
   QCOMPARE(reflected, QVector3D(-2, 3, 4));
 }
@@ -106,8 +111,8 @@ void MolecularSymmetryTest::bundled_example_payloads_are_valid() {
   };
   const QList<int> expected_operation_counts{4, 6, 12, 8, 24};
   for (int index = 0; index < files.size(); ++index) {
-    QFile file(QStringLiteral(UIL_TEST_SOURCE_DIR "/examples/molecular-symmetry/")
-               + files.at(index));
+    QFile file(QStringLiteral(UIL_TEST_SOURCE_DIR "/examples/molecular-symmetry/") +
+               files.at(index));
     QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(file.errorString()));
     MolecularSymmetryDefinition definition;
     QString error;
@@ -123,5 +128,63 @@ void MolecularSymmetryTest::bundled_example_payloads_are_valid() {
 }
 
 QTEST_GUILESS_MAIN(MolecularSymmetryTest)
+
+void MolecularSymmetryTest::parses_orbital_selections() {
+  auto root = QJsonDocument::fromJson(water_payload()).object();
+  root["orbitals"] = QJsonArray{QJsonObject{{"atom", 1}, {"orbital", "2px"}, {"scale", 1.2}}};
+  MolecularSymmetryDefinition definition;
+  QString error;
+  QVERIFY(parse_molecular_symmetry(QJsonDocument(root).toJson(), &definition, &error));
+  QCOMPARE(definition.orbitals.size(), 1);
+  QCOMPARE(definition.orbitals.at(0).atom, 1);
+  QCOMPARE(definition.orbitals.at(0).scale, 1.2f);
+  const auto original = root["orbitals"].toArray().at(0).toObject();
+  for (const auto& change : {QJsonObject{{"atom", 0}}, QJsonObject{{"atom", 4}},
+                             QJsonObject{{"atom", 1.5}}, QJsonObject{{"orbital", "4fxyz"}},
+                             QJsonObject{{"scale", 0}}, QJsonObject{{"scale", "large"}}}) {
+    auto entry = original;
+    for (auto it = change.begin(); it != change.end(); ++it) entry[it.key()] = it.value();
+    root["orbitals"] = QJsonArray{entry};
+    QVERIFY(!parse_molecular_symmetry(QJsonDocument(root).toJson(), &definition, &error));
+  }
+  root["orbitals"] = QJsonArray{original, original};
+  QVERIFY(!parse_molecular_symmetry(QJsonDocument(root).toJson(), &definition, &error));
+  root["orbitals"] = QJsonArray{QJsonObject{{"atom", 1}, {"orbital", "2px"}},
+                                QJsonObject{{"atom", 2}, {"orbital", "1s"}},
+                                QJsonObject{{"atom", 3}, {"orbital", "1s"}, {"scale", 0.7}}};
+  QVERIFY(parse_molecular_symmetry(QJsonDocument(root).toJson(), &definition, &error));
+  QCOMPARE(definition.orbitals.at(0).scale, 0.85f);
+  QCOMPARE(definition.orbitals.at(1).scale, 0.45f);
+  QCOMPARE(definition.orbitals.at(2).scale, 0.7f);
+}
+
+void MolecularSymmetryTest::baked_orbitals_preserve_phase() {
+  for (const auto& name : symmetry_orbital_names()) {
+    const auto& mesh = symmetry_orbital_mesh(name);
+    QVERIFY(!mesh.positive.isEmpty());
+    if (name != "1s") QVERIFY(!mesh.negative.isEmpty());
+    for (const auto* phase : {&mesh.positive, &mesh.negative}) {
+      QCOMPARE(phase->size() % 3, 0);
+      for (const auto& vertex : *phase) {
+        QVERIFY(vertex.position.length() <= 1.0001f);
+        QVERIFY(std::abs(vertex.normal.length() - 1.0f) < 0.001f);
+        if (name == "2px") {
+          QVERIFY(phase == &mesh.positive ? vertex.position.x() > 0 : vertex.position.x() < 0);
+        }
+        if (name == "3dxy") {
+          const float sign = vertex.position.x() * vertex.position.y();
+          QVERIFY(phase == &mesh.positive ? sign > 0 : sign < 0);
+        }
+      }
+    }
+  }
+  const auto& radial = symmetry_orbital_mesh("2s");
+  float positive_radius = 0, negative_radius = 2;
+  for (const auto& vertex : radial.positive)
+    positive_radius = std::max(positive_radius, vertex.position.length());
+  for (const auto& vertex : radial.negative)
+    negative_radius = std::min(negative_radius, vertex.position.length());
+  QVERIFY(positive_radius < negative_radius);
+}
 
 #include "molecular_symmetry_test.moc"

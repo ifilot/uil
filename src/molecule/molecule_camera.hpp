@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QVector3D>
+#include <QQuaternion>
 
 namespace molecule_camera {
 
@@ -27,6 +28,9 @@ float stereo_eye_separation(float camera_distance);
 
 /** @brief Builds the default view looking along -X with +Z pointing upward. */
 ViewFrame default_view(float camera_distance, float horizontal_eye_offset = 0.0f);
+
+/** @brief Orients the +XYZ body diagonal toward the camera with +Z up, +X left, +Y right. */
+QQuaternion isometric_rotation();
 
 /** @brief Maps a world-space direction to screen-right, screen-up, and camera-depth axes. */
 QVector3D camera_space_direction(const QVector3D& world_direction);

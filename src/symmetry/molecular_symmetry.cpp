@@ -5,7 +5,6 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QRegularExpression>
-
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -49,8 +48,8 @@ int shortest_signed_power(int power, int order) {
   return signed_power;
 }
 
-bool parse_operation_color(const QJsonObject& colors, const QString& name,
-                           QColor* color, QString* error_message) {
+bool parse_operation_color(const QJsonObject& colors, const QString& name, QColor* color,
+                           QString* error_message) {
   if (!colors.contains(name)) return true;
   const QString value = colors.value(name).toString();
   static const QRegularExpression hex_color(QStringLiteral("^#[0-9A-Fa-f]{6}$"));
@@ -70,8 +69,8 @@ QMatrix4x4 reflection_matrix(QVector3D normal, double amount) {
   const double components[] = {normal.x(), normal.y(), normal.z()};
   for (int row = 0; row < 3; ++row) {
     for (int column = 0; column < 3; ++column) {
-      matrix(row, column) = float((row == column ? 1.0 : 0.0)
-                                  - 2.0 * amount * components[row] * components[column]);
+      matrix(row, column) =
+          float((row == column ? 1.0 : 0.0) - 2.0 * amount * components[row] * components[column]);
     }
   }
   return matrix;
@@ -97,8 +96,8 @@ bool operation_maps_geometry(const MolecularSymmetryOperation& operation,
     const QVector3D transformed = matrix.mapVector(atom.position);
     bool match = false;
     for (const MoleculeAtom& candidate : geometry.atoms) {
-      if (candidate.element == atom.element
-          && (candidate.position - transformed).lengthSquared() <= tolerance_squared) {
+      if (candidate.element == atom.element &&
+          (candidate.position - transformed).lengthSquared() <= tolerance_squared) {
         match = true;
         break;
       }
@@ -112,34 +111,38 @@ bool operation_maps_geometry(const MolecularSymmetryOperation& operation,
 bool MolecularSymmetryOperation::is_valid() const {
   if (label.trimmed().isEmpty() || label.size() > 80) return false;
   switch (type) {
-  case MolecularSymmetryOperationType::Identity:
-  case MolecularSymmetryOperationType::Inversion:
-    return true;
-  case MolecularSymmetryOperationType::Reflection:
-    return axis.lengthSquared() > 1.0e-8f;
-  case MolecularSymmetryOperationType::ProperRotation:
-  case MolecularSymmetryOperationType::ImproperRotation:
-    return order >= 2 && order <= 24 && power != 0 && std::abs(power) < order
-        && axis.lengthSquared() > 1.0e-8f;
+    case MolecularSymmetryOperationType::Identity:
+    case MolecularSymmetryOperationType::Inversion:
+      return true;
+    case MolecularSymmetryOperationType::Reflection:
+      return axis.lengthSquared() > 1.0e-8f;
+    case MolecularSymmetryOperationType::ProperRotation:
+    case MolecularSymmetryOperationType::ImproperRotation:
+      return order >= 2 && order <= 24 && power != 0 && std::abs(power) < order &&
+             axis.lengthSquared() > 1.0e-8f;
   }
   return false;
 }
 
-QColor MolecularSymmetryOperationColors::for_type(
-    MolecularSymmetryOperationType type) const {
+QColor MolecularSymmetryOperationColors::for_type(MolecularSymmetryOperationType type) const {
   switch (type) {
-  case MolecularSymmetryOperationType::Identity: return identity;
-  case MolecularSymmetryOperationType::ProperRotation: return rotation;
-  case MolecularSymmetryOperationType::Reflection: return reflection;
-  case MolecularSymmetryOperationType::Inversion: return inversion;
-  case MolecularSymmetryOperationType::ImproperRotation: return improper_rotation;
+    case MolecularSymmetryOperationType::Identity:
+      return identity;
+    case MolecularSymmetryOperationType::ProperRotation:
+      return rotation;
+    case MolecularSymmetryOperationType::Reflection:
+      return reflection;
+    case MolecularSymmetryOperationType::Inversion:
+      return inversion;
+    case MolecularSymmetryOperationType::ImproperRotation:
+      return improper_rotation;
   }
   return identity;
 }
 
 bool MolecularSymmetryOperationColors::is_valid() const {
-  return identity.isValid() && rotation.isValid() && reflection.isValid()
-      && inversion.isValid() && improper_rotation.isValid();
+  return identity.isValid() && rotation.isValid() && reflection.isValid() && inversion.isValid() &&
+         improper_rotation.isValid();
 }
 
 QMatrix4x4 MolecularSymmetryOperation::matrix_at(double progress) const {
@@ -147,57 +150,59 @@ QMatrix4x4 MolecularSymmetryOperation::matrix_at(double progress) const {
   QMatrix4x4 identity;
   identity.setToIdentity();
   switch (type) {
-  case MolecularSymmetryOperationType::Identity:
-    return identity;
-  case MolecularSymmetryOperationType::Inversion: {
-    QMatrix4x4 matrix;
-    matrix.setToIdentity();
-    const float scale = float(1.0 - 2.0 * progress);
-    matrix(0, 0) = scale;
-    matrix(1, 1) = scale;
-    matrix(2, 2) = scale;
-    return matrix;
-  }
-  case MolecularSymmetryOperationType::Reflection:
-    return reflection_matrix(axis, progress);
-  case MolecularSymmetryOperationType::ProperRotation:
-    return axis_angle_matrix(
-        axis, 2.0 * kPi * double(shortest_signed_power(power, order)) * progress / double(order));
-  case MolecularSymmetryOperationType::ImproperRotation: {
-    const double rotation_progress = std::min(1.0, progress * 2.0);
-    const double reflection_progress = std::max(0.0, progress * 2.0 - 1.0);
-    return reflection_matrix(axis, reflection_progress)
-        * axis_angle_matrix(axis,
-                            2.0 * kPi * double(shortest_signed_power(power, order))
-                                * rotation_progress / double(order));
-  }
+    case MolecularSymmetryOperationType::Identity:
+      return identity;
+    case MolecularSymmetryOperationType::Inversion: {
+      QMatrix4x4 matrix;
+      matrix.setToIdentity();
+      const float scale = float(1.0 - 2.0 * progress);
+      matrix(0, 0) = scale;
+      matrix(1, 1) = scale;
+      matrix(2, 2) = scale;
+      return matrix;
+    }
+    case MolecularSymmetryOperationType::Reflection:
+      return reflection_matrix(axis, progress);
+    case MolecularSymmetryOperationType::ProperRotation:
+      return axis_angle_matrix(
+          axis, 2.0 * kPi * double(shortest_signed_power(power, order)) * progress / double(order));
+    case MolecularSymmetryOperationType::ImproperRotation: {
+      const double rotation_progress = std::min(1.0, progress * 2.0);
+      const double reflection_progress = std::max(0.0, progress * 2.0 - 1.0);
+      return reflection_matrix(axis, reflection_progress) *
+             axis_angle_matrix(axis, 2.0 * kPi * double(shortest_signed_power(power, order)) *
+                                         rotation_progress / double(order));
+    }
   }
   return identity;
 }
 
 bool MolecularSymmetryDefinition::is_valid() const {
-  return geometry.is_valid() && !point_group.trimmed().isEmpty()
-      && !operations.isEmpty() && operations.size() <= kMaximumOperations
-      && operation_colors.is_valid()
-      && animation_duration_ms >= 200 && animation_duration_ms <= 5000
-      && std::all_of(operations.cbegin(), operations.cend(),
+  return geometry.is_valid() && !point_group.trimmed().isEmpty() && !operations.isEmpty() &&
+         operations.size() <= kMaximumOperations && operation_colors.is_valid() &&
+         valid_symmetry_orbitals(orbitals, geometry.atoms.size()) && animation_duration_ms >= 200 &&
+         animation_duration_ms <= 5000 &&
+         std::all_of(operations.cbegin(), operations.cend(),
                      [](const auto& operation) { return operation.is_valid(); });
 }
 
 QString molecular_symmetry_operation_type_name(MolecularSymmetryOperationType type) {
   switch (type) {
-  case MolecularSymmetryOperationType::Identity: return QStringLiteral("identity");
-  case MolecularSymmetryOperationType::ProperRotation: return QStringLiteral("proper rotation");
-  case MolecularSymmetryOperationType::Reflection: return QStringLiteral("reflection");
-  case MolecularSymmetryOperationType::Inversion: return QStringLiteral("inversion");
-  case MolecularSymmetryOperationType::ImproperRotation:
-    return QStringLiteral("improper rotation");
+    case MolecularSymmetryOperationType::Identity:
+      return QStringLiteral("identity");
+    case MolecularSymmetryOperationType::ProperRotation:
+      return QStringLiteral("proper rotation");
+    case MolecularSymmetryOperationType::Reflection:
+      return QStringLiteral("reflection");
+    case MolecularSymmetryOperationType::Inversion:
+      return QStringLiteral("inversion");
+    case MolecularSymmetryOperationType::ImproperRotation:
+      return QStringLiteral("improper rotation");
   }
   return {};
 }
 
-bool parse_molecular_symmetry(const QByteArray& payload,
-                              MolecularSymmetryDefinition* definition,
+bool parse_molecular_symmetry(const QByteArray& payload, MolecularSymmetryDefinition* definition,
                               QString* error_message) {
   if (!definition) {
     set_error(error_message, QStringLiteral("Missing molecular-symmetry output object"));
@@ -218,8 +223,8 @@ bool parse_molecular_symmetry(const QByteArray& payload,
     return false;
   }
   const QJsonObject root = document.object();
-  if (root.value(QStringLiteral("format")).toString() != QStringLiteral("uil.molecular-symmetry")
-      || root.value(QStringLiteral("version")).toInt() != 1) {
+  if (root.value(QStringLiteral("format")).toString() != QStringLiteral("uil.molecular-symmetry") ||
+      root.value(QStringLiteral("version")).toInt() != 1) {
     set_error(error_message, QStringLiteral("Expected uil.molecular-symmetry version 1"));
     return false;
   }
@@ -227,24 +232,24 @@ bool parse_molecular_symmetry(const QByteArray& payload,
   MolecularSymmetryDefinition parsed;
   parsed.title = root.value(QStringLiteral("title")).toString().trimmed();
   parsed.point_group = root.value(QStringLiteral("point_group")).toString().trimmed();
-  parsed.animation_duration_ms = std::clamp(
-      root.value(QStringLiteral("animation_duration_ms")).toInt(1100), 200, 5000);
-  if (root.contains(QStringLiteral("operation_colors"))
-      && !root.value(QStringLiteral("operation_colors")).isObject()) {
+  parsed.animation_duration_ms =
+      std::clamp(root.value(QStringLiteral("animation_duration_ms")).toInt(1100), 200, 5000);
+  if (root.contains(QStringLiteral("operation_colors")) &&
+      !root.value(QStringLiteral("operation_colors")).isObject()) {
     set_error(error_message, QStringLiteral("operation_colors must be an object"));
     return false;
   }
   const QJsonObject colors = root.value(QStringLiteral("operation_colors")).toObject();
-  if (!parse_operation_color(colors, QStringLiteral("identity"),
-                             &parsed.operation_colors.identity, error_message)
-      || !parse_operation_color(colors, QStringLiteral("rotation"),
-                                &parsed.operation_colors.rotation, error_message)
-      || !parse_operation_color(colors, QStringLiteral("reflection"),
-                                &parsed.operation_colors.reflection, error_message)
-      || !parse_operation_color(colors, QStringLiteral("inversion"),
-                                &parsed.operation_colors.inversion, error_message)
-      || !parse_operation_color(colors, QStringLiteral("improper_rotation"),
-                                &parsed.operation_colors.improper_rotation, error_message)) {
+  if (!parse_operation_color(colors, QStringLiteral("identity"), &parsed.operation_colors.identity,
+                             error_message) ||
+      !parse_operation_color(colors, QStringLiteral("rotation"), &parsed.operation_colors.rotation,
+                             error_message) ||
+      !parse_operation_color(colors, QStringLiteral("reflection"),
+                             &parsed.operation_colors.reflection, error_message) ||
+      !parse_operation_color(colors, QStringLiteral("inversion"),
+                             &parsed.operation_colors.inversion, error_message) ||
+      !parse_operation_color(colors, QStringLiteral("improper_rotation"),
+                             &parsed.operation_colors.improper_rotation, error_message)) {
     return false;
   }
   const QJsonObject molecule = root.value(QStringLiteral("molecule")).toObject();
@@ -253,6 +258,31 @@ bool parse_molecular_symmetry(const QByteArray& payload,
   if (!parse_xyz_molecule(xyz, &parsed.geometry, &geometry_error)) {
     set_error(error_message, QStringLiteral("Invalid embedded XYZ: %1").arg(geometry_error));
     return false;
+  }
+
+  if (root.contains("orbitals")) {
+    if (!root.value("orbitals").isArray()) {
+      set_error(error_message, QStringLiteral("orbitals must be an array"));
+      return false;
+    }
+    for (const auto& value : root.value("orbitals").toArray()) {
+      const auto object = value.toObject();
+      const double atom = object.value("atom").toDouble(-1);
+      if (atom < 1 || atom > parsed.geometry.atoms.size() || atom != std::floor(atom) ||
+          !object.value("orbital").isString() ||
+          (object.contains("scale") && !object.value("scale").isDouble())) {
+        set_error(error_message, QStringLiteral("Invalid orbital atom, name, or scale"));
+        return false;
+      }
+      parsed.orbitals.push_back({int(atom), object.value("orbital").toString(),
+                                 float(object.value("scale").toDouble(default_symmetry_orbital_radius(
+                                     parsed.geometry.atoms.at(int(atom) - 1).element)))});
+    }
+    if (!valid_symmetry_orbitals(parsed.orbitals, parsed.geometry.atoms.size())) {
+      set_error(error_message,
+                QStringLiteral("Invalid or duplicate orbital selection (maximum 64)"));
+      return false;
+    }
   }
 
   const QJsonArray operations = root.value(QStringLiteral("operations")).toArray();
@@ -277,19 +307,18 @@ bool parse_molecular_symmetry(const QByteArray& payload,
     } else if (type == QStringLiteral("improper-rotation")) {
       operation.type = MolecularSymmetryOperationType::ImproperRotation;
     } else {
-      set_error(error_message,
-                QStringLiteral("Operation %1 has an unknown type").arg(index + 1));
+      set_error(error_message, QStringLiteral("Operation %1 has an unknown type").arg(index + 1));
       return false;
     }
     operation.order = object.value(QStringLiteral("order")).toInt(1);
     operation.power = object.value(QStringLiteral("power")).toInt(1);
-    if (operation.type == MolecularSymmetryOperationType::ProperRotation
-        || operation.type == MolecularSymmetryOperationType::ImproperRotation
-        || operation.type == MolecularSymmetryOperationType::Reflection) {
+    if (operation.type == MolecularSymmetryOperationType::ProperRotation ||
+        operation.type == MolecularSymmetryOperationType::ImproperRotation ||
+        operation.type == MolecularSymmetryOperationType::Reflection) {
       if (!parse_axis(object.value(QStringLiteral("axis")), &operation.axis)) {
-        set_error(error_message,
-                  QStringLiteral("Operation %1 requires a finite three-component axis")
-                      .arg(index + 1));
+        set_error(
+            error_message,
+            QStringLiteral("Operation %1 requires a finite three-component axis").arg(index + 1));
         return false;
       }
     }
@@ -301,7 +330,8 @@ bool parse_molecular_symmetry(const QByteArray& payload,
     if (!operation_maps_geometry(operation, parsed.geometry)) {
       set_error(error_message,
                 QStringLiteral("Operation %1 (%2) does not map the molecule onto itself")
-                    .arg(index + 1).arg(operation.label));
+                    .arg(index + 1)
+                    .arg(operation.label));
       return false;
     }
     parsed.operations.push_back(operation);

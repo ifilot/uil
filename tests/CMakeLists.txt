@@ -4,7 +4,7 @@ function(add_uil_unit_test target)
         ${PROJECT_SOURCE_DIR}/src/util/performance_log.cpp
     )
     target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src)
-    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Gui Qt6::Test uil_symmetry_orbitals)
     uil_enable_windows_hardening(${target})
     uil_enable_sanitizers(${target})
     add_test(NAME ${target} COMMAND ${target})
@@ -74,6 +74,7 @@ target_link_libraries(audience_window_test PRIVATE
     Qt6::OpenGLWidgets
     Qt6::Svg
 )
+target_compile_definitions(audience_window_test PRIVATE UIL_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 add_uil_unit_test(app_controller_test
     app_controller_test.cpp
@@ -212,6 +213,28 @@ target_link_libraries(molecular_symmetry_widget_test PRIVATE
     Qt6::OpenGLWidgets
     Qt6::Svg
 )
+
+add_executable(molecular_symmetry_preview_generator
+    molecular_symmetry_preview_generator.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecular_symmetry_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+    ${PROJECT_SOURCE_DIR}/src/symmetry/molecular_symmetry.cpp
+    ${PROJECT_SOURCE_DIR}/src/util/performance_log.cpp
+)
+target_include_directories(molecular_symmetry_preview_generator PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(molecular_symmetry_preview_generator PRIVATE
+    Qt6::Widgets Qt6::OpenGL Qt6::OpenGLWidgets Qt6::Svg uil_symmetry_orbitals)
+uil_enable_windows_hardening(molecular_symmetry_preview_generator)
+uil_enable_sanitizers(molecular_symmetry_preview_generator)
+
+add_executable(symmetry_orbital_baker symmetry_orbital_baker.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+    ${PROJECT_SOURCE_DIR}/src/util/performance_log.cpp)
+target_include_directories(symmetry_orbital_baker PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(symmetry_orbital_baker PRIVATE Qt6::Core Qt6::Gui)
 
 add_uil_unit_test(render_scheduler_test
     render_scheduler_test.cpp

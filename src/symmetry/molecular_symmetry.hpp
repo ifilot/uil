@@ -1,13 +1,14 @@
 #pragma once
 
-#include "molecule/molecule_geometry.hpp"
-
 #include <QByteArray>
 #include <QColor>
 #include <QMatrix4x4>
 #include <QString>
-#include <QVector>
 #include <QVector3D>
+#include <QVector>
+
+#include "molecule/molecule_geometry.hpp"
+#include "orbital/symmetry_orbitals.hpp"
 
 /** @brief Kind of finite molecular point-group operation. */
 enum class MolecularSymmetryOperationType {
@@ -51,6 +52,7 @@ struct MolecularSymmetryDefinition {
   QString title;
   QString point_group;
   MoleculeGeometry geometry;
+  QVector<SymmetryOrbital> orbitals;
   QVector<MolecularSymmetryOperation> operations;
   MolecularSymmetryOperationColors operation_colors;
   int animation_duration_ms = 1100;
@@ -60,8 +62,7 @@ struct MolecularSymmetryDefinition {
 };
 
 /** @brief Parses and validates a self-contained `uil.molecular-symmetry` payload. */
-bool parse_molecular_symmetry(const QByteArray& payload,
-                              MolecularSymmetryDefinition* definition,
+bool parse_molecular_symmetry(const QByteArray& payload, MolecularSymmetryDefinition* definition,
                               QString* error_message = nullptr);
 
 /** @brief Returns a concise user-facing name for an operation kind. */

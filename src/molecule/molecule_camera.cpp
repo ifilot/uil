@@ -44,6 +44,16 @@ QVector3D camera_space_direction(const QVector3D& world_direction) {
   return QVector3D(world_direction.y(), world_direction.z(), world_direction.x());
 }
 
+QQuaternion isometric_rotation() {
+  // The base camera looks along -X: model X is depth, Y screen-right, Z screen-up.
+  const float depth = 1.0f / std::sqrt(3.0f);
+  const float right = 1.0f / std::sqrt(2.0f);
+  const float up = 1.0f / std::sqrt(6.0f);
+  return QQuaternion::fromAxes(QVector3D(depth, -right, -up),
+                               QVector3D(depth, right, -up),
+                               QVector3D(depth, 0.0f, 2.0f * up)).normalized();
+}
+
 float zoomed_distance_factor(float current_factor, int angle_delta_y, int pixel_delta_y) {
   const float delta_steps =
       angle_delta_y != 0 ? float(angle_delta_y) / 120.0f : float(pixel_delta_y) / 80.0f;

@@ -327,7 +327,14 @@ Molecular symmetry players use `\molecularsymmetry` from
 coordinates, a point-group label, and the complete operation list. UIL renders
 the molecule beside clickable buttons; selecting a button animates the proper
 rotation, reflection, inversion, or improper rotation and then restores the
-starting geometry. The selected symmetry element remains in the 3D scene:
+starting geometry when no orbitals are selected. With selected atom-centered
+orbitals, the result remains visible until replay or **Reset operation**. The
+**Settings** tab selects the atom from a visible list and individual basis functions;
+the **Symmetry operations** tab retains the animation controls. Default choices
+follow neutral-atom occupied subshells; advanced mode exposes the full basis. Optional
+`orbitals` entries in the JSON define the starting choices. See
+[symmetry orbitals](symmetry-orbitals.md) for the basis formulas, authoring format,
+phase convention, and baked-mesh workflow. The selected symmetry element remains in the 3D scene:
 proper rotations show their axis, reflections show a translucent mirror plane,
 inversion shows its center, and improper rotations show both axis and plane.
 Symmetry operations and the molecule-fixed Cartesian axes use `(0,0,0)` from

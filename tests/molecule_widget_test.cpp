@@ -1,5 +1,6 @@
 #include "ui/molecule_widget.hpp"
 
+#include <QDir>
 #include <QFrame>
 #include <QGuiApplication>
 #include <QTest>
@@ -16,6 +17,8 @@ class MoleculeWidgetTest final : public QObject {
   void vibration_control_tracks_geometry_capability();
   /** @brief Smoke-tests each rendering mode when an OpenGL display is available. */
   void renders_supported_modes_when_opengl_is_available();
+  /** @brief Exercises every baked basis and checks a fixed-center p phase reversal. */
+  void renders_baked_orbitals();
 };
 
 void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
@@ -52,8 +55,7 @@ void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
 
   QToolButton* rotation_button =
       widget.findChild<QToolButton*>(QStringLiteral("moleculeAutoRotationButton"));
-  QTimer* rotation_timer =
-      widget.findChild<QTimer*>(QStringLiteral("moleculeAutoRotationTimer"));
+  QTimer* rotation_timer = widget.findChild<QTimer*>(QStringLiteral("moleculeAutoRotationTimer"));
   QVERIFY(rotation_button);
   QVERIFY(rotation_timer);
   QVERIFY(!widget.auto_rotation_enabled());
@@ -83,9 +85,8 @@ void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
   widget.set_toolbar_expanded(true);
   QVERIFY(widget.toolbar_expanded());
 
-  widget.set_symmetry_element(
-      MoleculeWidget::SymmetryElement::MirrorPlane, QVector3D(0.0f, 2.0f, 0.0f),
-      QColor(QStringLiteral("#277d83")));
+  widget.set_symmetry_element(MoleculeWidget::SymmetryElement::MirrorPlane,
+                              QVector3D(0.0f, 2.0f, 0.0f), QColor(QStringLiteral("#277d83")));
   QCOMPARE(widget.symmetry_element(), MoleculeWidget::SymmetryElement::MirrorPlane);
   QCOMPARE(widget.symmetry_element_axis(), QVector3D(0.0f, 1.0f, 0.0f));
   QCOMPARE(widget.symmetry_element_color(), QColor(QStringLiteral("#277d83")));
@@ -93,6 +94,14 @@ void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
   QCOMPARE(widget.symmetry_element(), MoleculeWidget::SymmetryElement::None);
   widget.set_coordinate_origin(QVector3D(0.25f, -0.5f, 0.75f));
   QCOMPARE(widget.coordinate_origin(), QVector3D(0.25f, -0.5f, 0.75f));
+  QVERIFY(!widget.reference_geometry_visible());
+  QCOMPARE(widget.reference_geometry_opacity(), 0.5f);
+  widget.set_reference_geometry_visible(true);
+  QVERIFY(widget.reference_geometry_visible());
+  widget.set_reference_geometry_opacity(0.35f);
+  QCOMPARE(widget.reference_geometry_opacity(), 0.35f);
+  widget.set_reference_geometry_opacity(2.0f);
+  QCOMPARE(widget.reference_geometry_opacity(), 1.0f);
 }
 
 void MoleculeWidgetTest::vibration_control_tracks_geometry_capability() {
@@ -154,13 +163,30 @@ void MoleculeWidgetTest::renders_supported_modes_when_opengl_is_available() {
 
   widget.set_stereo_mode(MoleculeWidget::StereoMode::Mono);
   const QImage before_rotation = widget.grabFramebuffer();
-  widget.set_symmetry_element(
-      MoleculeWidget::SymmetryElement::RotationAxis, QVector3D(0.0f, 0.0f, 1.0f));
+  QMatrix4x4 operation_transform;
+  operation_transform.rotate(65.0f, QVector3D(0.0f, 0.0f, 1.0f));
+  widget.set_coordinate_transform(operation_transform);
+  QTest::qWait(50);
+  const QImage transformed_without_reference = widget.grabFramebuffer();
+  widget.set_reference_geometry_visible(true);
+  QTest::qWait(50);
+  QVERIFY(widget.grabFramebuffer() != transformed_without_reference);
+  widget.set_reference_geometry_visible(false);
+  widget.clear_coordinate_transform();
+  // All atom centers lie in the xy plane. Reflection must still be visible
+  // through the atom surfaces, and both endpoints must recover the original.
+  const QImage reflection_start = widget.grabFramebuffer();
+  widget.set_atom_reflection_shape(QVector3D(0.0f, 0.0f, 1.0f), 0.5);
+  QVERIFY(widget.grabFramebuffer() != reflection_start);
+  widget.set_atom_reflection_shape(QVector3D(0.0f, 0.0f, 1.0f), 1.0);
+  QCOMPARE(widget.grabFramebuffer(), reflection_start);
+  widget.set_symmetry_element(MoleculeWidget::SymmetryElement::RotationAxis,
+                              QVector3D(0.0f, 0.0f, 1.0f));
   QTest::qWait(50);
   const QImage with_rotation_axis = widget.grabFramebuffer();
   QVERIFY(with_rotation_axis != before_rotation);
-  widget.set_symmetry_element(
-      MoleculeWidget::SymmetryElement::MirrorPlane, QVector3D(0.0f, 1.0f, 0.0f));
+  widget.set_symmetry_element(MoleculeWidget::SymmetryElement::MirrorPlane,
+                              QVector3D(0.0f, 1.0f, 0.0f));
   QTest::qWait(50);
   const QImage with_mirror_plane = widget.grabFramebuffer();
   QVERIFY(with_mirror_plane != with_rotation_axis);
@@ -168,9 +194,8 @@ void MoleculeWidgetTest::renders_supported_modes_when_opengl_is_available() {
   QTest::qWait(50);
   const QImage with_inversion_center = widget.grabFramebuffer();
   QVERIFY(with_inversion_center != with_mirror_plane);
-  widget.set_symmetry_element(
-      MoleculeWidget::SymmetryElement::ImproperAxisAndPlane,
-      QVector3D(0.0f, 0.0f, 1.0f));
+  widget.set_symmetry_element(MoleculeWidget::SymmetryElement::ImproperAxisAndPlane,
+                              QVector3D(0.0f, 0.0f, 1.0f));
   QTest::qWait(50);
   QVERIFY(widget.grabFramebuffer() != with_inversion_center);
   widget.set_symmetry_element(MoleculeWidget::SymmetryElement::None);
@@ -183,5 +208,66 @@ void MoleculeWidgetTest::renders_supported_modes_when_opengl_is_available() {
 }
 
 QTEST_MAIN(MoleculeWidgetTest)
+
+void MoleculeWidgetTest::renders_baked_orbitals() {
+  if (QGuiApplication::platformName() == QStringLiteral("offscreen")) QSKIP("OpenGL required");
+  MoleculeWidget widget;
+  widget.resize(640, 480);
+  MoleculeGeometry geometry;
+  geometry.atoms = {{QStringLiteral("O"), {}, {}}};
+  widget.set_geometry(geometry);
+  widget.set_builtin_controls_visible(false);
+  widget.set_axes_visible(false);
+  widget.set_default_view_rotation(QQuaternion::fromEulerAngles(-20, 30, 20));
+  widget.show();
+  QTest::qWait(100);
+  if (!widget.isValid()) QSKIP("OpenGL context unavailable");
+  const QImage bare = widget.grabFramebuffer();
+  const QString output = qEnvironmentVariable("UIL_ORBITAL_TEST_IMAGES");
+  if (!output.isEmpty()) QVERIFY(QDir().mkpath(output));
+  for (const auto& name : symmetry_orbital_names()) {
+    widget.set_orbitals({{1, name, 1.0f}});
+    const QImage rendered = widget.grabFramebuffer();
+    QVERIFY(rendered != bare);
+    if (!output.isEmpty()) QVERIFY(rendered.save(QDir(output).filePath(name + ".png")));
+  }
+  widget.set_orbitals({{1, "2px", 1.0f}});
+  const QImage original = widget.grabFramebuffer();
+  QMatrix4x4 reflection;
+  reflection.scale(-1.0f, 1.0f, 1.0f);
+  widget.set_coordinate_transform(reflection);
+  const QImage reflected = widget.grabFramebuffer();
+  int phase_swaps = 0;
+  for (int y = 0; y < original.height(); ++y) {
+    for (int x = 0; x < original.width(); ++x) {
+      const QColor before = original.pixelColor(x, y);
+      const QColor after = reflected.pixelColor(x, y);
+      if (before.green() > before.red() + 30 && after.red() > after.green() + 20 &&
+          before.blue() > before.red() + 30 && after.blue() > after.green() + 30) ++phase_swaps;
+    }
+  }
+  QVERIFY(phase_swaps > 100);
+  widget.clear_coordinate_transform();
+  if (!output.isEmpty()) {
+    original.save(QDir(output).filePath("phase-original.png"));
+    widget.grabFramebuffer().save(QDir(output).filePath("phase-reset.png"));
+  }
+  const QImage reset = widget.grabFramebuffer();
+  QCOMPARE(reset.size(), original.size());
+  // Alpha blending can round a few channels by one 8-bit step after a reflected
+  // normal matrix. Reject geometric/color changes, not one-LSB GPU rounding.
+  int rounded_pixels = 0;
+  for (int y = 0; y < original.height(); ++y) {
+    for (int x = 0; x < original.width(); ++x) {
+      const QColor a = original.pixelColor(x, y), b = reset.pixelColor(x, y);
+      QVERIFY(std::abs(a.red() - b.red()) <= 1);
+      QVERIFY(std::abs(a.green() - b.green()) <= 1);
+      QVERIFY(std::abs(a.blue() - b.blue()) <= 1);
+      QCOMPARE(b.alpha(), 255);
+      if (a != b) ++rounded_pixels;
+    }
+  }
+  QVERIFY(rounded_pixels < original.width() * original.height() / 1000);
+}
 
 #include "molecule_widget_test.moc"

@@ -5,46 +5,36 @@
 \setbeamercolor{normal text}{fg=black,bg=white}
 \setbeamercolor{frametitle}{fg=white,bg=teal!75!black}
 
-\newcommand{\symmetryposter}[3]{%
-  \fcolorbox{teal!55!black}{gray!8}{%
-    \begin{minipage}[c][5.75cm][c]{12.8cm}
-      \centering\sffamily
-      {\fontsize{28}{32}\selectfont\bfseries #1}\par\vspace{0.25cm}
-      {\Large Point group $\mathrm{#2}$}\par\vspace{0.55cm}
-      {\large #3 symmetry operations}\par\vspace{0.2cm}
-      \textcolor{teal!70!black}{Open in UIL and click an operation to play it.}
-    \end{minipage}}}
-
 \begin{document}
 
 \begin{frame}{Water: bent molecules and $C_{2v}$}
   \centering
   \molecularsymmetry[width=13.1cm,height=5.95cm]
-    {\symmetryposter{Water}{C_{2v}}{4}}{water.uilsym}
+    {\includegraphics{water.png}}{water.uilsym}
 \end{frame}
 
 \begin{frame}{Ammonia: a threefold principal axis}
   \centering
   \molecularsymmetry[width=13.1cm,height=5.95cm]
-    {\symmetryposter{Ammonia}{C_{3v}}{6}}{ammonia.uilsym}
+    {\includegraphics{ammonia.png}}{ammonia.uilsym}
 \end{frame}
 
 \begin{frame}{Boron trifluoride: planar $D_{3h}$ symmetry}
   \centering
   \molecularsymmetry[width=13.1cm,height=5.95cm]
-    {\symmetryposter{Boron trifluoride}{D_{3h}}{12}}{boron-trifluoride.uilsym}
+    {\includegraphics{boron-trifluoride.png}}{boron-trifluoride.uilsym}
 \end{frame}
 
 \begin{frame}{Ethylene: inversion and three mirror planes}
   \centering
   \molecularsymmetry[width=13.1cm,height=5.95cm]
-    {\symmetryposter{Ethylene}{D_{2h}}{8}}{ethylene.uilsym}
+    {\includegraphics{ethylene.png}}{ethylene.uilsym}
 \end{frame}
 
 \begin{frame}{Methane: tetrahedral symmetry}
   \centering
   \molecularsymmetry[width=13.1cm,height=5.95cm]
-    {\symmetryposter{Methane}{T_d}{24}}{methane.uilsym}
+    {\includegraphics{methane.png}}{methane.uilsym}
 \end{frame}
 
 \end{document}

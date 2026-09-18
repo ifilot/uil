@@ -197,6 +197,12 @@ else()
     set(UIL_VIEWER_TARGET uil)
 endif()
 
+add_library(uil_symmetry_orbitals STATIC src/orbital/symmetry_orbitals.cpp)
+target_include_directories(uil_symmetry_orbitals PRIVATE src)
+target_link_libraries(uil_symmetry_orbitals PUBLIC Qt6::Core Qt6::Gui)
+uil_enable_windows_hardening(uil_symmetry_orbitals)
+uil_enable_sanitizers(uil_symmetry_orbitals)
+
 qt_add_executable(${UIL_VIEWER_TARGET}
     src/main.cpp
     src/app_controller.hpp
@@ -263,6 +269,8 @@ qt_add_executable(${UIL_VIEWER_TARGET}
     src/package/uil_package.cpp
     ${UIL_VIEWER_WINDOWS_RESOURCES}
 )
+
+target_link_libraries(${UIL_VIEWER_TARGET} PRIVATE uil_symmetry_orbitals)
 
 qt_add_resources(${UIL_VIEWER_TARGET} "uil_resources"
     PREFIX "/"

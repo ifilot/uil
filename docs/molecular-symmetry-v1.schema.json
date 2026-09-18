@@ -10,6 +10,18 @@
     "title": { "type": "string" },
     "point_group": { "type": "string", "minLength": 1 },
     "animation_duration_ms": { "type": "integer", "minimum": 200, "maximum": 5000 },
+    "orbitals": {
+      "type": "array", "maxItems": 64,
+      "items": {
+        "type": "object", "required": ["atom", "orbital"],
+        "properties": {
+          "atom": { "type": "integer", "minimum": 1, "description": "One-based XYZ atom index" },
+          "orbital": { "enum": ["1s", "2s", "2px", "2py", "2pz", "3dxy", "3dxz", "3dyz", "3dx2-y2", "3dz2"] },
+          "scale": { "type": "number", "minimum": 0.1, "maximum": 3, "description": "Illustrative display radius in angstrom. Defaults to 0.45 for H/He, 0.85 otherwise; not a physical atomic size." }
+        },
+        "additionalProperties": false
+      }
+    },
     "operation_colors": {
       "type": "object",
       "properties": {

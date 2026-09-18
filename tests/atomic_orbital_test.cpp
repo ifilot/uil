@@ -45,6 +45,9 @@ void AtomicOrbitalTest::hydrogenic_values_have_expected_nodes_and_orientation() 
     const double negative_z = hydrogenic_atomic_orbital_value(2, 1, 0, 0, 0, -1);
     QVERIFY(positive_z * negative_z < 0.0);
     QVERIFY(std::abs(positive_z + negative_z) < 1.0e-12);
+    // Real m != 0 harmonics require sqrt(2) normalization relative to complex harmonics.
+    const double positive_x = hydrogenic_atomic_orbital_value(2, 1, 1, 1, 0, 0);
+    QVERIFY(std::abs(std::abs(positive_x) - std::abs(positive_z)) < 1.0e-12);
 }
 
 void AtomicOrbitalTest::payload_parses_rendering_and_sampling_options() {

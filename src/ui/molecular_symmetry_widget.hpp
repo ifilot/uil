@@ -1,14 +1,17 @@
 #pragma once
 
-#include "symmetry/molecular_symmetry.hpp"
-
 #include <QElapsedTimer>
 #include <QImage>
 #include <QWidget>
-
 #include <functional>
 
+#include "symmetry/molecular_symmetry.hpp"
+
 class QButtonGroup;
+class QCheckBox;
+class QListWidget;
+class QDoubleSpinBox;
+class QToolButton;
 class QContextMenuEvent;
 class QGridLayout;
 class QHideEvent;
@@ -50,6 +53,8 @@ class MolecularSymmetryWidget final : public QWidget {
   void stop_animation(bool clear_selection = false);
   void show_symmetry_element(const MolecularSymmetryOperation& operation);
   void update_status();
+  /** @brief Synchronizes the persistent orbital menu with the selected atom. */
+  void update_orbital_controls();
 
   MolecularSymmetryDefinition definition_;
   MoleculeWidget* molecule_widget_ = nullptr;
@@ -60,6 +65,12 @@ class MolecularSymmetryWidget final : public QWidget {
   QButtonGroup* operation_buttons_ = nullptr;
   QTimer* animation_timer_ = nullptr;
   QElapsedTimer animation_elapsed_;
+  QListWidget* orbital_atom_ = nullptr;
+  QDoubleSpinBox* orbital_scale_ = nullptr;
+  QLabel* orbital_summary_ = nullptr;
+  QCheckBox* orbital_advanced_ = nullptr;
+  QVector<QCheckBox*> orbital_checks_;
+  bool result_visible_ = false;
   int active_operation_index_ = -1;
   int selected_operation_index_ = -1;
   std::function<void(const QPoint&)> context_menu_handler_;
