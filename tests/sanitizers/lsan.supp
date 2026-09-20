@@ -2,3 +2,8 @@
 # rejects a malformed or password-protected document. Keep leak detection enabled
 # for the rest of the process while ignoring allocations on that dependency path.
 leak:QPdfDocumentPrivate::initiateAsyncLoadWithTotalSizeKnown
+
+# Qt's versioned OpenGL function wrapper retains its resolved function table
+# until process teardown. The allocation is owned by libQt6OpenGL and is only
+# observed after successfully exercising a real QOpenGLWidget under Xvfb.
+leak:QOpenGLFunctions_3_3_Core::initializeOpenGLFunctions

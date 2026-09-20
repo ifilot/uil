@@ -84,6 +84,7 @@ jobs:
 
       - name: Run unit tests
         env:
+          QT_QPA_PLATFORM: offscreen
           QT_OPENGL: software
         run: ctest --test-dir build-windows --output-on-failure --parallel 4
 
