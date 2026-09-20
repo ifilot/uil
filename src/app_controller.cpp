@@ -253,6 +253,26 @@ bool AppController::open_pdf(const QString& path) {
     return true;
 }
 
+bool AppController::reload_current_document() {
+    if (!has_document()) {
+        emit status_message_changed(QStringLiteral("No presentation is open to reload"));
+        return false;
+    }
+
+    // UIL packages are extracted to a temporary PDF path. Reopen the package
+    // itself so its manifest, assets, and overlays are refreshed as well.
+    const QString path = current_package_path_.isEmpty() ? current_path_ : current_package_path_;
+    const int page_to_restore = current_page_index_;
+    if (!open_pdf(path)) {
+        return false;
+    }
+
+    go_to_page(page_to_restore);
+    emit status_message_changed(QStringLiteral("Reloaded presentation at slide %1")
+        .arg(current_page_index_ + 1));
+    return true;
+}
+
 void AppController::schedule_media_scan(
     const QString& pdf_path,
     const QString& package_root_path,

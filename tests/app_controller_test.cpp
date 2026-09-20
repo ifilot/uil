@@ -32,6 +32,7 @@ class AppControllerTest final : public QObject {
 private slots:
     void empty_controller_rejects_document_operations();
     void opens_renders_and_navigates_bundled_document();
+    void reloads_current_document_at_active_page();
     void opens_bundled_molecule_presentation();
     void opens_bundled_atomic_orbital_presentation();
     void opens_bundled_molecular_symmetry_presentation();
@@ -100,6 +101,26 @@ void AppControllerTest::opens_renders_and_navigates_bundled_document() {
     controller.go_to_page(-50);
     QCOMPARE(controller.current_page(), 0);
     QCOMPARE(page_spy.size(), 2);
+}
+
+void AppControllerTest::reloads_current_document_at_active_page() {
+    AppController controller;
+    const QString path = example_path(QStringLiteral("getting-started.pdf"));
+    QVERIFY(controller.open_pdf(path));
+    controller.go_to_page(3);
+    QCOMPARE(controller.current_page(), 3);
+
+    QSignalSpy document_spy(&controller, &AppController::document_changed);
+    QSignalSpy status_spy(&controller, &AppController::status_message_changed);
+    QVERIFY(controller.reload_current_document());
+
+    QCOMPARE(controller.current_path(), path);
+    QCOMPARE(controller.page_count(), 4);
+    QCOMPARE(controller.current_page(), 3);
+    QCOMPARE(document_spy.size(), 1);
+    QVERIFY(!status_spy.isEmpty());
+    QCOMPARE(status_spy.constLast().constFirst().toString(),
+             QStringLiteral("Reloaded presentation at slide 4"));
 }
 
 void AppControllerTest::opens_bundled_molecule_presentation() {

@@ -1077,6 +1077,10 @@ void PresenterWindow::show_about() {
 }
 
 void PresenterWindow::start_presentation_mode() {
+    if (controller_->page_count() > 0 && !controller_->reload_current_document()) {
+        return;
+    }
+
     QScreen* primaryScreen = QGuiApplication::primaryScreen();
     if (primaryScreen) {
         if (windowHandle()) {
@@ -1237,7 +1241,7 @@ void PresenterWindow::create_actions() {
     last_action_->setIcon(bluecurve::icon(QStringLiteral("stock-goto-last")));
     last_action_->setShortcut(Qt::Key_End);
 
-    start_presentation_action_ = new QAction(QStringLiteral("Start Presentation"), this);
+    start_presentation_action_ = new QAction(QStringLiteral("Reload and Start Presentation"), this);
     start_presentation_action_->setIcon(bluecurve::icon(QStringLiteral("icon-resize-screen")));
     start_presentation_action_->setShortcut(Qt::Key_F5);
 
@@ -1501,8 +1505,8 @@ void PresenterWindow::create_layout() {
     startPresentationButton->setFixedSize(31, 30);
     startPresentationButton->setDefaultAction(start_presentation_action_);
     startPresentationButton->setIconSize(QSize(16, 16));
-    startPresentationButton->setToolTip(QStringLiteral("Start presentation (F5)"));
-    startPresentationButton->setAccessibleName(QStringLiteral("Start presentation"));
+    startPresentationButton->setToolTip(QStringLiteral("Reload and start presentation (F5)"));
+    startPresentationButton->setAccessibleName(QStringLiteral("Reload and start presentation"));
 
     clear_all_overlays_button_ = new QToolButton(central);
     clear_all_overlays_button_->setObjectName(QStringLiteral("statusIconButton"));

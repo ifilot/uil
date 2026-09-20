@@ -40,6 +40,8 @@ public:
 
     /** @brief Opens a PDF or UIL presentation from @p path. */
     bool open_pdf(const QString& path);
+    /** @brief Reopens the active presentation and restores the closest current page. */
+    bool reload_current_document();
     /** @brief Advances to the next page when one is available. */
     void next_page();
     /** @brief Returns to the previous page when one is available. */
