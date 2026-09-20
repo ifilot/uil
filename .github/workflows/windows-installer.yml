@@ -83,6 +83,8 @@ jobs:
         run: cmake --build build-windows --parallel
 
       - name: Run unit tests
+        env:
+          QT_OPENGL: software
         run: ctest --test-dir build-windows --output-on-failure --parallel 4
 
       - name: Stage runtime dependencies

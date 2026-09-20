@@ -323,3 +323,15 @@ add_uil_unit_test(atomic_orbital_cache_test
     ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital_cache.cpp
     ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
 )
+
+# OpenGL contexts created by Qt widgets share process-global graphics resources.
+# Keep these UI tests exclusive so CTest's parallel workers cannot race each
+# other on a headless CI runner's software graphics backend.
+set_tests_properties(
+    audience_window_test
+    app_controller_test
+    atomic_orbital_widget_test
+    molecule_widget_test
+    molecular_symmetry_widget_test
+    PROPERTIES RESOURCE_LOCK uil_qt_opengl
+)
