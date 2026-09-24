@@ -1,0 +1,22 @@
+{
+  "format": "uil.interactive-figure",
+  "version": 1,
+  "title": "Fitting a step with particle-in-a-box eigenfunctions",
+  "background_svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 520'><rect width='800' height='520' fill='#f8fafc'/></svg>",
+  "plot": {
+    "kind": "particle-in-box-step-expansion",
+    "x_min": 0.0,
+    "x_max": 1.0,
+    "y_min": -0.25,
+    "y_max": 1.25,
+    "x_label": "$x$",
+    "y_label": "$f(x), S_N(x)$",
+    "step_position": 0.5,
+    "step_height": 1.0,
+    "target_color": "#64748b",
+    "approximation_color": "#0f766e"
+  },
+  "controls": {
+    "basis_count": { "min": 1, "max": 25, "value": 1 }
+  }
+}

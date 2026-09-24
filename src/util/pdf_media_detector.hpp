@@ -1,6 +1,9 @@
 #pragma once
 
+#include "figure/interactive_figure.hpp"
 #include "molecule/molecule_geometry.hpp"
+#include "orbital/atomic_orbital.hpp"
+#include "symmetry/molecular_symmetry.hpp"
 
 #include <QImage>
 #include <QRectF>
@@ -36,9 +39,48 @@ struct PdfMoleculeAnnotation {
     bool is_ready() const;
 };
 
+struct PdfInteractiveFigureAnnotation {
+    int page_index = -1;
+    int object_number = -1;
+    QString file_name;
+    QRectF rect;
+    InteractiveFigureDefinition definition;
+    QString error_message;
+
+    /** @brief Returns whether an embedded interactive figure was decoded and validated. */
+    bool is_ready() const;
+};
+
+struct PdfAtomicOrbitalAnnotation {
+    int page_index = -1;
+    int object_number = -1;
+    QString file_name;
+    QRectF rect;
+    AtomicOrbitalDefinition definition;
+    QString error_message;
+
+    /** @brief Returns whether an embedded atomic-orbital definition was decoded. */
+    bool is_ready() const;
+};
+
+struct PdfMolecularSymmetryAnnotation {
+    int page_index = -1;
+    int object_number = -1;
+    QString file_name;
+    QRectF rect;
+    MolecularSymmetryDefinition definition;
+    QString error_message;
+
+    /** @brief Returns whether an embedded molecular-symmetry definition was decoded. */
+    bool is_ready() const;
+};
+
 struct PdfMediaScanResult {
     QVector<PdfMediaAnnotation> annotations;
     QVector<PdfMoleculeAnnotation> molecule_annotations;
+    QVector<PdfInteractiveFigureAnnotation> interactive_figure_annotations;
+    QVector<PdfAtomicOrbitalAnnotation> atomic_orbital_annotations;
+    QVector<PdfMolecularSymmetryAnnotation> molecular_symmetry_annotations;
 
     /** @brief Returns whether the scan found at least one interactive annotation. */
     bool has_media() const;

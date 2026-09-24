@@ -4,7 +4,7 @@ function(add_uil_unit_test target)
         ${PROJECT_SOURCE_DIR}/src/util/performance_log.cpp
     )
     target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src)
-    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Gui Qt6::Test uil_symmetry_orbitals)
     uil_enable_windows_hardening(${target})
     uil_enable_sanitizers(${target})
     add_test(NAME ${target} COMMAND ${target})
@@ -56,8 +56,17 @@ add_uil_unit_test(audience_window_test
     ${PROJECT_SOURCE_DIR}/src/ui/bluecurve.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecular_symmetry_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/atomic_orbital_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/interactive_figure_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/particle_in_box_basis.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+    ${PROJECT_SOURCE_DIR}/src/symmetry/molecular_symmetry.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital_cache.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
 )
 target_link_libraries(audience_window_test PRIVATE
     Qt6::Widgets
@@ -65,6 +74,7 @@ target_link_libraries(audience_window_test PRIVATE
     Qt6::OpenGLWidgets
     Qt6::Svg
 )
+target_compile_definitions(audience_window_test PRIVATE UIL_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 add_uil_unit_test(app_controller_test
     app_controller_test.cpp
@@ -76,13 +86,22 @@ add_uil_unit_test(app_controller_test
     ${PROJECT_SOURCE_DIR}/src/ui/bluecurve.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
     ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecular_symmetry_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/atomic_orbital_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/interactive_figure_widget.cpp
     ${PROJECT_SOURCE_DIR}/src/util/document_hash.cpp
     ${PROJECT_SOURCE_DIR}/src/util/image_util.cpp
     ${PROJECT_SOURCE_DIR}/src/util/pdf_media_detector.cpp
     ${PROJECT_SOURCE_DIR}/src/media/video_frame_extractor.cpp
     ${PROJECT_SOURCE_DIR}/src/media/video_frame_buffer.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+    ${PROJECT_SOURCE_DIR}/src/symmetry/molecular_symmetry.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital_cache.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/particle_in_box_basis.cpp
     ${PROJECT_SOURCE_DIR}/src/package/uil_package.cpp
 )
 target_compile_definitions(app_controller_test PRIVATE
@@ -107,6 +126,116 @@ add_uil_unit_test(molecule_camera_test
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
 )
 
+add_uil_unit_test(molecule_geometry_test
+    molecule_geometry_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+)
+
+add_uil_unit_test(molecular_symmetry_test
+    molecular_symmetry_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/symmetry/molecular_symmetry.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+)
+target_compile_definitions(molecular_symmetry_test PRIVATE
+    UIL_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+)
+
+add_uil_unit_test(atomic_orbital_test
+    atomic_orbital_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+)
+
+add_uil_unit_test(atomic_orbital_widget_test
+    atomic_orbital_widget_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/atomic_orbital_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+)
+target_link_libraries(atomic_orbital_widget_test PRIVATE
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+)
+
+add_executable(atomic_orbital_preview_generator
+    atomic_orbital_preview_generator.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/atomic_orbital_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+)
+target_include_directories(atomic_orbital_preview_generator PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(atomic_orbital_preview_generator PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+)
+uil_enable_windows_hardening(atomic_orbital_preview_generator)
+uil_enable_sanitizers(atomic_orbital_preview_generator)
+
+add_uil_unit_test(harmonic_wavepacket_test
+    harmonic_wavepacket_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/harmonic_wavepacket.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
+)
+
+add_uil_unit_test(particle_in_box_basis_test
+    particle_in_box_basis_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/particle_in_box_basis.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
+)
+
+add_uil_unit_test(molecule_widget_test
+    molecule_widget_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+)
+target_link_libraries(molecule_widget_test PRIVATE
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+    Qt6::Svg
+)
+
+add_uil_unit_test(molecular_symmetry_widget_test
+    molecular_symmetry_widget_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecular_symmetry_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+    ${PROJECT_SOURCE_DIR}/src/symmetry/molecular_symmetry.cpp
+)
+target_link_libraries(molecular_symmetry_widget_test PRIVATE
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+    Qt6::Svg
+)
+
+add_executable(molecular_symmetry_preview_generator
+    molecular_symmetry_preview_generator.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/font_awesome.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecule_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/ui/molecular_symmetry_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_camera.cpp
+    ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+    ${PROJECT_SOURCE_DIR}/src/symmetry/molecular_symmetry.cpp
+    ${PROJECT_SOURCE_DIR}/src/util/performance_log.cpp
+)
+target_include_directories(molecular_symmetry_preview_generator PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(molecular_symmetry_preview_generator PRIVATE
+    Qt6::Widgets Qt6::OpenGL Qt6::OpenGLWidgets Qt6::Svg uil_symmetry_orbitals)
+uil_enable_windows_hardening(molecular_symmetry_preview_generator)
+uil_enable_sanitizers(molecular_symmetry_preview_generator)
+
+add_executable(symmetry_orbital_baker symmetry_orbital_baker.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+    ${PROJECT_SOURCE_DIR}/src/util/performance_log.cpp)
+target_include_directories(symmetry_orbital_baker PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(symmetry_orbital_baker PRIVATE Qt6::Core Qt6::Gui)
+
 add_uil_unit_test(render_scheduler_test
     render_scheduler_test.cpp
     ${PROJECT_SOURCE_DIR}/src/render/render_scheduler.cpp
@@ -130,6 +259,12 @@ add_uil_unit_test(pdf_media_detector_test
     ${PROJECT_SOURCE_DIR}/src/util/pdf_media_detector.cpp
     ${PROJECT_SOURCE_DIR}/src/media/video_frame_extractor.cpp
     ${PROJECT_SOURCE_DIR}/src/molecule/molecule_geometry.cpp
+    ${PROJECT_SOURCE_DIR}/src/symmetry/molecular_symmetry.cpp
+    ${PROJECT_SOURCE_DIR}/src/figure/interactive_figure.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+)
+target_compile_definitions(pdf_media_detector_test PRIVATE
+    UIL_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
 )
 target_link_libraries(pdf_media_detector_test PRIVATE ZLIB::ZLIB)
 if(FFMPEG_FOUND)
@@ -182,3 +317,21 @@ if(WIN32)
     )
     set_tests_properties(native_launcher_test PROPERTIES LABELS unit TIMEOUT 30)
 endif()
+
+add_uil_unit_test(atomic_orbital_cache_test
+    atomic_orbital_cache_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital_cache.cpp
+    ${PROJECT_SOURCE_DIR}/src/orbital/atomic_orbital.cpp
+)
+
+# OpenGL contexts created by Qt widgets share process-global graphics resources.
+# Keep these UI tests exclusive so CTest's parallel workers cannot race each
+# other on a headless CI runner's software graphics backend.
+set_tests_properties(
+    audience_window_test
+    app_controller_test
+    atomic_orbital_widget_test
+    molecule_widget_test
+    molecular_symmetry_widget_test
+    PROPERTIES RESOURCE_LOCK uil_qt_opengl
+)

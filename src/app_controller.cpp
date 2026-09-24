@@ -33,6 +33,7 @@ Q_LOGGING_CATEGORY(logScreens, "screens")
 namespace {
 constexpr int kMaximumOverlayDimension = 8192;
 constexpr qint64 kMaximumOverlayPixels = 34LL * 1024LL * 1024LL;
+constexpr int kAudienceSlideSwapDelayMs = 10;
 
 /** @brief Decodes a bounded PNG overlay from an extracted package. */
 QImage read_safe_package_overlay(const QString& path) {
@@ -86,6 +87,9 @@ void AppController::set_audience_window(AudienceWindow* audience_window) {
             audience_window_->set_audience_screen(audience_screen_);
         }
         update_active_molecule();
+        update_active_interactive_figure();
+        update_active_atomic_orbital();
+        update_active_molecular_symmetry();
     }
 }
 
@@ -206,6 +210,8 @@ bool AppController::open_pdf(const QString& path) {
     slide_cache_.clear();
     render_scheduler_.clear();
     render_generation_ = render_scheduler_.generation();
+    audience_slide_transition_pending_ = false;
+    ++audience_slide_commit_sequence_;
     deck_overview_render_size_ = {};
     deck_overview_first_page_ = -1;
     deck_overview_last_page_ = -1;
@@ -244,6 +250,26 @@ bool AppController::open_pdf(const QString& path) {
     open_span.checkpoint(QStringLiteral("schedule_media_scan"));
     open_span.add_field(QStringLiteral("page_count"), page_count());
     open_span.set_outcome(QStringLiteral("opened"));
+    return true;
+}
+
+bool AppController::reload_current_document() {
+    if (!has_document()) {
+        emit status_message_changed(QStringLiteral("No presentation is open to reload"));
+        return false;
+    }
+
+    // UIL packages are extracted to a temporary PDF path. Reopen the package
+    // itself so its manifest, assets, and overlays are refreshed as well.
+    const QString path = current_package_path_.isEmpty() ? current_path_ : current_package_path_;
+    const int page_to_restore = current_page_index_;
+    if (!open_pdf(path)) {
+        return false;
+    }
+
+    go_to_page(page_to_restore);
+    emit status_message_changed(QStringLiteral("Reloaded presentation at slide %1")
+        .arg(current_page_index_ + 1));
     return true;
 }
 
@@ -306,7 +332,12 @@ void AppController::schedule_media_scan(
                 self->package_movie_asset_paths_.removeDuplicates();
                 self->package_molecule_asset_paths_.removeDuplicates();
             }
-            self->update_active_molecule();
+            if (!self->audience_slide_transition_pending_) {
+                self->update_active_molecule();
+                self->update_active_interactive_figure();
+                self->update_active_atomic_orbital();
+                self->update_active_molecular_symmetry();
+            }
             emit self->media_scan_changed(self->media_scan_result_);
             if (self->media_scan_result_.has_media()) {
                 emit self->status_message_changed(self->media_scan_result_.summary());
@@ -314,7 +345,10 @@ void AppController::schedule_media_scan(
             performance_log::record_event(QStringLiteral("pdf.media_scan_applied"), {
                 {QStringLiteral("annotation_count"),
                  self->media_scan_result_.annotations.size()
-                     + self->media_scan_result_.molecule_annotations.size()},
+                     + self->media_scan_result_.molecule_annotations.size()
+                     + self->media_scan_result_.interactive_figure_annotations.size()
+                     + self->media_scan_result_.atomic_orbital_annotations.size()
+                     + self->media_scan_result_.molecular_symmetry_annotations.size()},
                 {QStringLiteral("generation"), generation}
             });
         }, Qt::QueuedConnection);
@@ -347,8 +381,11 @@ void AppController::go_to_page(int page_index) {
     }
 
     stop_media_playback();
+    if (audience_window_) {
+        audience_window_->begin_slide_transition();
+        audience_slide_transition_pending_ = true;
+    }
     current_page_index_ = clampedPage;
-    update_active_molecule();
     request_page_render(current_page_index_, 1000);
     update_visible_slides();
     schedule_predictive_renders();
@@ -820,7 +857,7 @@ void AppController::update_visible_slides() {
     if (auto currentImage = slide_cache_.get(currentKey)) {
         emit current_slide_image_changed(*currentImage);
         if (audience_window_) {
-            audience_window_->set_slide_image(texture_key_for_cache_key(currentKey), *currentImage);
+            queue_audience_slide_commit(current_page_index_, currentKey, *currentImage);
             if (!video_playing_) {
                 audience_window_->clear_video_overlay();
             }
@@ -848,6 +885,48 @@ void AppController::update_visible_slides() {
     }
 
     emit page_changed(current_page_index_, page_count());
+}
+
+void AppController::queue_audience_slide_commit(
+    int page_index,
+    const SlideCacheKey& key,
+    const QImage& image) {
+    if (!audience_window_ || image.isNull()) {
+        return;
+    }
+
+    const quint64 sequence = ++audience_slide_commit_sequence_;
+    const QString texture_key = texture_key_for_cache_key(key);
+    QTimer::singleShot(
+        kAudienceSlideSwapDelayMs,
+        this,
+        [this, sequence, page_index, texture_key, image] {
+            if (sequence != audience_slide_commit_sequence_
+                || page_index != current_page_index_
+                || texture_key != texture_key_for_cache_key(cache_key_for_page(page_index))) {
+                return;
+            }
+            commit_audience_slide(texture_key, image);
+        });
+}
+
+void AppController::commit_audience_slide(
+    const QString& texture_key,
+    const QImage& image) {
+    if (!audience_window_) {
+        audience_slide_transition_pending_ = false;
+        return;
+    }
+
+    AudienceWindow* window = audience_window_;
+    window->set_slide_image(texture_key, image);
+    update_active_molecule();
+    update_active_interactive_figure();
+    update_active_atomic_orbital();
+    update_active_molecular_symmetry();
+    window->prepare_interactive_overlays_for_display();
+    audience_slide_transition_pending_ = false;
+    window->repaint();
 }
 
 void AppController::schedule_predictive_renders() {
@@ -958,6 +1037,58 @@ void AppController::update_active_molecule() {
         }
     }
     audience_window_->clear_molecule_overlay();
+}
+
+void AppController::update_active_interactive_figure() {
+    if (!audience_window_) {
+        return;
+    }
+    for (const PdfInteractiveFigureAnnotation& annotation
+         : media_scan_result_.interactive_figure_annotations) {
+        if (annotation.page_index == current_page_index_ && annotation.is_ready()) {
+            audience_window_->set_interactive_figure_overlay(
+                annotation.definition,
+                normalized_pdf_rect(annotation.page_index, annotation.rect));
+            return;
+        }
+    }
+    audience_window_->clear_interactive_figure_overlay();
+}
+
+void AppController::update_active_atomic_orbital() {
+    if (!audience_window_) return;
+    QVector<AudienceWindow::AtomicOrbitalOverlay> overlays;
+    for (const PdfAtomicOrbitalAnnotation& annotation
+         : media_scan_result_.atomic_orbital_annotations) {
+        if (annotation.page_index == current_page_index_ && annotation.is_ready()) {
+          overlays.push_back(
+              {annotation.definition, normalized_pdf_rect(annotation.page_index, annotation.rect)});
+        }
+    }
+    QVector<AtomicOrbitalDefinition> nearby;
+    // Keep speculative work local; navigating again replaces any unstarted builds.
+    for (const int offset : {1, -1, 2}) {
+      for (const auto& annotation : media_scan_result_.atomic_orbital_annotations) {
+        if (annotation.page_index == current_page_index_ + offset && annotation.is_ready())
+          nearby.push_back(annotation.definition);
+      }
+    }
+    audience_window_->set_atomic_orbital_overlays(
+        overlays, nearby, texture_key_for_cache_key(cache_key_for_page(current_page_index_)));
+}
+
+void AppController::update_active_molecular_symmetry() {
+    if (!audience_window_) return;
+    for (const PdfMolecularSymmetryAnnotation& annotation
+         : media_scan_result_.molecular_symmetry_annotations) {
+      if (annotation.page_index == current_page_index_ && annotation.is_ready()) {
+        audience_window_->set_molecular_symmetry_overlay(
+            annotation.definition,
+            normalized_pdf_rect(annotation.page_index, annotation.rect));
+        return;
+      }
+    }
+    audience_window_->clear_molecular_symmetry_overlay();
 }
 
 void AppController::start_media_playback() {
@@ -1143,7 +1274,7 @@ void AppController::handle_render_finished(const RenderRequest& request, const Q
         }
         emit current_slide_image_changed(displayImage);
         if (audience_window_) {
-            audience_window_->set_slide_image(texture_key, displayImage);
+            queue_audience_slide_commit(request.page_index, key, displayImage);
         }
         emit status_message_changed(QStringLiteral("Rendered page %1 in %2 ms").arg(request.page_index + 1).arg(elapsed_ms));
     }

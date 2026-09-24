@@ -54,6 +54,63 @@ QByteArray molecule_pdf_fixture() {
         "/UIL << /Version 1 /F (molecules/water.xyz) >> >>\nendobj\n"
         "%%EOF\n");
 }
+
+/** @brief Returns a PDF containing a complete interactive figure in an embedded-file stream. */
+QByteArray interactive_figure_pdf_fixture() {
+    const QByteArray payload = QByteArrayLiteral(
+        "{\"format\":\"uil.interactive-figure\",\"version\":1,"
+        "\"title\":\"Embedded wave\","
+        "\"background_svg\":\"<svg xmlns='http://www.w3.org/2000/svg' "
+        "viewBox='0 0 800 500'><rect width='800' height='500' fill='#f8fafc'/></svg>\","
+        "\"plot\":{\"kind\":\"sine-wave\",\"color\":\"#2563eb\","
+        "\"x_min\":-6.28,\"x_max\":6.28,\"y_min\":-2.5,\"y_max\":2.5,"
+        "\"x_label\":\"time\",\"y_label\":\"signal\"},"
+        "\"controls\":{\"amplitude\":{\"min\":0,\"max\":2,\"value\":1},"
+        "\"frequency\":{\"min\":0.25,\"max\":3,\"value\":1},\"animate\":true}}\n");
+    return QByteArrayLiteral(
+        "%PDF-1.7\n"
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>\nendobj\n"
+        "4 0 obj\n<< /Type /Annot /Subtype /UILInteractiveFigure "
+        "/Rect [10 20 410 320] /UIL << /Version 1 /Asset 5 0 R >> >>\nendobj\n"
+        "5 0 obj\n<< /Type /Filespec /F (wave.uilfig) /UF (wave.uilfig) "
+        "/EF << /F 6 0 R >> >>\nendobj\n"
+        "6 0 obj\n<< /Type /EmbeddedFile /Subtype /application#2Fvnd.uil.figure "
+        "/Length ")
+        + QByteArray::number(payload.size())
+        + QByteArrayLiteral(" >>\nstream\n")
+        + payload
+        + QByteArrayLiteral("endstream\nendobj\n%%EOF\n");
+}
+
+/** @brief Returns a PDF containing an embedded atomic-orbital definition. */
+QByteArray atomic_orbital_pdf_fixture() {
+    const QByteArray payload = QByteArrayLiteral(
+        "{\"format\":\"uil.atomic-orbital\",\"version\":1,"
+        "\"title\":\"Embedded 2p z\",\"orbital\":\"2pz\","
+        "\"surface\":{\"positive_color\":\"#2563eb\","
+        "\"negative_color\":\"#dc2626\",\"grid_size\":33},"
+        "\"sampling_plane\":{\"type\":\"xz\","
+        "\"offset\":{\"min\":-1,\"max\":1,\"value\":0.25}},"
+        "\"contour\":{\"colormap\":\"RdBu_r\","
+        "\"maximum\":0.01,\"levels\":14}}\n");
+    return QByteArrayLiteral(
+        "%PDF-1.7\n"
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>\nendobj\n"
+        "4 0 obj\n<< /Type /Annot /Subtype /UILAtomicOrbital "
+        "/Rect [12 24 612 424] /UIL << /Version 1 /Asset 5 0 R >> >>\nendobj\n"
+        "5 0 obj\n<< /Type /Filespec /F (2pz.uilorb) /UF (2pz.uilorb) "
+        "/EF << /F 6 0 R >> >>\nendobj\n"
+        "6 0 obj\n<< /Type /EmbeddedFile /Subtype /application#2Fvnd.uil.atomic-orbital "
+        "/Length ")
+        + QByteArray::number(payload.size())
+        + QByteArrayLiteral(" >>\nstream\n")
+        + payload
+        + QByteArrayLiteral("endstream\nendobj\n%%EOF\n");
+}
 }
 
 class PdfMediaDetectorTest final : public QObject {
@@ -80,6 +137,23 @@ private slots:
 
     /** @brief Verifies dedicated molecule annotation detection and XYZ loading. */
     void molecule_annotation_loads_xyz_geometry();
+
+    /** @brief Verifies extraction and validation of a self-contained embedded figure. */
+    void embedded_interactive_figure_loads();
+
+    /** @brief Verifies the bundled LaTeX-produced example end to end. */
+    void bundled_interactive_figure_example_loads();
+
+    /** @brief Verifies extraction and validation of an embedded atomic orbital. */
+    void embedded_atomic_orbital_loads();
+
+    /** @brief Verifies the bundled atomic-orbital presentation end to end. */
+    void bundled_atomic_orbital_example_loads();
+    /** @brief Checks every embedded orbital in the generated Garnet-Slate atlas. */
+    void bundled_orbital_atlas_loads();
+
+    /** @brief Verifies all five bundled molecular-symmetry players end to end. */
+    void bundled_molecular_symmetry_example_loads();
 
 #if defined(UIL_HAVE_FFMPEG)
     /** @brief Verifies that the optional FFmpeg runtime can be loaded on first use. */
@@ -198,6 +272,189 @@ void PdfMediaDetectorTest::molecule_annotation_loads_xyz_geometry() {
     QVERIFY(result.summary().contains(QStringLiteral("page 1 molecule")));
 }
 
+void PdfMediaDetectorTest::embedded_interactive_figure_loads() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString pdf_path = directory.filePath(QStringLiteral("embedded-figure.pdf"));
+    QVERIFY(write_pdf_fixture(pdf_path, interactive_figure_pdf_fixture()));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.annotations.size(), 0);
+    QCOMPARE(result.molecule_annotations.size(), 0);
+    QCOMPARE(result.interactive_figure_annotations.size(), 1);
+    const PdfInteractiveFigureAnnotation& figure =
+        result.interactive_figure_annotations.constFirst();
+    QCOMPARE(figure.page_index, 0);
+    QCOMPARE(figure.object_number, 4);
+    QCOMPARE(figure.file_name, QStringLiteral("wave.uilfig"));
+    QCOMPARE(figure.rect, QRectF(10, 20, 400, 300));
+    QVERIFY2(figure.is_ready(), qPrintable(figure.error_message));
+    QCOMPARE(figure.definition.title, QStringLiteral("Embedded wave"));
+    QCOMPARE(figure.definition.x_label, QStringLiteral("time"));
+    QCOMPARE(figure.definition.y_label, QStringLiteral("signal"));
+    QCOMPARE(figure.definition.amplitude_initial, 1.0);
+    QVERIFY(result.summary().contains(QStringLiteral("embedded figure ready")));
+}
+
+void PdfMediaDetectorTest::bundled_interactive_figure_example_loads() {
+    const QString pdf_path = QStringLiteral(
+        UIL_TEST_SOURCE_DIR "/examples/bundled/interactive-figure.pdf");
+    QVERIFY2(QFileInfo::exists(pdf_path), qPrintable(pdf_path));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.annotations.size(), 0);
+    QCOMPARE(result.molecule_annotations.size(), 0);
+    QCOMPARE(result.interactive_figure_annotations.size(), 5);
+
+    const PdfInteractiveFigureAnnotation& sine =
+        result.interactive_figure_annotations.at(0);
+    QCOMPARE(sine.page_index, 0);
+    QCOMPARE(sine.file_name, QStringLiteral("moving-wave.uilfig"));
+    QVERIFY2(sine.is_ready(), qPrintable(sine.error_message));
+    QCOMPARE(sine.definition.title, QStringLiteral("A moving sine wave"));
+    QCOMPARE(sine.definition.x_label, QStringLiteral("$x\\;\\mathrm{(radians)}$"));
+    QCOMPARE(sine.definition.y_label, QStringLiteral("$y$"));
+
+    const PdfInteractiveFigureAnnotation& figure =
+        result.interactive_figure_annotations.at(1);
+    QCOMPARE(figure.page_index, 1);
+    QCOMPARE(figure.file_name, QStringLiteral("harmonic-wavepacket.uilfig"));
+    QVERIFY2(figure.is_ready(), qPrintable(figure.error_message));
+    QCOMPARE(
+        figure.definition.kind,
+        InteractiveFigureDefinition::Kind::HarmonicBondWavepacket);
+    QCOMPARE(figure.definition.stretch_initial, 3.0);
+    QCOMPARE(figure.definition.period_seconds, 8.0);
+    QVERIFY(figure.definition.loop);
+    QCOMPARE(figure.definition.x_label, QStringLiteral("$x = q / \\ell$"));
+
+    const PdfInteractiveFigureAnnotation& basis =
+        result.interactive_figure_annotations.at(2);
+    QCOMPARE(basis.page_index, 2);
+    QCOMPARE(basis.file_name, QStringLiteral("harmonic-basis-states.uilfig"));
+    QVERIFY2(basis.is_ready(), qPrintable(basis.error_message));
+    QCOMPARE(
+        basis.definition.kind,
+        InteractiveFigureDefinition::Kind::HarmonicBasisStates);
+    QCOMPARE(basis.definition.basis_colors.size(), 6);
+    QVERIFY(basis.definition.loop);
+    QCOMPARE(
+        basis.definition.title,
+        QStringLiteral("A coherent packet and its real basis components"));
+
+    const PdfInteractiveFigureAnnotation& step_fit =
+        result.interactive_figure_annotations.at(3);
+    QCOMPARE(step_fit.page_index, 3);
+    QCOMPARE(
+        step_fit.file_name,
+        QStringLiteral("particle-in-box-step-expansion.uilfig"));
+    QVERIFY2(step_fit.is_ready(), qPrintable(step_fit.error_message));
+    QCOMPARE(
+        step_fit.definition.kind,
+        InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion);
+    QCOMPARE(step_fit.definition.basis_count_min, 1);
+    QCOMPARE(step_fit.definition.basis_count_max, 25);
+
+    const PdfInteractiveFigureAnnotation& harmonic_fit =
+        result.interactive_figure_annotations.at(4);
+    QCOMPARE(harmonic_fit.page_index, 4);
+    QCOMPARE(
+        harmonic_fit.file_name,
+        QStringLiteral("harmonic-displaced-state-expansion.uilfig"));
+    QVERIFY2(harmonic_fit.is_ready(), qPrintable(harmonic_fit.error_message));
+    QCOMPARE(
+        harmonic_fit.definition.kind,
+        InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion);
+    QCOMPARE(harmonic_fit.definition.displacement, 2.0);
+    QCOMPARE(harmonic_fit.definition.basis_count_min, 1);
+    QCOMPARE(harmonic_fit.definition.basis_count_max, 25);
+}
+
+void PdfMediaDetectorTest::embedded_atomic_orbital_loads() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString pdf_path = directory.filePath(QStringLiteral("embedded-orbital.pdf"));
+    QVERIFY(write_pdf_fixture(pdf_path, atomic_orbital_pdf_fixture()));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.annotations.size(), 0);
+    QCOMPARE(result.molecule_annotations.size(), 0);
+    QCOMPARE(result.interactive_figure_annotations.size(), 0);
+    QCOMPARE(result.atomic_orbital_annotations.size(), 1);
+    const PdfAtomicOrbitalAnnotation& orbital =
+        result.atomic_orbital_annotations.constFirst();
+    QCOMPARE(orbital.page_index, 0);
+    QCOMPARE(orbital.object_number, 4);
+    QCOMPARE(orbital.file_name, QStringLiteral("2pz.uilorb"));
+    QCOMPARE(orbital.rect, QRectF(12, 24, 600, 400));
+    QVERIFY2(orbital.is_ready(), qPrintable(orbital.error_message));
+    QCOMPARE(orbital.definition.title, QStringLiteral("Embedded 2p z"));
+    QCOMPARE(orbital.definition.orbital, QStringLiteral("2pz"));
+    QCOMPARE(orbital.definition.plane, AtomicOrbitalDefinition::Plane::XZ);
+    QCOMPARE(orbital.definition.colormap, QStringLiteral("RdBu_r"));
+    QCOMPARE(orbital.definition.contour_maximum, 0.01);
+    QCOMPARE(orbital.definition.offset_initial, 0.25);
+    QVERIFY(result.summary().contains(QStringLiteral("embedded orbital ready")));
+}
+
+void PdfMediaDetectorTest::bundled_atomic_orbital_example_loads() {
+    const QString pdf_path = QStringLiteral(
+        UIL_TEST_SOURCE_DIR "/examples/bundled/atomic-orbitals.pdf");
+    QVERIFY2(QFileInfo::exists(pdf_path), qPrintable(pdf_path));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.atomic_orbital_annotations.size(), 6);
+    const QStringList expected_names{QStringLiteral("1s"),   QStringLiteral("2s"),
+                                     QStringLiteral("2s"),   QStringLiteral("2pz"),
+                                     QStringLiteral("3dz2"), QStringLiteral("4fz(5z2-3r2)")};
+    for (int index = 0; index < expected_names.size(); ++index) {
+        const PdfAtomicOrbitalAnnotation& orbital =
+            result.atomic_orbital_annotations.at(index);
+        QCOMPARE(orbital.page_index, std::max(0, index - 1));
+        QVERIFY2(orbital.is_ready(), qPrintable(orbital.error_message));
+        QCOMPARE(orbital.definition.orbital, expected_names.at(index));
+    }
+}
+
+void PdfMediaDetectorTest::bundled_orbital_atlas_loads() {
+  const auto result = scan_pdf_media_annotations(
+      QStringLiteral(UIL_TEST_SOURCE_DIR "/examples/bundled/orbital-atlas.pdf"));
+  const auto catalog = atomic_orbital_catalog();
+  QCOMPARE(result.atomic_orbital_annotations.size(), catalog.size());
+  for (int index = 0; index < catalog.size(); ++index) {
+    const auto& annotation = result.atomic_orbital_annotations.at(index);
+    QVERIFY2(annotation.is_ready(), qPrintable(annotation.error_message));
+    QCOMPARE(annotation.page_index, index / 4);
+    QCOMPARE(annotation.definition.orbital, catalog.at(index).name);
+    QCOMPARE(annotation.definition.colormap, QStringLiteral("garnet_slate"));
+    for (int other = index / 4 * 4; other < index; ++other) {
+      QVERIFY(!annotation.rect.intersects(result.atomic_orbital_annotations.at(other).rect));
+    }
+  }
+}
+
+void PdfMediaDetectorTest::bundled_molecular_symmetry_example_loads() {
+    const QString pdf_path = QStringLiteral(
+        UIL_TEST_SOURCE_DIR "/examples/bundled/molecular-symmetry.pdf");
+    QVERIFY2(QFileInfo::exists(pdf_path), qPrintable(pdf_path));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.molecular_symmetry_annotations.size(), 5);
+    const QStringList expected_groups{
+        QStringLiteral("C2v"), QStringLiteral("C3v"), QStringLiteral("D3h"),
+        QStringLiteral("D2h"), QStringLiteral("Td")};
+    const QList<int> expected_counts{4, 6, 12, 8, 24};
+    for (int index = 0; index < expected_groups.size(); ++index) {
+        const PdfMolecularSymmetryAnnotation& annotation =
+            result.molecular_symmetry_annotations.at(index);
+        QCOMPARE(annotation.page_index, index);
+        QVERIFY2(annotation.is_ready(), qPrintable(annotation.error_message));
+        QCOMPARE(annotation.definition.point_group, expected_groups.at(index));
+        QCOMPARE(annotation.definition.operations.size(), expected_counts.at(index));
+    }
+    QVERIFY(result.summary().contains(QStringLiteral("embedded symmetry ready")));
+}
+
 void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -207,6 +464,8 @@ void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {
     QVERIFY(!result.has_media());
     QVERIFY(result.annotations.isEmpty());
     QVERIFY(result.molecule_annotations.isEmpty());
+    QVERIFY(result.interactive_figure_annotations.isEmpty());
+    QVERIFY(result.molecular_symmetry_annotations.isEmpty());
 }
 
 #if defined(UIL_HAVE_FFMPEG)

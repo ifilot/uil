@@ -1,0 +1,21 @@
+{
+  "format": "uil.interactive-figure",
+  "version": 1,
+  "title": "Fitting a stretched harmonic-oscillator state",
+  "background_svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 650'><rect width='1200' height='650' fill='#f8fafc'/></svg>",
+  "plot": {
+    "kind": "harmonic-displaced-state-expansion",
+    "x_min": -6,
+    "x_max": 6,
+    "y_min": -0.2,
+    "y_max": 0.9,
+    "x_label": "$y=x/\\alpha$",
+    "y_label": "$\\Phi(y), S_N(y)$",
+    "displacement": 2,
+    "target_color": "#64748b",
+    "approximation_color": "#8e1b3e"
+  },
+  "controls": {
+    "basis_count": { "min": 1, "max": 25, "value": 1 }
+  }
+}

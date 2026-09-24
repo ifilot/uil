@@ -1,0 +1,226 @@
+%% uilorbital.sty -- embedded orbitals and a pre-rendered orbital atlas
+\NeedsTeXFormat{LaTeX2e}[2020/10/01]
+\ProvidesPackage{uilorbital}[2026/09/06 v0.2 Orbital atlas and PDF annotations]
+\RequirePackage{graphicx}
+\RequirePackage{keyval}
+\RequirePackage{xcolor}
+\RequirePackage{xparse}
+\makeatletter
+
+\newif\ifuilorb@supported
+\ifdefined\pdfextension
+  \ifnum\outputmode>0 \uilorb@supportedtrue\fi
+  \protected\def\uilorb@pdfannot{\pdfextension annot }
+\else
+  \ifdefined\pdfannot
+    \ifnum\pdfoutput>0 \uilorb@supportedtrue\fi
+    \let\uilorb@pdfannot\pdfannot
+  \fi
+\fi
+\ifuilorb@supported\RequirePackage{embedfile}\fi
+\newcounter{uilorb@asset}
+\newsavebox{\uilorb@posterbox}
+\newsavebox{\uilorb@labelbox}
+\newdimen\uilorb@width
+\newdimen\uilorb@height
+\newdimen\uilorb@depth
+\newif\ifuilorb@widthset
+\newif\ifuilorb@heightset
+\newif\ifuilorb@depthset
+\newif\ifuilorb@static
+\newif\ifuilorb@valid
+\define@key{uilorbital}{width}{\uilorb@width=#1\relax\uilorb@widthsettrue}
+\define@key{uilorbital}{height}{\uilorb@height=#1\relax\uilorb@heightsettrue}
+\define@key{uilorbital}{depth}{\uilorb@depth=#1\relax\uilorb@depthsettrue}
+\define@key{uilorbital}{borderwidth}{\def\uilorb@borderwidth{#1}}
+\define@key{uilorbital}{static}[true]{%
+  \def\uilorb@value{#1}\def\uilorb@true{true}\def\uilorb@false{false}%
+  \ifx\uilorb@value\uilorb@true\uilorb@statictrue
+  \else\ifx\uilorb@value\uilorb@false\uilorb@staticfalse
+  \else\uilorb@validfalse
+    \PackageError{uilorbital}{Invalid static value `#1'}{Use static=true or static=false.}%
+  \fi\fi
+}
+
+% The custom-poster API retains its explicit box sizing semantics. All state is
+% local, and the annotation uses the final measured box, including its depth.
+\newcommand\uilorb@embed[3][]{%
+  \begingroup
+  \leavevmode
+  \uilorb@validtrue
+  \uilorb@staticfalse
+  \uilorb@widthsetfalse\uilorb@heightsetfalse\uilorb@depthsetfalse
+  \def\uilorb@borderwidth{0}%
+  \setbox\uilorb@posterbox=\hbox{#2}%
+  \uilorb@width=\wd\uilorb@posterbox
+  \uilorb@height=\ht\uilorb@posterbox
+  \uilorb@depth=\dp\uilorb@posterbox
+  \setkeys{uilorbital}{#1}%
+  \edef\uilorb@file{#3}%
+  \edef\uilorb@file{\expandafter\detokenize\expandafter{\uilorb@file}}%
+  \ifdim\uilorb@borderwidth pt<0pt\relax
+    \uilorb@validfalse
+    \PackageError{uilorbital}{Negative annotation border width}{Use a nonnegative number in PDF points.}%
+  \fi
+  \ifuilorb@heightset\ifuilorb@depthset\else\uilorb@depth=0pt\fi\fi
+  \ifdim\uilorb@width>0pt\relax\else\uilorb@validfalse\fi
+  \ifdim\dimexpr\uilorb@height+\uilorb@depth\relax>0pt\relax\else\uilorb@validfalse\fi
+  \ifdim\uilorb@depth<0pt\relax\uilorb@validfalse\fi
+  \ifuilorb@valid\else
+    \PackageError{uilorbital}{Invalid poster dimensions}{Width and total height must be positive; depth must be nonnegative.}%
+  \fi
+  \ifuilorb@valid
+    \ifuilorb@widthset
+      \ifuilorb@heightset
+        \setbox\uilorb@posterbox=\hbox{\resizebox*{\uilorb@width}{\dimexpr\uilorb@height+\uilorb@depth\relax}{\usebox\uilorb@posterbox}}%
+      \else
+        \setbox\uilorb@posterbox=\hbox{\resizebox{\uilorb@width}{!}{\usebox\uilorb@posterbox}}%
+      \fi
+    \else
+      \ifuilorb@heightset
+        \setbox\uilorb@posterbox=\hbox{\resizebox*{!}{\dimexpr\uilorb@height+\uilorb@depth\relax}{\usebox\uilorb@posterbox}}%
+      \fi
+    \fi
+    \ifuilorb@depthset
+      \setbox\uilorb@posterbox=\hbox{\raisebox{\dimexpr\dp\uilorb@posterbox-\uilorb@depth\relax}{\usebox\uilorb@posterbox}}%
+    \fi
+    \ifuilorb@static\else
+      \IfFileExists{#3}{}{%
+        \uilorb@validfalse
+        \PackageError{uilorbital}{Orbital definition `#3' not found}{Supply a .uilorb file, or use static=true for a poster-only PDF.}}%
+      \ifuilorb@supported\else
+        \uilorb@validfalse
+        \PackageError{uilorbital}{Interactive orbitals require PDF output from pdfLaTeX or LuaLaTeX}{Use static=true for other output engines.}%
+      \fi
+      \ifuilorb@valid
+        \stepcounter{uilorb@asset}%
+        \edef\uilorb@id{uilorbital-\arabic{uilorb@asset}}%
+        \setbox\uilorb@labelbox=\hbox{\embedfile[id=\uilorb@id,filespec=\uilorb@file,ucfilespec=\uilorb@file,
+          mimetype=application/vnd.uil.atomic-orbital,
+          desc={UIL atomic orbital},afrelationship=Supplement]{#3}}%
+        \uilorb@pdfannot width \wd\uilorb@posterbox height \ht\uilorb@posterbox depth \dp\uilorb@posterbox {%
+          /Subtype /UILAtomicOrbital /Border [0 0 \uilorb@borderwidth]
+          /UIL << /Version 1 /Asset \embedfilegetobject{\uilorb@id}{Filespec} >>}%
+      \fi
+    \fi
+    \usebox\uilorb@posterbox
+  \fi
+  \endgroup
+}
+
+% Atlas settings are scoped by TeX groups; per-orbital overrides never leak.
+\def\uilorb@atlaspath{uilorbital-atlas}
+\def\uilorb@orbital{1s}
+\def\uilorb@palette{garnet_slate}
+\def\uilorb@layout{surface-contour}
+\def\uilorb@atlaswidth{\linewidth}
+\def\uilorb@atlasheight{}
+\def\uilorb@atlasstatic{false}
+\define@key{uilorbitalatlas}{atlas path}{\def\uilorb@atlaspath{#1}}
+\define@key{uilorbitalatlas}{orbital}{\def\uilorb@orbital{#1}}
+\define@key{uilorbitalatlas}{palette}{\def\uilorb@palette{#1}}
+\define@key{uilorbitalatlas}{layout}{\def\uilorb@layout{#1}}
+\define@key{uilorbitalatlas}{width}{\def\uilorb@atlaswidth{#1}}
+\define@key{uilorbitalatlas}{height}{\def\uilorb@atlasheight{#1}}
+\define@key{uilorbitalatlas}{static}[true]{\def\uilorb@atlasstatic{#1}}
+\newcommand\uilorbitalsetup[1]{\setkeys{uilorbitalatlas}{#1}}
+\newcommand\uilorbitalentry[5]{%
+  \expandafter\def\csname uilorb@label@#1\endcsname{#2}%
+  \expandafter\def\csname uilorb@radial@#1\endcsname{#3}%
+  \expandafter\def\csname uilorb@angular@#1\endcsname{#4}%
+  \expandafter\def\csname uilorb@view@#1\endcsname{#5}%
+  \ignorespaces
+}
+\newcommand\uilorb@atlas[1]{%
+  \begingroup
+  \setkeys{uilorbitalatlas}{#1}%
+  \uilorb@validtrue
+  \def\uilorb@teal{garnet_teal}\def\uilorb@slate{garnet_slate}%
+  \definecolor{uilorbPositive}{HTML}{8E1B3E}%
+  \definecolor{uilorbNegative}{HTML}{426B86}%
+  \definecolor{uilorbBorder}{HTML}{E7D9DE}%
+  \ifx\uilorb@palette\uilorb@teal
+    \definecolor{uilorbNegative}{HTML}{177E72}%
+  \else\ifx\uilorb@palette\uilorb@slate\else
+    \uilorb@validfalse
+    \PackageError{uilorbital}{Unknown atlas palette `\uilorb@palette'}{Choose garnet_slate or garnet_teal.}%
+  \fi\fi
+  \def\uilorb@surface{surface}\def\uilorb@combined{surface-contour}%
+  \ifx\uilorb@layout\uilorb@surface\else\ifx\uilorb@layout\uilorb@combined\else
+    \uilorb@validfalse
+    \PackageError{uilorbital}{Unknown atlas layout `\uilorb@layout'}{Choose surface or surface-contour.}%
+  \fi\fi
+  \def\uilorb@true{true}\def\uilorb@false{false}%
+  \ifx\uilorb@atlasstatic\uilorb@true\else\ifx\uilorb@atlasstatic\uilorb@false\else
+    \uilorb@validfalse
+    \PackageError{uilorbital}{Invalid static value `\uilorb@atlasstatic'}{Use static=true or static=false.}%
+  \fi\fi
+  \InputIfFileExists{\uilorb@atlaspath/catalog.tex}{}{%
+    \uilorb@validfalse
+    \PackageError{uilorbital}{Orbital atlas not found at `\uilorb@atlaspath'}{Set atlas path with \string\uilorbitalsetup, or generate the atlas using atomic_orbital_preview_generator --atlas OUTPUT_DIR.}}%
+  \ifcsname uilorb@label@\uilorb@orbital\endcsname\else
+    \uilorb@validfalse
+    \PackageError{uilorbital}{Unknown atlas orbital `\uilorb@orbital'}{Use a catalog identifier such as 1s, 2pz, or 3dx2-y2. See catalog.tex for all 55 identifiers.}%
+  \fi
+  \edef\uilorb@stem{\uilorb@atlaspath/\uilorb@palette/\uilorb@orbital}%
+  \edef\uilorb@image{\uilorb@stem-\uilorb@layout.png}%
+  \ifuilorb@valid
+    \IfFileExists{\uilorb@image}{}{%
+      \uilorb@validfalse
+      \PackageError{uilorbital}{Atlas image `\uilorb@image' not found}{Regenerate the complete atlas; no renderer is run during LaTeX compilation.}}%
+  \fi
+  \ifdim\uilorb@atlaswidth>20pt\relax\else
+    \uilorb@validfalse
+    \PackageError{uilorbital}{Atlas width is too small}{Choose a width greater than 20pt.}%
+  \fi
+  \ifx\uilorb@atlasheight\@empty\else
+    \ifdim\uilorb@atlasheight>0pt\relax\else
+      \uilorb@validfalse
+      \PackageError{uilorbital}{Invalid atlas height}{Height must be positive.}%
+    \fi
+  \fi
+  \ifuilorb@valid
+    \setlength\fboxsep{5pt}\setlength\fboxrule{0.4pt}%
+    \setbox\uilorb@posterbox=\hbox{%
+      \fcolorbox{uilorbBorder}{white}{%
+        \begin{minipage}{\dimexpr\uilorb@atlaswidth-2\fboxsep-2\fboxrule\relax}
+          \color{black!85}\normalfont\sffamily
+          \setbox\uilorb@labelbox=\hbox{\large$\csname uilorb@label@\uilorb@orbital\endcsname$}%
+          \noindent\hbox to \linewidth{%
+            \color{uilorbPositive}%
+            \ifdim\wd\uilorb@labelbox>.62\linewidth
+              \resizebox{.62\linewidth}{!}{\usebox\uilorb@labelbox}%
+            \else\usebox\uilorb@labelbox\fi
+            \hfil\scriptsize\bfseries
+            \ifx\uilorb@atlasstatic\uilorb@true ORBITAL\else INTERACTIVE\fi}\par
+          \vspace{3pt}\noindent\includegraphics[width=\linewidth]{\uilorb@image}\par
+          \vspace{2pt}{\scriptsize
+            \noindent\textcolor{uilorbPositive}{$\bullet\;\psi>0$}\quad
+            \textcolor{uilorbNegative}{$\bullet\;\psi<0$}\hfill
+            \csname uilorb@view@\uilorb@orbital\endcsname\par
+            \noindent Radial nodes: \csname uilorb@radial@\uilorb@orbital\endcsname
+            \hfill Angular nodes: \csname uilorb@angular@\uilorb@orbital\endcsname\par
+            \ifx\uilorb@layout\uilorb@combined
+              \noindent Signed $\psi$ slice: logarithmic $|\psi|$, $10^{-8}$--$10^{-1}\,a_0^{-3/2}$\par
+            \fi}%
+        \end{minipage}}}%
+    \ifx\uilorb@atlasheight\@empty\else
+      \ifdim\dimexpr\ht\uilorb@posterbox+\dp\uilorb@posterbox\relax>\uilorb@atlasheight
+        \setbox\uilorb@posterbox=\hbox{\resizebox*{!}{\uilorb@atlasheight}{\usebox\uilorb@posterbox}}%
+      \fi
+    \fi
+    \edef\uilorb@options{static=\uilorb@atlasstatic}%
+    \expandafter\uilorb@embed\expandafter[\uilorb@options]{\usebox\uilorb@posterbox}{\uilorb@stem.uilorb}%
+  \fi
+  \endgroup
+}
+
+% With no braced arguments select the atlas; with two retain the custom API.
+\NewDocumentCommand\atomicorbital{O{} g g}{%
+  \IfNoValueTF{#2}{\uilorb@atlas{#1}}{%
+    \IfNoValueTF{#3}{%
+      \PackageError{uilorbital}{Custom poster requires two braced arguments}{Use \string\atomicorbital[orbital=2pz] or \string\atomicorbital[width=6cm]{poster}{file.uilorb}.}%
+    }{\uilorb@embed[#1]{#2}{#3}}}%
+}
+\makeatother
+\endinput

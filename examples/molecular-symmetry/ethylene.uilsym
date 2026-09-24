@@ -1,0 +1,78 @@
+{
+  "format": "uil.molecular-symmetry",
+  "version": 1,
+  "title": "Ethylene",
+  "point_group": "D2h",
+  "animation_duration_ms": 1050,
+  "operation_colors": {"identity":"#5f6b78","rotation":"#9b2f4f","reflection":"#277d83","inversion":"#7a5aa6","improper_rotation":"#c06a2b"},
+  "molecule": {
+    "xyz": "6\nEthylene\nC -0.67 0 0\nC 0.67 0 0\nH -1.23 0.93 0\nH -1.23 -0.93 0\nH 1.23 0.93 0\nH 1.23 -0.93 0\n"
+  },
+  "operations": [
+    {
+      "label": "E",
+      "type": "identity"
+    },
+    {
+      "label": "C₂(x)",
+      "type": "rotation",
+      "order": 2,
+      "axis": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "label": "C₂(y)",
+      "type": "rotation",
+      "order": 2,
+      "axis": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "C₂(z)",
+      "type": "rotation",
+      "order": 2,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "i",
+      "type": "inversion"
+    },
+    {
+      "label": "σ(xy)",
+      "type": "reflection",
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "σ(xz)",
+      "type": "reflection",
+      "axis": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "σ(yz)",
+      "type": "reflection",
+      "axis": [
+        1,
+        0,
+        0
+      ]
+    }
+  ]
+}

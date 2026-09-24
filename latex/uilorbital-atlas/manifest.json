@@ -1,0 +1,894 @@
+{
+    "entries": [
+        {
+            "angular_nodes": 0,
+            "cutaway": false,
+            "orbital": "1s",
+            "palette": "garnet_slate",
+            "plane": "xy",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 0,
+            "cutaway": false,
+            "orbital": "1s",
+            "palette": "garnet_teal",
+            "plane": "xy",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 0,
+            "cutaway": true,
+            "orbital": "2s",
+            "palette": "garnet_slate",
+            "plane": "xy",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 0,
+            "cutaway": true,
+            "orbital": "2s",
+            "palette": "garnet_teal",
+            "plane": "xy",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "2px",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "2px",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "2py",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "2py",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "2pz",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "2pz",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 0,
+            "cutaway": true,
+            "orbital": "3s",
+            "palette": "garnet_slate",
+            "plane": "xy",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 0,
+            "cutaway": true,
+            "orbital": "3s",
+            "palette": "garnet_teal",
+            "plane": "xy",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "3px",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "3px",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "3py",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "3py",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "3pz",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "3pz",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "3dxy",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "3dxy",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "3dxz",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "3dxz",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "3dyz",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "3dyz",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "3dx2-y2",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "3dx2-y2",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "3dz2",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "3dz2",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 0,
+            "cutaway": true,
+            "orbital": "4s",
+            "palette": "garnet_slate",
+            "plane": "xy",
+            "radial_nodes": 3
+        },
+        {
+            "angular_nodes": 0,
+            "cutaway": true,
+            "orbital": "4s",
+            "palette": "garnet_teal",
+            "plane": "xy",
+            "radial_nodes": 3
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "4px",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "4px",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "4py",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "4py",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "4pz",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "4pz",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "4dxy",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "4dxy",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "4dxz",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "4dxz",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "4dyz",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "4dyz",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "4dx2-y2",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "4dx2-y2",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "4dz2",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "4dz2",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fy(3x2-y2)",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fy(3x2-y2)",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fxyz",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fxyz",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fy(5z2-r2)",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fy(5z2-r2)",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fz(5z2-3r2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fz(5z2-3r2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fx(5z2-r2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fx(5z2-r2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fz(x2-y2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fz(x2-y2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fx(x2-3y2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "4fx(x2-3y2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 0,
+            "cutaway": true,
+            "orbital": "5s",
+            "palette": "garnet_slate",
+            "plane": "xy",
+            "radial_nodes": 4
+        },
+        {
+            "angular_nodes": 0,
+            "cutaway": true,
+            "orbital": "5s",
+            "palette": "garnet_teal",
+            "plane": "xy",
+            "radial_nodes": 4
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "5px",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 3
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "5px",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 3
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "5py",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 3
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "5py",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 3
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "5pz",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 3
+        },
+        {
+            "angular_nodes": 1,
+            "cutaway": false,
+            "orbital": "5pz",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 3
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "5dxy",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "5dxy",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "5dxz",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "5dxz",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "5dyz",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "5dyz",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "5dx2-y2",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "5dx2-y2",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "5dz2",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 2,
+            "cutaway": false,
+            "orbital": "5dz2",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 2
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fy(3x2-y2)",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fy(3x2-y2)",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fxyz",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fxyz",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fy(5z2-r2)",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fy(5z2-r2)",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fz(5z2-3r2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fz(5z2-3r2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fx(5z2-r2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fx(5z2-r2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fz(x2-y2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fz(x2-y2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fx(x2-3y2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 3,
+            "cutaway": false,
+            "orbital": "5fx(x2-3y2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 1
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gxy(x2-y2)",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gxy(x2-y2)",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gyz(3x2-y2)",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gyz(3x2-y2)",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gxy(7z2-r2)",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gxy(7z2-r2)",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gyz(7z2-3r2)",
+            "palette": "garnet_slate",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gyz(7z2-3r2)",
+            "palette": "garnet_teal",
+            "plane": "yz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5g(35z4-30z2r2+3r4)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5g(35z4-30z2r2+3r4)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gxz(7z2-3r2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gxz(7z2-3r2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5g(x2-y2)(7z2-r2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5g(x2-y2)(7z2-r2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gxz(x2-3y2)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5gxz(x2-3y2)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5g(x4-6x2y2+y4)",
+            "palette": "garnet_slate",
+            "plane": "xz",
+            "radial_nodes": 0
+        },
+        {
+            "angular_nodes": 4,
+            "cutaway": false,
+            "orbital": "5g(x4-6x2y2+y4)",
+            "palette": "garnet_teal",
+            "plane": "xz",
+            "radial_nodes": 0
+        }
+    ],
+    "layouts": [
+        "surface",
+        "surface-contour"
+    ],
+    "orbitals": 55,
+    "palettes": [
+        "garnet_slate",
+        "garnet_teal"
+    ],
+    "version": 1
+}

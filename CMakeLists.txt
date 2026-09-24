@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(uil VERSION 0.2.0 LANGUAGES C CXX)
+project(uil VERSION 0.3.0 LANGUAGES C CXX)
 
 include(CTest)
 
@@ -99,14 +99,21 @@ set(FONT_AWESOME_SVG_FILES
     resources/fontawesome/svgs/regular/eye-slash.svg
     resources/fontawesome/svgs/solid/angles-left.svg
     resources/fontawesome/svgs/solid/angles-right.svg
+    resources/fontawesome/svgs/solid/arrows-rotate.svg
     resources/fontawesome/svgs/solid/arrow-pointer.svg
     resources/fontawesome/svgs/solid/chevron-left.svg
     resources/fontawesome/svgs/solid/chevron-right.svg
+    resources/fontawesome/svgs/solid/compass.svg
     resources/fontawesome/svgs/solid/door-open.svg
     resources/fontawesome/svgs/solid/eraser.svg
+    resources/fontawesome/svgs/solid/glasses.svg
     resources/fontawesome/svgs/solid/location-crosshairs.svg
+    resources/fontawesome/svgs/solid/pause.svg
     resources/fontawesome/svgs/solid/pencil.svg
+    resources/fontawesome/svgs/solid/play.svg
+    resources/fontawesome/svgs/solid/rotate.svg
     resources/fontawesome/svgs/solid/satellite-dish.svg
+    resources/fontawesome/svgs/solid/sliders.svg
     resources/fontawesome/svgs/solid/table-cells-large.svg
     resources/fontawesome/svgs/solid/trash-can.svg
     resources/fontawesome/svgs/solid/window-maximize.svg
@@ -190,6 +197,12 @@ else()
     set(UIL_VIEWER_TARGET uil)
 endif()
 
+add_library(uil_symmetry_orbitals STATIC src/orbital/symmetry_orbitals.cpp)
+target_include_directories(uil_symmetry_orbitals PRIVATE src)
+target_link_libraries(uil_symmetry_orbitals PUBLIC Qt6::Core Qt6::Gui)
+uil_enable_windows_hardening(uil_symmetry_orbitals)
+uil_enable_sanitizers(uil_symmetry_orbitals)
+
 qt_add_executable(${UIL_VIEWER_TARGET}
     src/main.cpp
     src/app_controller.hpp
@@ -229,16 +242,35 @@ qt_add_executable(${UIL_VIEWER_TARGET}
     src/media/video_frame_extractor.cpp
     src/media/video_frame_buffer.hpp
     src/media/video_frame_buffer.cpp
+    src/figure/interactive_figure.hpp
+    src/figure/interactive_figure.cpp
+    src/figure/harmonic_wavepacket.hpp
+    src/figure/harmonic_wavepacket.cpp
+    src/figure/particle_in_box_basis.hpp
+    src/figure/particle_in_box_basis.cpp
     src/molecule/molecule_geometry.hpp
     src/molecule/molecule_geometry.cpp
     src/molecule/molecule_camera.hpp
     src/molecule/molecule_camera.cpp
+    src/symmetry/molecular_symmetry.hpp
+    src/symmetry/molecular_symmetry.cpp
+    src/orbital/atomic_orbital.hpp
+    src/orbital/atomic_orbital_cache.cpp
+    src/orbital/atomic_orbital.cpp
     src/ui/molecule_widget.hpp
     src/ui/molecule_widget.cpp
+    src/ui/molecular_symmetry_widget.hpp
+    src/ui/molecular_symmetry_widget.cpp
+    src/ui/atomic_orbital_widget.hpp
+    src/ui/atomic_orbital_widget.cpp
+    src/ui/interactive_figure_widget.hpp
+    src/ui/interactive_figure_widget.cpp
     src/package/uil_package.hpp
     src/package/uil_package.cpp
     ${UIL_VIEWER_WINDOWS_RESOURCES}
 )
+
+target_link_libraries(${UIL_VIEWER_TARGET} PRIVATE uil_symmetry_orbitals)
 
 qt_add_resources(${UIL_VIEWER_TARGET} "uil_resources"
     PREFIX "/"

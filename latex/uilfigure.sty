@@ -1,0 +1,95 @@
+%% uilfigure.sty -- self-contained UIL interactive figure annotations
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{uilfigure}[2026/09/04 v0.1 UIL embedded interactive figures]
+
+\RequirePackage{embedfile}
+\RequirePackage{graphicx}
+\RequirePackage{iftex}
+\RequirePackage{keyval}
+
+\newif\ifuilfig@supported
+\uilfig@supportedfalse
+\ifPDFTeX
+  \let\uilfig@pdfannot\pdfannot
+  \uilfig@supportedtrue
+\fi
+\ifLuaTeX
+  \protected\def\uilfig@pdfannot{\pdfextension annot }
+  \uilfig@supportedtrue
+\fi
+
+\newcounter{uilfig@asset}
+\newif\ifuilfig@widthset
+\newif\ifuilfig@heightset
+\newif\ifuilfig@depthset
+\newdimen\uilfig@width
+\newdimen\uilfig@height
+\newdimen\uilfig@depth
+
+\define@key{uilfigure}{width}{\uilfig@width=#1\relax\uilfig@widthsettrue}
+\define@key{uilfigure}{height}{\uilfig@height=#1\relax\uilfig@heightsettrue}
+\define@key{uilfigure}{depth}{\uilfig@depth=#1\relax\uilfig@depthsettrue}
+\define@key{uilfigure}{borderwidth}{\def\uilfig@borderwidth{#1}}
+
+%% Usage: \interactivefigure[width=...,height=...]{poster material}{figure.uilfig}
+\newcommand\interactivefigure[3][]{%
+  \leavevmode
+  \IfFileExists{#3}{}{%
+    \PackageError{uilfigure}{The interactive figure `#3' was not found}{}%
+  }%
+  \setbox\@tempboxa=\hbox{#2}%
+  \uilfig@width=\wd\@tempboxa
+  \uilfig@height=\ht\@tempboxa
+  \uilfig@depth=\dp\@tempboxa
+  \def\uilfig@borderwidth{0}%
+  \uilfig@widthsetfalse
+  \uilfig@heightsetfalse
+  \uilfig@depthsetfalse
+  \setkeys{uilfigure}{#1}%
+  \ifuilfig@heightset
+    \ifuilfig@depthset\else
+      \uilfig@depth=0pt
+    \fi
+  \fi
+  \ifuilfig@widthset
+    \ifuilfig@heightset
+      \setbox\@tempboxa=\hbox{%
+        \resizebox*{\uilfig@width}{\dimexpr\uilfig@height+\uilfig@depth\relax}{\box\@tempboxa}}%
+    \else
+      \setbox\@tempboxa=\hbox{\resizebox{\uilfig@width}{!}{\box\@tempboxa}}%
+    \fi
+  \else
+    \ifuilfig@heightset
+      \setbox\@tempboxa=\hbox{%
+        \resizebox*{!}{\dimexpr\uilfig@height+\uilfig@depth\relax}{\box\@tempboxa}}%
+    \fi
+  \fi
+  \uilfig@width=\wd\@tempboxa
+  \uilfig@height=\ht\@tempboxa
+  \uilfig@depth=\dp\@tempboxa
+  \stepcounter{uilfig@asset}%
+  \edef\uilfig@id{uilfigure-\arabic{uilfig@asset}}%
+  \ifuilfig@supported
+    \embedfile[
+      id=\uilfig@id,
+      filespec=#3,
+      ucfilespec=#3,
+      mimetype=application/vnd.uil.figure,
+      desc={UIL interactive figure},
+      afrelationship=Supplement
+    ]{#3}%
+    \uilfig@pdfannot width \uilfig@width height \uilfig@height depth \uilfig@depth {%
+      /Subtype /UILInteractiveFigure
+      /Border [0 0 \uilfig@borderwidth]
+      /UIL <<
+        /Version 1
+        /Asset \embedfilegetobject{\uilfig@id}{Filespec}
+      >>
+    }%
+  \else
+    \PackageError{uilfigure}{Only pdfLaTeX and LuaLaTeX are currently supported}{}%
+  \fi
+  \box\@tempboxa
+}
+
+\endinput

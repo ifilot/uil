@@ -18,6 +18,7 @@
 #include <QSplashScreen>
 #include <QStyleFactory>
 #include <QSysInfo>
+#include <QSurfaceFormat>
 #include <QThread>
 #include <QThreadPool>
 #include <QTimer>
@@ -48,7 +49,7 @@ protected:
 
 /** @brief Creates the raster-only startup image without loading icon plugins. */
 QPixmap create_loading_splash_pixmap() {
-    constexpr int kSplashWidth = 420;
+    constexpr int kSplashWidth = 600;
     constexpr int kSplashHeight = 150;
     QPixmap pixmap(kSplashWidth, kSplashHeight);
     pixmap.fill(QColor(0x18, 0x18, 0x18));
@@ -162,6 +163,12 @@ int main(int argc, char* argv[]) {
     const qint64 process_to_main_ms = windows_process_age_ms();
     harden_windows_dll_search();
     launcher_readiness::initialize(argc, argv);
+    QSurfaceFormat surface_format;
+    surface_format.setVersion(3, 3);
+    surface_format.setProfile(QSurfaceFormat::CoreProfile);
+    surface_format.setDepthBufferSize(24);
+    surface_format.setSamples(4);
+    QSurfaceFormat::setDefaultFormat(surface_format);
     QApplication app(argc, argv);
     const qint64 application_construction_ms = process_start_timer.elapsed();
     QApplication::setApplicationName(QStringLiteral("uil"));
