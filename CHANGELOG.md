@@ -4,6 +4,19 @@ Notable user-facing changes to `uil` are documented here.
 
 ## 0.3.1 - Unreleased
 
+### Changed
+
+- Simplified molecular-symmetry orbital selection to the `s`, `p`, and `d`
+  symmetry types, with normalized render sizes and properly formatted notation.
+
+### Fixed
+
+- Preserve molecular-symmetry render settings independently while switching slides.
+- Present OpenGL content immediately after entering fullscreen so starting a deck
+  with F5 no longer leaves the audience display black until pointer input.
+
+## 0.3.0 - 2026-09-27
+
 ### Added
 
 - Added self-contained atomic-orbital objects covering all real hydrogen-like
