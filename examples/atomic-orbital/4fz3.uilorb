@@ -1,0 +1,21 @@
+{
+  "format": "uil.atomic-orbital",
+  "version": 1,
+  "title": "Hydrogen-like $4f_{z^3}$ orbital",
+  "orbital": "4fz(5z2-3r2)",
+  "surface": {
+    "isovalue": 0.0,
+    "positive_color": "#2563eb",
+    "negative_color": "#dc2626",
+    "grid_size": 65
+  },
+  "sampling_plane": {
+    "type": "xz",
+    "offset": { "min": -1.0, "max": 1.0, "value": 0.0 }
+  },
+  "contour": {
+    "colormap": "RdBu_r",
+    "maximum": 0.01,
+    "levels": 16
+  }
+}

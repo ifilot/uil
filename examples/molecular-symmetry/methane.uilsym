@@ -1,0 +1,255 @@
+{
+  "format": "uil.molecular-symmetry",
+  "version": 1,
+  "title": "Methane",
+  "point_group": "Td",
+  "animation_duration_ms": 1100,
+  "operation_colors": {"identity":"#5f6b78","rotation":"#9b2f4f","reflection":"#277d83","inversion":"#7a5aa6","improper_rotation":"#c06a2b"},
+  "molecule": {
+    "xyz": "5\nMethane\nC 0 0 0\nH 0.6291 0.6291 0.6291\nH -0.6291 -0.6291 0.6291\nH -0.6291 0.6291 -0.6291\nH 0.6291 -0.6291 -0.6291\n"
+  },
+  "operations": [
+    {
+      "label": "E",
+      "type": "identity"
+    },
+    {
+      "label": "C₃(1, +120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 1,
+      "axis": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "label": "C₃(1, −120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 2,
+      "axis": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "label": "C₃(2, +120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 1,
+      "axis": [
+        -1,
+        -1,
+        1
+      ]
+    },
+    {
+      "label": "C₃(2, −120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 2,
+      "axis": [
+        -1,
+        -1,
+        1
+      ]
+    },
+    {
+      "label": "C₃(3, +120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 1,
+      "axis": [
+        -1,
+        1,
+        -1
+      ]
+    },
+    {
+      "label": "C₃(3, −120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 2,
+      "axis": [
+        -1,
+        1,
+        -1
+      ]
+    },
+    {
+      "label": "C₃(4, +120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 1,
+      "axis": [
+        1,
+        -1,
+        -1
+      ]
+    },
+    {
+      "label": "C₃(4, −120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 2,
+      "axis": [
+        1,
+        -1,
+        -1
+      ]
+    },
+    {
+      "label": "C₂(x)",
+      "type": "rotation",
+      "order": 2,
+      "axis": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "label": "C₂(y)",
+      "type": "rotation",
+      "order": 2,
+      "axis": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "C₂(z)",
+      "type": "rotation",
+      "order": 2,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "S₄(x, +90°)",
+      "type": "improper-rotation",
+      "order": 4,
+      "power": 1,
+      "axis": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "label": "S₄(x, −90°)",
+      "type": "improper-rotation",
+      "order": 4,
+      "power": 3,
+      "axis": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "label": "S₄(y, +90°)",
+      "type": "improper-rotation",
+      "order": 4,
+      "power": 1,
+      "axis": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "S₄(y, −90°)",
+      "type": "improper-rotation",
+      "order": 4,
+      "power": 3,
+      "axis": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "S₄(z, +90°)",
+      "type": "improper-rotation",
+      "order": 4,
+      "power": 1,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "S₄(z, −90°)",
+      "type": "improper-rotation",
+      "order": 4,
+      "power": 3,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "σᵈ(x−y)",
+      "type": "reflection",
+      "axis": [
+        1,
+        -1,
+        0
+      ]
+    },
+    {
+      "label": "σᵈ(x+y)",
+      "type": "reflection",
+      "axis": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "σᵈ(x−z)",
+      "type": "reflection",
+      "axis": [
+        1,
+        0,
+        -1
+      ]
+    },
+    {
+      "label": "σᵈ(x+z)",
+      "type": "reflection",
+      "axis": [
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "σᵈ(y−z)",
+      "type": "reflection",
+      "axis": [
+        0,
+        1,
+        -1
+      ]
+    },
+    {
+      "label": "σᵈ(y+z)",
+      "type": "reflection",
+      "axis": [
+        0,
+        1,
+        1
+      ]
+    }
+  ]
+}

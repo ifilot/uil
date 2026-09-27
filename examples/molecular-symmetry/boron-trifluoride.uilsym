@@ -1,0 +1,127 @@
+{
+  "format": "uil.molecular-symmetry",
+  "version": 1,
+  "title": "Boron trifluoride",
+  "point_group": "D3h",
+  "animation_duration_ms": 1050,
+  "operation_colors": {"identity":"#5f6b78","rotation":"#9b2f4f","reflection":"#277d83","inversion":"#7a5aa6","improper_rotation":"#c06a2b"},
+  "molecule": {
+    "xyz": "4\nBoron trifluoride\nB 0 0 0\nF 1.31 0 0\nF -0.655 1.134493 0\nF -0.655 -1.134493 0\n"
+  },
+  "operations": [
+    {
+      "label": "E",
+      "type": "identity"
+    },
+    {
+      "label": "C₃(+120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 1,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "C₃(−120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 2,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "C₂′(1)",
+      "type": "rotation",
+      "order": 2,
+      "axis": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "label": "C₂′(2)",
+      "type": "rotation",
+      "order": 2,
+      "axis": [
+        -0.5,
+        0.8660254,
+        0
+      ]
+    },
+    {
+      "label": "C₂′(3)",
+      "type": "rotation",
+      "order": 2,
+      "axis": [
+        -0.5,
+        -0.8660254,
+        0
+      ]
+    },
+    {
+      "label": "σₕ(xy)",
+      "type": "reflection",
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "S₃(+120°)",
+      "type": "improper-rotation",
+      "order": 3,
+      "power": 1,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "S₃(−120°)",
+      "type": "improper-rotation",
+      "order": 3,
+      "power": 2,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "σᵥ(1)",
+      "type": "reflection",
+      "axis": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "σᵥ(2)",
+      "type": "reflection",
+      "axis": [
+        -0.8660254,
+        -0.5,
+        0
+      ]
+    },
+    {
+      "label": "σᵥ(3)",
+      "type": "reflection",
+      "axis": [
+        0.8660254,
+        -0.5,
+        0
+      ]
+    }
+  ]
+}

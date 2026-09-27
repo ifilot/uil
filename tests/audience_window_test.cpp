@@ -1,15 +1,33 @@
 #include "ui/audience_window.hpp"
+#include "ui/atomic_orbital_widget.hpp"
+#include "ui/interactive_figure_widget.hpp"
+#include "ui/molecule_widget.hpp"
+#include "ui/molecular_symmetry_widget.hpp"
 
 #include <QApplication>
+#include <QAbstractItemView>
+#include <QListWidget>
+#include <QTabWidget>
+#include <QTabBar>
+#include <QCheckBox>
+#include <QFile>
+#include <QMenu>
+#include <QTimer>
 #include <QContextMenuEvent>
 #include <QDir>
+#include <QGuiApplication>
+#include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPointer>
 #include <QSettings>
+#include <QSlider>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QToolButton>
+
+#include <algorithm>
 
 namespace {
 void send_mouse_move(AudienceWindow* window, const QPointF& position) {
@@ -30,6 +48,7 @@ class AudienceWindowTest final : public QObject {
 private slots:
     void initTestCase();
     void cleanup();
+    void opengl_compositor_is_primed_before_first_show();
     void navigation_and_tool_shortcuts();
     void shortcut_tooltips_are_exposed();
     void pointer_size_defaults_clamps_and_persists();
@@ -37,6 +56,19 @@ private slots:
     void pointer_motion_restarts_timeout();
     void annotation_coordinates_respect_letterboxing();
     void blank_screen_shortcuts_change_painted_output();
+    void molecule_right_click_suspends_surface_while_menu_is_open();
+    void molecule_tool_switch_restores_interaction_without_extra_click();
+    void interactive_figure_controls_and_tool_switching();
+    void atomic_orbital_controls_and_tool_switching();
+    /** @brief Guards symmetry masking, world axes, cursor, and focus-independent navigation. */
+    void molecular_symmetry_overlay_preserves_presentation_controls();
+    /** @brief Verifies independent controls and lifecycle of multiple orbital overlays. */
+    void molecular_symmetry_settings_tabs_accept_mouse_clicks();
+    void multiple_atomic_orbitals();
+    void harmonic_wavepacket_controls_update_status();
+    void harmonic_basis_controls_update_phase_status();
+    void particle_in_box_basis_slider_updates_fit_status();
+    void harmonic_displaced_basis_slider_updates_fit_status();
 
 private:
     QTemporaryDir settings_directory_;
@@ -57,12 +89,19 @@ void AudienceWindowTest::cleanup() {
     QSettings settings;
     settings.clear();
     settings.sync();
-    for (QWidget* widget : QApplication::topLevelWidgets()) {
+    for (QWidget* widget : QApplication::allWidgets()) {
         if (widget->objectName() == QStringLiteral("featureMenuPanel")) {
             widget->close();
         }
     }
     QCoreApplication::processEvents();
+}
+
+void AudienceWindowTest::opengl_compositor_is_primed_before_first_show() {
+    AudienceWindow window;
+    const auto orbitals = window.findChildren<AtomicOrbitalWidget*>();
+    QCOMPARE(orbitals.size(), 1);
+    QVERIFY(orbitals.constFirst()->isHidden());
 }
 
 void AudienceWindowTest::navigation_and_tool_shortcuts() {
@@ -75,12 +114,14 @@ void AudienceWindowTest::navigation_and_tool_shortcuts() {
     QSignalSpy media_spy(&window, &AudienceWindow::play_pause_requested);
 
     QTest::keyClick(&window, Qt::Key_Right);
+    QTest::keyClick(&window, Qt::Key_Down);
     QTest::keyClick(&window, Qt::Key_Left);
+    QTest::keyClick(&window, Qt::Key_Up);
     QTest::keyClick(&window, Qt::Key_Home);
     QTest::keyClick(&window, Qt::Key_End);
     QTest::keyClick(&window, Qt::Key_Return);
-    QCOMPARE(next_spy.size(), 1);
-    QCOMPARE(previous_spy.size(), 1);
+    QCOMPARE(next_spy.size(), 2);
+    QCOMPARE(previous_spy.size(), 2);
     QCOMPARE(first_spy.size(), 1);
     QCOMPARE(last_spy.size(), 1);
     QCOMPARE(media_spy.size(), 1);
@@ -108,14 +149,9 @@ void AudienceWindowTest::shortcut_tooltips_are_exposed() {
     QApplication::sendEvent(&window, &event);
     QCoreApplication::processEvents();
 
-    QWidget* panel = nullptr;
-    for (QWidget* widget : QApplication::topLevelWidgets()) {
-        if (widget->objectName() == QStringLiteral("featureMenuPanel")) {
-            panel = widget;
-            break;
-        }
-    }
+    QWidget* panel = window.findChild<QWidget*>(QStringLiteral("featureMenuPanel"));
     QVERIFY(panel);
+    QVERIFY(!panel->isWindow());
 
     QStringList tooltips;
     for (QToolButton* button : panel->findChildren<QToolButton*>()) {
@@ -213,6 +249,620 @@ void AudienceWindowTest::blank_screen_shortcuts_change_painted_output() {
     QCOMPARE(render_window().pixelColor(400, 225), QColor(Qt::white));
     QTest::keyClick(&window, Qt::Key_W);
     QCOMPARE(render_window().pixelColor(400, 225), QColor(20, 80, 180));
+}
+
+void AudienceWindowTest::molecule_right_click_suspends_surface_while_menu_is_open() {
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+        QSKIP("The offscreen Qt platform cannot safely expose QOpenGLWidget");
+    }
+
+    AudienceWindow window;
+    window.resize(800, 450);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(QColor(235, 240, 245));
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    MoleculeGeometry geometry;
+    geometry.atoms.push_back(MoleculeAtom{
+        QStringLiteral("H"), QVector3D(), QVector3D(0.1f, 0.0f, 0.0f)});
+    window.set_molecule_overlay(geometry, QRectF(0.2, 0.2, 0.6, 0.6));
+    window.show();
+    QTest::qWait(100);
+
+    MoleculeWidget* molecule = dynamic_cast<MoleculeWidget*>(
+        window.findChild<QWidget*>(QStringLiteral("moleculeWidget")));
+    QVERIFY(molecule);
+    QVERIFY(molecule->isVisible());
+    molecule->set_vibration_playing(true);
+    QVERIFY(molecule->vibration_playing());
+
+    QTest::mouseClick(molecule, Qt::RightButton, Qt::NoModifier, molecule->rect().center());
+
+    QWidget* menu = window.findChild<QWidget*>(QStringLiteral("featureMenuPanel"));
+    QVERIFY(menu);
+    QVERIFY(!menu->isWindow());
+    QVERIFY(menu->isVisible());
+    QVERIFY(molecule->isHidden());
+    QVERIFY(!molecule->vibration_playing());
+
+    QPointer<QWidget> guarded_menu = menu;
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
+    QTRY_VERIFY(guarded_menu.isNull());
+    QTRY_VERIFY(molecule->isVisible());
+    QTRY_VERIFY(molecule->vibration_playing());
+}
+
+void AudienceWindowTest::molecule_tool_switch_restores_interaction_without_extra_click() {
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+        QSKIP("The offscreen Qt platform cannot safely expose QOpenGLWidget");
+    }
+
+    AudienceWindow window;
+    window.resize(800, 450);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(QColor(235, 240, 245));
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    MoleculeGeometry geometry;
+    geometry.atoms.push_back(MoleculeAtom{QStringLiteral("H"), QVector3D(), QVector3D()});
+    window.set_molecule_overlay(geometry, QRectF(0.2, 0.2, 0.6, 0.6));
+    window.show();
+    QTest::qWait(100);
+
+    MoleculeWidget* molecule = dynamic_cast<MoleculeWidget*>(
+        window.findChild<QWidget*>(QStringLiteral("moleculeWidget")));
+    QVERIFY(molecule);
+    QVERIFY(molecule->isVisible());
+
+    QTest::mouseClick(molecule, Qt::RightButton, Qt::NoModifier, molecule->rect().center());
+    QWidget* menu = window.findChild<QWidget*>(QStringLiteral("featureMenuPanel"));
+    QVERIFY(menu);
+
+    QToolButton* pointer_button = nullptr;
+    for (QToolButton* button : menu->findChildren<QToolButton*>()) {
+        if (button->text() == QStringLiteral("Laser\npointer")) {
+            pointer_button = button;
+            break;
+        }
+    }
+    QVERIFY(pointer_button);
+    pointer_button->click();
+    QVERIFY(window.is_pointer_tool_selected());
+    QVERIFY(menu->isVisible());
+
+    QPointer<QWidget> pointer_menu = menu;
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
+    QTRY_VERIFY(pointer_menu.isNull());
+    QVERIFY(molecule->isHidden());
+
+    const QPoint menu_position(100, 100);
+    QContextMenuEvent context_event(
+        QContextMenuEvent::Mouse, menu_position, window.mapToGlobal(menu_position));
+    QApplication::sendEvent(&window, &context_event);
+    menu = window.findChild<QWidget*>(QStringLiteral("featureMenuPanel"));
+    QVERIFY(menu);
+
+    QToolButton* cursor_button = nullptr;
+    for (QToolButton* button : menu->findChildren<QToolButton*>()) {
+        if (button->text() == QStringLiteral("Classic\npointer")) {
+            cursor_button = button;
+            break;
+        }
+    }
+    QVERIFY(cursor_button);
+    QPointer<QWidget> cursor_menu = menu;
+    cursor_button->click();
+    QTRY_VERIFY(cursor_menu.isNull());
+    QTRY_VERIFY(molecule->isVisible());
+
+    QTest::mousePress(molecule, Qt::LeftButton, Qt::NoModifier, molecule->rect().center());
+    QCOMPARE(molecule->cursor().shape(), Qt::ClosedHandCursor);
+    QTest::mouseRelease(molecule, Qt::LeftButton, Qt::NoModifier, molecule->rect().center());
+    QCOMPARE(molecule->cursor().shape(), Qt::OpenHandCursor);
+}
+
+void AudienceWindowTest::interactive_figure_controls_and_tool_switching() {
+    AudienceWindow window;
+    window.resize(800, 450);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(QColor(235, 240, 245));
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    InteractiveFigureDefinition definition;
+    definition.title = QStringLiteral("A moving sine wave");
+    definition.x_label = QStringLiteral("$x\\;\\mathrm{(radians)}$");
+    definition.y_label = QStringLiteral("$y$");
+    definition.background_svg = QByteArrayLiteral(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 500'>"
+        "<rect width='800' height='500' fill='#ffffff'/></svg>");
+    window.set_interactive_figure_overlay(definition, QRectF(0.15, 0.15, 0.7, 0.7));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* figure = window.findChild<InteractiveFigureWidget*>(
+        QStringLiteral("interactiveFigureWidget"));
+    QVERIFY(figure);
+    QVERIFY(figure->isVisible());
+    QVERIFY(figure->font().pixelSize() >= 28);
+    auto* amplitude = figure->findChild<QSlider*>(QStringLiteral("figureAmplitudeSlider"));
+    QVERIFY(amplitude);
+    QCOMPARE(amplitude->focusPolicy(), Qt::NoFocus);
+    QVERIFY(!figure->findChild<QWidget*>(QStringLiteral("figureColorButton")));
+    const int initial_value = amplitude->value();
+    amplitude->setValue(std::min(amplitude->maximum(), initial_value + 100));
+    QVERIFY(amplitude->value() != initial_value);
+
+    QSignalSpy next_spy(&window, &AudienceWindow::next_requested);
+    QSignalSpy previous_spy(&window, &AudienceWindow::previous_requested);
+    window.activateWindow();
+    window.setFocus();
+    QCoreApplication::processEvents();
+    const bool window_has_keyboard_focus = QApplication::focusWidget() == &window;
+    QTest::mouseClick(
+        amplitude, Qt::LeftButton, Qt::NoModifier, amplitude->rect().center());
+    if (window_has_keyboard_focus) QCOMPARE(QApplication::focusWidget(), &window);
+    const int clicked_value = amplitude->value();
+    QTest::keyClick(&window, Qt::Key_Right);
+    QTest::keyClick(&window, Qt::Key_Down);
+    QTest::keyClick(&window, Qt::Key_PageDown);
+    QTest::keyClick(&window, Qt::Key_Left);
+    QTest::keyClick(&window, Qt::Key_Up);
+    QTest::keyClick(&window, Qt::Key_PageUp);
+    QCOMPARE(next_spy.size(), 3);
+    QCOMPARE(previous_spy.size(), 3);
+    QCOMPARE(amplitude->value(), clicked_value);
+
+    window.set_pen_tool();
+    QVERIFY(figure->isHidden());
+    window.set_cursor_tool();
+    QVERIFY(figure->isVisible());
+
+    const QPoint figure_center = figure->geometry().center();
+    window.begin_slide_transition();
+    QVERIFY(figure->isVisible());
+
+    QImage next_slide(1600, 900, QImage::Format_RGB32);
+    next_slide.fill(QColor(20, 120, 160));
+    window.set_slide_image(QStringLiteral("deck:1:1600x900:0"), next_slide);
+    window.clear_interactive_figure_overlay();
+    window.repaint();
+    QVERIFY(figure->isHidden());
+    const QImage swapped_frame = window.grab().toImage();
+    QCOMPARE(swapped_frame.pixelColor(figure_center), QColor(20, 120, 160));
+}
+
+void AudienceWindowTest::atomic_orbital_controls_and_tool_switching() {
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+        QSKIP("The offscreen Qt platform cannot safely expose QOpenGLWidget");
+    }
+
+    AudienceWindow window;
+    window.resize(900, 520);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(QColor(235, 240, 245));
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    AtomicOrbitalDefinition definition;
+    definition.title = QStringLiteral("2p z slice");
+    definition.orbital = QStringLiteral("2pz");
+    definition.n = 2;
+    definition.l = 1;
+    definition.m = 0;
+    definition.grid_size = 33;
+    definition.plane = AtomicOrbitalDefinition::Plane::XZ;
+    window.set_atomic_orbital_overlay(definition, QRectF(0.08, 0.1, 0.84, 0.8));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* orbital = window.findChild<AtomicOrbitalWidget*>(
+        QStringLiteral("atomicOrbitalWidget"));
+    QVERIFY(orbital);
+    QTRY_VERIFY(orbital->isVisible());
+    QCOMPARE(orbital->definition().orbital, QStringLiteral("2pz"));
+    auto* slider = orbital->findChild<QSlider*>(
+        QStringLiteral("atomicOrbitalOffsetSlider"));
+    QVERIFY(slider);
+    QCOMPARE(slider->focusPolicy(), Qt::NoFocus);
+    const int initial_value = slider->value();
+    slider->setValue(std::min(slider->maximum(), initial_value + 125));
+    QVERIFY(slider->value() != initial_value);
+    QVERIFY(orbital->plane_offset() > 0.0);
+
+    QSignalSpy next_spy(&window, &AudienceWindow::next_requested);
+    QSignalSpy previous_spy(&window, &AudienceWindow::previous_requested);
+    window.activateWindow();
+    window.setFocus();
+    QCoreApplication::processEvents();
+    const bool window_has_keyboard_focus = QApplication::focusWidget() == &window;
+    QTest::mouseClick(
+        slider, Qt::LeftButton, Qt::NoModifier, slider->rect().center());
+    if (window_has_keyboard_focus) QCOMPARE(QApplication::focusWidget(), &window);
+    const int clicked_value = slider->value();
+    QTest::keyClick(&window, Qt::Key_Right);
+    QTest::keyClick(&window, Qt::Key_PageDown);
+    QTest::keyClick(&window, Qt::Key_Left);
+    QTest::keyClick(&window, Qt::Key_PageUp);
+    QCOMPARE(next_spy.size(), 2);
+    QCOMPARE(previous_spy.size(), 2);
+    QCOMPARE(slider->value(), clicked_value);
+
+    window.set_pen_tool();
+    QVERIFY(orbital->isHidden());
+    window.set_cursor_tool();
+    QTRY_VERIFY(orbital->isVisible());
+}
+
+void AudienceWindowTest::molecular_symmetry_overlay_preserves_presentation_controls() {
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+        QSKIP("The offscreen Qt platform cannot safely expose QOpenGLWidget");
+    }
+
+    AudienceWindow window;
+    window.resize(900, 520);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(QColor(20, 150, 120));
+    window.set_slide_image(QStringLiteral("symmetry-slide"), slide);
+
+    MolecularSymmetryDefinition definition;
+    definition.title = QStringLiteral("Atom");
+    definition.point_group = QStringLiteral("C1");
+    definition.geometry.atoms = {
+        MoleculeAtom{QStringLiteral("H"), QVector3D(), QVector3D()},
+    };
+    definition.operations = {
+        MolecularSymmetryOperation{QStringLiteral("E"),
+                                   MolecularSymmetryOperationType::Identity},
+    };
+    QVERIFY(definition.is_valid());
+    const QRectF overlay_rect(0.08, 0.1, 0.84, 0.8);
+    window.set_molecular_symmetry_overlay(definition, overlay_rect);
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* symmetry = window.findChild<MolecularSymmetryWidget*>(
+        QStringLiteral("molecularSymmetryWidget"));
+    auto* molecule = dynamic_cast<MoleculeWidget*>(window.findChild<QWidget*>(
+        QStringLiteral("symmetryMoleculeOpenGLWidget")));
+    QVERIFY(symmetry);
+    QVERIFY(molecule);
+    QTRY_VERIFY(symmetry->isVisible());
+    QVERIFY(molecule->world_axes_visible());
+
+    const QPoint transparent_margin = symmetry->geometry().topLeft() + QPoint(2, 2);
+    const QImage frame = window.grab().toImage();
+    QCOMPARE(frame.pixelColor(transparent_margin), QColor(Qt::white));
+
+    QSignalSpy next_spy(&window, &AudienceWindow::next_requested);
+    QSignalSpy previous_spy(&window, &AudienceWindow::previous_requested);
+    window.activateWindow();
+    window.setFocus();
+    QTest::keyClick(molecule, Qt::Key_Right);
+    QTest::keyClick(molecule, Qt::Key_Down);
+    QTest::keyClick(molecule, Qt::Key_PageDown);
+    QTest::keyClick(molecule, Qt::Key_Left);
+    QTest::keyClick(molecule, Qt::Key_Up);
+    QTest::keyClick(molecule, Qt::Key_PageUp);
+    QCOMPARE(next_spy.size(), 3);
+    QCOMPARE(previous_spy.size(), 3);
+
+    window.setCursor(QCursor(Qt::BlankCursor));
+    const QPointF local_position(5.0, 5.0);
+    QMouseEvent move_event(QEvent::MouseMove, local_position,
+                           molecule->mapToGlobal(local_position.toPoint()),
+                           Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(molecule, &move_event);
+    QVERIFY(window.cursor().shape() != Qt::BlankCursor);
+}
+
+void AudienceWindowTest::molecular_symmetry_settings_tabs_accept_mouse_clicks() {
+    if (QGuiApplication::platformName() == "offscreen")
+        QSKIP("OpenGL display required");
+    AudienceWindow window;
+    QFile theme(QStringLiteral(UIL_TEST_SOURCE_DIR "/resources/styles/vscode.qss"));
+    QVERIFY(theme.open(QIODevice::ReadOnly));
+    window.setStyleSheet(QString::fromUtf8(theme.readAll()));
+    QFile payload(QStringLiteral(UIL_TEST_SOURCE_DIR "/examples/molecular-symmetry/water.uilsym"));
+    QVERIFY(payload.open(QIODevice::ReadOnly));
+    MolecularSymmetryDefinition definition;
+    QString error;
+    QVERIFY(parse_molecular_symmetry(payload.readAll(), &definition, &error));
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image("orbital-menu", slide);
+    window.set_molecular_symmetry_overlay(definition, QRectF(0.08, 0.1, 0.84, 0.8));
+    window.enter_fullscreen();
+    QTest::qWait(200);
+    auto* tabs = window.findChild<QTabWidget*>(QStringLiteral("symmetryControlTabs"));
+    QVERIFY(tabs);
+    // The page must fill the tab pane at every CI screen size; dark application
+    // backgrounds must not leak through the rounded corners.
+    QVERIFY(tabs->width() > 0);
+    QVERIFY(std::abs(tabs->currentWidget()->width() - tabs->contentsRect().width()) <= 4);
+    const QImage panel_image = tabs->grab().toImage();
+    int dark_pixels = 0;
+    for (int y = 0; y < panel_image.height(); ++y) {
+        for (int x = 0; x < panel_image.width(); ++x) {
+            const QColor color = panel_image.pixelColor(x, y);
+            if (color.red() < 33 && color.green() < 33 && color.blue() < 33) ++dark_pixels;
+        }
+    }
+    QCOMPARE(dark_pixels, 0);
+    auto click = [&](QWidget* target, QPoint point) {
+        QTest::mouseClick(window.windowHandle(), Qt::LeftButton, Qt::NoModifier,
+                          target->mapTo(&window, point));
+    };
+    click(tabs->tabBar(), tabs->tabBar()->tabRect(1).center());
+    QCOMPARE(tabs->currentIndex(), 1);
+    auto* atoms = window.findChild<QListWidget*>(QStringLiteral("symmetryOrbitalAtom"));
+    QVERIFY(atoms);
+    click(atoms->viewport(), atoms->visualItemRect(atoms->item(1)).center());
+    QCOMPARE(atoms->currentRow(), 1);
+    auto* s = window.findChild<QCheckBox*>(QStringLiteral("symmetryOrbital_1s"));
+    QVERIFY(s->isVisible());
+    QCoreApplication::processEvents();
+    click(s, QPoint(7, s->height() / 2));
+    auto* molecule = dynamic_cast<MoleculeWidget*>(window.findChild<QWidget*>(QStringLiteral("symmetryMoleculeOpenGLWidget")));
+    QVERIFY(molecule);
+    QCOMPARE(molecule->orbitals().last().atom, 2);
+    QCOMPARE(molecule->orbitals().last().orbital, QStringLiteral("1s"));
+    QTest::mouseClick(window.windowHandle(), Qt::LeftButton, Qt::NoModifier, QPoint(20, 20));
+    QCOMPARE(tabs->currentIndex(), 1);
+    QVERIFY(atoms->isVisible());
+    if (!qEnvironmentVariable("UIL_ORBITAL_TEST_IMAGES").isEmpty()) {
+        QVERIFY(window.grab().save(QDir(qEnvironmentVariable("UIL_ORBITAL_TEST_IMAGES")).filePath("orbital-settings-slide.png")));
+    }
+    click(tabs->tabBar(), tabs->tabBar()->tabRect(0).center());
+    QCOMPARE(tabs->currentIndex(), 0);
+    QCOMPARE(molecule->orbitals().size(), 2);
+
+}
+
+void AudienceWindowTest::multiple_atomic_orbitals() {
+  if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+    QSKIP("The offscreen Qt platform cannot safely expose QOpenGLWidget");
+  }
+  AudienceWindow window;
+  window.resize(1280, 720);
+  QImage slide(1600, 900, QImage::Format_RGB32);
+  slide.fill(Qt::white);
+  window.set_slide_image(QStringLiteral("comparison"), slide);
+  AtomicOrbitalDefinition first;
+  first.grid_size = 33;
+  AtomicOrbitalDefinition second = first;
+  second.orbital = QStringLiteral("2s");
+  second.n = 2;
+  window.set_atomic_orbital_overlays(
+      {{first, QRectF(0.02, 0.2, 0.46, 0.5)}, {second, QRectF(0.52, 0.2, 0.46, 0.5)}});
+  window.show();
+  QCoreApplication::processEvents();
+  const auto orbitals = window.findChildren<AtomicOrbitalWidget*>();
+  QCOMPARE(orbitals.size(), 2);
+  for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isVisible());
+  QVERIFY(!orbitals[0]->geometry().intersects(orbitals[1]->geometry()));
+  QCOMPARE(orbitals[0]->definition().orbital, QStringLiteral("1s"));
+  QCOMPARE(orbitals[1]->definition().orbital, QStringLiteral("2s"));
+  const double second_offset = orbitals[1]->plane_offset();
+  auto* slider = orbitals[0]->findChild<QSlider*>(QStringLiteral("atomicOrbitalOffsetSlider"));
+  QVERIFY(slider);
+  slider->setValue(slider->maximum());
+  QVERIFY(orbitals[0]->plane_offset() > second_offset);
+  QCOMPARE(orbitals[1]->plane_offset(), second_offset);
+  QTest::mouseClick(orbitals[1], Qt::RightButton, Qt::NoModifier, orbitals[1]->rect().center());
+  QPointer<QWidget> menu = window.findChild<QWidget*>(QStringLiteral("featureMenuPanel"));
+  QVERIFY(menu);
+  QVERIFY(menu->isVisible());
+  for (auto* orbital : orbitals) QVERIFY(orbital->isHidden());
+  QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
+  QTRY_VERIFY(menu.isNull());
+  for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isVisible());
+  window.set_pen_tool();
+  for (auto* orbital : orbitals) QVERIFY(orbital->isHidden());
+  window.set_cursor_tool();
+  for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isVisible());
+  window.toggle_black_screen();
+  for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isHidden());
+  window.toggle_black_screen();
+  for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isVisible());
+  window.resize(1000, 600);
+  QCoreApplication::processEvents();
+  QVERIFY(!orbitals[0]->geometry().intersects(orbitals[1]->geometry()));
+  window.set_atomic_orbital_overlay(first, QRectF(0.1, 0.1, 0.8, 0.8));
+  QVERIFY(orbitals[0]->isVisible());
+  QVERIFY(orbitals[1]->isHidden());
+  // Cached definitions preserve the user's controls across controller refreshes.
+  const double offset = orbitals[0]->plane_offset();
+  window.set_atomic_orbital_overlay(first, QRectF(0.1, 0.1, 0.8, 0.8));
+  QCOMPARE(orbitals[0]->plane_offset(), offset);
+  // Even ready geometry must wait for the correct PDF page; resize keys share identity.
+  window.set_atomic_orbital_overlays({{second, QRectF(0.1, 0.1, 0.8, 0.8)}}, {},
+                                     "deck:2:1600x900:0");
+  QVERIFY(orbitals[0]->isHidden());
+  window.set_slide_image("deck:1:1600x900:0", slide);
+  QVERIFY(orbitals[0]->isHidden());
+  window.set_slide_image("deck:2:800x450:0", slide);
+  QTRY_VERIFY(orbitals[0]->isVisible());
+  QCOMPARE(orbitals[0]->definition().n, 2);
+  // A completion after clearing must never resurrect an overlay.
+  auto pending = first;
+  pending.n = 5;
+  window.set_atomic_orbital_overlay(pending, QRectF(0.1, 0.1, 0.8, 0.8));
+  window.clear_slide_image();
+  for (auto* orbital : orbitals) QVERIFY(orbital->isHidden());
+}
+
+void AudienceWindowTest::harmonic_wavepacket_controls_update_status() {
+    AudienceWindow window;
+    window.resize(1100, 700);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    InteractiveFigureDefinition definition;
+    definition.kind = InteractiveFigureDefinition::Kind::HarmonicBondWavepacket;
+    definition.title = QStringLiteral("A displaced harmonic-bond wavepacket");
+    definition.background_svg = QByteArrayLiteral(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600'>"
+        "<rect width='800' height='600' fill='#f8fafc'/></svg>");
+    definition.x_min = -5.0;
+    definition.x_max = 5.0;
+    definition.x_label = QStringLiteral("$x = q / \\ell$");
+    definition.potential_label = QStringLiteral("$U/(\\hbar\\omega)$");
+    definition.density_label = QStringLiteral("$\\ell|\\psi|^2$");
+    definition.animate_initially = false;
+    window.set_interactive_figure_overlay(definition, QRectF(0.08, 0.08, 0.84, 0.84));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* figure = window.findChild<InteractiveFigureWidget*>(
+        QStringLiteral("interactiveFigureWidget"));
+    QVERIFY(figure);
+    auto* status = figure->findChild<QLabel*>(QStringLiteral("figureStatusLabel"));
+    auto* phase = figure->findChild<QSlider*>(QStringLiteral("figureFrequencySlider"));
+    auto* stretch = figure->findChild<QSlider*>(QStringLiteral("figureAmplitudeSlider"));
+    QVERIFY(status);
+    QVERIFY(phase);
+    QVERIFY(stretch);
+    QVERIFY(!figure->findChild<QWidget*>(QStringLiteral("figureColorButton")));
+    QVERIFY(status->isVisible());
+    QVERIFY(status->text().contains(QStringLiteral("maximum stretch")));
+
+    phase->setValue(250);
+    QVERIFY(status->text().contains(QStringLiteral("crossing equilibrium inward")));
+    QVERIFY(status->text().contains(QStringLiteral("P = -3.00")));
+    stretch->setValue(0);
+    QVERIFY(status->text().contains(QStringLiteral("P = -0.50")));
+}
+
+void AudienceWindowTest::harmonic_basis_controls_update_phase_status() {
+    AudienceWindow window;
+    window.resize(1100, 700);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    InteractiveFigureDefinition definition;
+    definition.kind = InteractiveFigureDefinition::Kind::HarmonicBasisStates;
+    definition.title = QStringLiteral("A coherent packet and its real basis components");
+    definition.background_svg = QByteArrayLiteral(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600'>"
+        "<rect width='800' height='600' fill='#f8fafc'/></svg>");
+    definition.x_min = -5.0;
+    definition.x_max = 5.0;
+    definition.x_label = QStringLiteral("$x = q / \\ell$");
+    definition.phase_initial = 0.5;
+    definition.animate_initially = false;
+    window.set_interactive_figure_overlay(definition, QRectF(0.08, 0.08, 0.84, 0.84));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* figure = window.findChild<InteractiveFigureWidget*>(
+        QStringLiteral("interactiveFigureWidget"));
+    QVERIFY(figure);
+    auto* status = figure->findChild<QLabel*>(QStringLiteral("figureStatusLabel"));
+    auto* phase = figure->findChild<QSlider*>(QStringLiteral("figureFrequencySlider"));
+    QVERIFY(status);
+    QVERIFY(phase);
+    QVERIFY(!figure->findChild<QWidget*>(QStringLiteral("figureColorButton")));
+    QVERIFY(status->text().contains(QStringLiteral("τ = 0.500")));
+    phase->setValue(750);
+    QVERIFY(status->text().contains(QStringLiteral("τ = 0.750")));
+}
+
+void AudienceWindowTest::particle_in_box_basis_slider_updates_fit_status() {
+    AudienceWindow window;
+    window.resize(1100, 700);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    InteractiveFigureDefinition definition;
+    definition.kind = InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion;
+    definition.title = QStringLiteral("Fitting a step with box eigenfunctions");
+    definition.background_svg = QByteArrayLiteral(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 520'>"
+        "<rect width='800' height='520' fill='#f8fafc'/></svg>");
+    definition.x_min = 0.0;
+    definition.x_max = 1.0;
+    definition.y_min = -0.25;
+    definition.y_max = 1.25;
+    definition.x_label = QStringLiteral("$x$");
+    definition.y_label = QStringLiteral("$f(x), S_N(x)$");
+    window.set_interactive_figure_overlay(definition, QRectF(0.08, 0.08, 0.84, 0.84));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* figure = window.findChild<InteractiveFigureWidget*>(
+        QStringLiteral("interactiveFigureWidget"));
+    QVERIFY(figure);
+    auto* status = figure->findChild<QLabel*>(QStringLiteral("figureStatusLabel"));
+    auto* basis_count = figure->findChild<QSlider*>(QStringLiteral("figureAmplitudeSlider"));
+    QVERIFY(status);
+    QVERIFY(basis_count);
+    QCOMPARE(basis_count->minimum(), 1);
+    QCOMPARE(basis_count->maximum(), 25);
+    QVERIFY(status->text().contains(QStringLiteral("40.5%")));
+
+    for (int n = 1; n <= 25; ++n) {
+        basis_count->setValue(n);
+        QCoreApplication::processEvents();
+        QVERIFY2(status->text().contains(QStringLiteral("= %1").arg(n)),
+                 qPrintable(status->text()));
+    }
+    basis_count->setValue(5);
+    QVERIFY(status->text().contains(QStringLiteral("= 5")));
+    QVERIFY(status->text().contains(QStringLiteral("87.2%")));
+    basis_count->setValue(25);
+    QVERIFY(status->text().contains(QStringLiteral("= 25")));
+    QVERIFY(status->text().contains(QStringLiteral("97.5%")));
+    basis_count->setValue(16);
+    QCoreApplication::processEvents();
+}
+
+void AudienceWindowTest::harmonic_displaced_basis_slider_updates_fit_status() {
+    AudienceWindow window;
+    window.resize(1100, 700);
+    QImage slide(1600, 900, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image(QStringLiteral("deck:0:1600x900:0"), slide);
+
+    InteractiveFigureDefinition definition;
+    definition.kind = InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion;
+    definition.title = QStringLiteral("Fitting a stretched harmonic-oscillator state");
+    definition.background_svg = QByteArrayLiteral(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 520'>"
+        "<rect width='800' height='520' fill='#f8fafc'/></svg>");
+    definition.x_min = -6.0;
+    definition.x_max = 6.0;
+    definition.y_min = -0.2;
+    definition.y_max = 0.9;
+    definition.x_label = QStringLiteral("$y=x/\\alpha$");
+    definition.y_label = QStringLiteral("$\\Phi(y), S_N(y)$");
+    definition.displacement = 2.0;
+    window.set_interactive_figure_overlay(definition, QRectF(0.08, 0.08, 0.84, 0.84));
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto* figure = window.findChild<InteractiveFigureWidget*>(
+        QStringLiteral("interactiveFigureWidget"));
+    QVERIFY(figure);
+    auto* status = figure->findChild<QLabel*>(QStringLiteral("figureStatusLabel"));
+    auto* basis_count = figure->findChild<QSlider*>(QStringLiteral("figureAmplitudeSlider"));
+    QVERIFY(status);
+    QVERIFY(basis_count);
+    QCOMPARE(basis_count->minimum(), 1);
+    QCOMPARE(basis_count->maximum(), 25);
+    QVERIFY2(status->text().contains(QStringLiteral("13.53%")), qPrintable(status->text()));
+
+    for (int n = 1; n <= 25; ++n) {
+        basis_count->setValue(n);
+        QCoreApplication::processEvents();
+        QVERIFY2(status->text().contains(QStringLiteral("= %1").arg(n)),
+                 qPrintable(status->text()));
+    }
+    basis_count->setValue(5);
+    QVERIFY(status->text().contains(QStringLiteral("94.73%")));
+    basis_count->setValue(25);
+    QVERIFY(status->text().contains(QStringLiteral("100.00%")));
 }
 
 QTEST_MAIN(AudienceWindowTest)

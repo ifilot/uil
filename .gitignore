@@ -27,3 +27,4 @@ dev/
 SPEC.md
 .codex
 .agents
+.env

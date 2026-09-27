@@ -1,0 +1,66 @@
+{
+  "format": "uil.molecular-symmetry",
+  "version": 1,
+  "title": "Ammonia",
+  "point_group": "C3v",
+  "animation_duration_ms": 1000,
+  "operation_colors": {"identity":"#5f6b78","rotation":"#9b2f4f","reflection":"#277d83","inversion":"#7a5aa6","improper_rotation":"#c06a2b"},
+  "molecule": {
+    "xyz": "4\nAmmonia\nN 0 0 0\nH 0.94 0 -0.4\nH -0.47 0.814063 -0.4\nH -0.47 -0.814063 -0.4\n"
+  },
+  "operations": [
+    {
+      "label": "E",
+      "type": "identity"
+    },
+    {
+      "label": "C₃(+120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 1,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "C₃(−120°)",
+      "type": "rotation",
+      "order": 3,
+      "power": 2,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "label": "σᵥ(1)",
+      "type": "reflection",
+      "axis": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "σᵥ(2)",
+      "type": "reflection",
+      "axis": [
+        -0.8660254,
+        -0.5,
+        0
+      ]
+    },
+    {
+      "label": "σᵥ(3)",
+      "type": "reflection",
+      "axis": [
+        0.8660254,
+        -0.5,
+        0
+      ]
+    }
+  ]
+}

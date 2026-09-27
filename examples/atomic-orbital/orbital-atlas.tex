@@ -1,0 +1,36 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[margin=16mm]{geometry}
+\usepackage{uilorbital}
+\usepackage{etoolbox}
+\usepackage{fancyhdr}
+\definecolor{garnet}{HTML}{8E1B3E}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\sffamily\color{garnet}\textbf{Atomic orbital atlas}}
+\fancyhead[R]{\sffamily Garnet--Slate}
+\fancyfoot[L]{\sffamily\small Hydrogen-like real orbitals: $1s$ through $5g$}
+\fancyfoot[R]{\sffamily\thepage}
+\setlength{\headheight}{15pt}
+\setlength{\parindent}{0pt}
+\uilorbitalsetup{palette=garnet_slate,layout=surface}
+\newcounter{atlasposition}
+\newcommand{\atlasitem}[1]{%
+  \begin{minipage}[t]{.48\linewidth}
+    \atomicorbital[orbital=#1,width=\linewidth,height=10cm]
+  \end{minipage}%
+  \stepcounter{atlasposition}%
+  \ifnum\value{atlasposition}=4
+    \setcounter{atlasposition}{0}\clearpage
+  \else\ifodd\value{atlasposition}\hfill\else\par\vspace{10mm}\fi\fi
+}
+\newcommand{\atlascontents}{}
+\let\atlasregister\uilorbitalentry
+\renewcommand{\uilorbitalentry}[5]{%
+  \atlasregister{#1}{#2}{#3}{#4}{#5}%
+  \gappto\atlascontents{\atlasitem{#1}}%
+}
+\input{uilorbital-atlas/catalog.tex}
+\let\uilorbitalentry\atlasregister
+\begin{document}
+\atlascontents
+\end{document}

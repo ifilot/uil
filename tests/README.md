@@ -13,6 +13,12 @@ synthetic fixtures, so they do not depend on developer-specific files or network
   resolution, and rejection of missing, unknown, or non-file entries.
 - `qt_pdf_backend_test`: opening both bundled PDF decks, page counts and aspect ratios, rendering
   dimensions, invalid requests, and missing, malformed, or password-protected document errors.
+- `molecule_geometry_test`: XYZ parsing, bond inference, and normal-mode displacement playback.
+- `molecule_widget_test`: molecule toolbar state and visualizer mode controls.
+- `atomic_orbital_cache_test`: geometry-only keys, deduplication, shared array storage, LRU
+  eviction, oversized-volume delivery, replacement of speculative work, safe worker shutdown,
+  and cold-build versus warm-cache timing. The controller tests also exercise rapid jumps
+  through the four-orbital atlas and document changes with geometry still in flight.
 - `slide_cache_test`: hit/miss statistics, replacement accounting, LRU refresh and eviction,
   oversized entries, null images, reset behavior, and adaptive-budget bounds.
 - `spotlight_detector_test`: unavailable detection, initial receiver presence, connect/disconnect
@@ -64,3 +70,15 @@ ctest --test-dir build --output-on-failure
 ```
 
 Run only the fast unit layer with `ctest --test-dir build -L unit --output-on-failure`.
+
+### LaTeX orbital package
+
+Run `python3 tests/latex_orbital_test.py` with pdfLaTeX, LuaLaTeX, and qpdf
+installed. This verifies every atlas identifier, embedded payloads, multiple
+annotations per page, exact custom-poster dimensions, local options, and
+expected error messages. XeLaTeX static-mode checks run when available.
+
+The orbital widget regression also checks GPU-cache hits without new texture uploads, exact
+frame restoration, palette changes, LRU eviction within the 32 MiB per-widget payload budget,
+and reparenting across OpenGL contexts. Atlas navigation asserts that a warm four-orbital
+revisit performs zero geometry uploads.

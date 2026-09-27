@@ -40,6 +40,8 @@ public:
 
     /** @brief Opens a PDF or UIL presentation from @p path. */
     bool open_pdf(const QString& path);
+    /** @brief Reopens the active presentation and restores the closest current page. */
+    bool reload_current_document();
     /** @brief Advances to the next page when one is available. */
     void next_page();
     /** @brief Returns to the previous page when one is available. */
@@ -131,6 +133,10 @@ private:
     RenderRequest render_request_for_page(int page_index) const;
     /** @brief Updates the current and next slide images. */
     void update_visible_slides();
+    /** @brief Queues an atomic audience-frame swap after a short compositor grace period. */
+    void queue_audience_slide_commit(int page_index, const SlideCacheKey& key, const QImage& image);
+    /** @brief Atomically commits a rendered slide and its interactive overlays. */
+    void commit_audience_slide(const QString& texture_key, const QImage& image);
     /** @brief Schedules likely upcoming pages for background rendering. */
     void schedule_predictive_renders();
     /** @brief Queues a page render at an explicit size and priority. */
@@ -147,6 +153,12 @@ private:
     QRectF normalized_pdf_rect(int page_index, const QRectF& rect) const;
     /** @brief Shows the first ready molecule attached to the current page. */
     void update_active_molecule();
+    /** @brief Shows the first ready embedded interactive figure on the current page. */
+    void update_active_interactive_figure();
+    /** @brief Shows all ready embedded atomic orbitals on the current page. */
+    void update_active_atomic_orbital();
+    /** @brief Shows the embedded molecular-symmetry player on the current page. */
+    void update_active_molecular_symmetry();
     /** @brief Starts playback of the current slide's media. */
     void start_media_playback();
     /** @brief Stops active media playback and clears its frame overlay. */
@@ -207,6 +219,8 @@ private:
     bool video_playing_ = false;
     bool loaded_overlays_globally_visible_ = true;
     bool awaiting_first_slide_image_ = false;
+    bool audience_slide_transition_pending_ = false;
+    quint64 audience_slide_commit_sequence_ = 0;
     int current_page_index_ = 0;
     int render_generation_ = 0;
     int media_scan_generation_ = 0;

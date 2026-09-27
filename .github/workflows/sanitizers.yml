@@ -3,6 +3,7 @@ name: Sanitizers
 on:
   push:
     branches:
+      - develop
       - main
       - master
   pull_request:
@@ -30,6 +31,7 @@ jobs:
             qt6-base-dev \
             qt6-pdf-dev \
             qt6-svg-dev \
+            xvfb \
             zlib1g-dev
 
       - name: Configure instrumented build
@@ -45,6 +47,8 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/sanitizers/lsan.supp:print_suppressions=1
-          QT_QPA_PLATFORM: offscreen
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          QT_OPENGL: software
+          QT_QPA_PLATFORM: xcb
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        run: ctest --test-dir build-sanitized --output-on-failure --parallel 2
+        run: xvfb-run --auto-servernum ctest --test-dir build-sanitized --output-on-failure --parallel 2

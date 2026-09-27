@@ -2,6 +2,49 @@
 
 Notable user-facing changes to `uil` are documented here.
 
+## 0.3.0 - Unreleased
+
+### Added
+
+- Added self-contained atomic-orbital objects covering all real hydrogen-like
+  orbitals from 1s through 5g, with signed isosurfaces and configurable phase colors.
+- Added a movable world-fixed sampling plane, logarithmic signed-wavefunction
+  contours, divergent color maps, and a colorbar beside the rotatable orbital.
+- Added a world-fixed, depth-tested black XYZ axis triad with billboarded 3D
+  endpoint labels to the orbital scene.
+- Added the `uilorbital` LaTeX package, version-one JSON schema, authoring guide,
+  and bundled 2s, 2pz, 3dz2, and 4fz3 example presentation.
+- Added one-click red/cyan anaglyph molecule rendering.
+- Added sinusoidal normal-mode playback from optional XYZ displacement vectors.
+- Added a Blender-style X/Y/Z orientation gizmo to molecule views.
+- Added a compact, collapsible molecule toolbar for stereo, vibration, axes, and view reset.
+- Added a bundled interactive molecule presentation that demonstrates every visualizer control.
+- Added rendered molecule stills as fallbacks when the example deck is opened in a PDF reader.
+- Added a subtle gray outline that distinguishes a live interactive molecule from its PDF poster.
+- Added a toolbar toggle for continuous rotation around the molecule's local Z axis.
+- Changed the default molecule camera to look along the negative X axis with positive Z upward.
+- Placed the example water molecule in the YZ plane and added benzene to the bundled tour.
+
+### Fixed
+
+- Render atomic-orbital titles and panel notation as math text, enlarge their
+  controls, and replace fixed-axis mouse rotation with a quaternion arcball.
+- Use a JSON-configurable, power-of-ten absolute maximum for orbital contour
+  colors, with a fixed `1e-8` cutoff and scientific-notation colorbar limits.
+- Generate atomic-orbital PDF posters from the live renderer and label them as
+  interactive, keeping fallback previews consistent with the live object.
+
+- Forward molecule right-clicks immediately to an audience-window overlay and suspend the OpenGL
+  surface while it is visible, preventing delayed menus and black fullscreen compositor frames.
+- Preserve the molecule's last rendered frame beneath the audience controls and while pointer or
+  annotation tools are active instead of reverting to its static PDF poster.
+- Close the audience controls immediately when returning to the classic cursor, allowing the next
+  click-and-drag to rotate the molecule without an extra activation click.
+
+### Changed
+
+- Use OpenGL 3.3 core-profile rendering as the baseline for molecule and atomic-orbital views.
+
 ## 0.2.0 - 2026-09-02
 
 ### Added

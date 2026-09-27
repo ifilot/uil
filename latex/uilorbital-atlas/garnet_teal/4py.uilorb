@@ -1,0 +1,25 @@
+{
+    "contour": {
+        "colormap": "garnet_teal",
+        "levels": 12,
+        "maximum": 0.1
+    },
+    "format": "uil.atomic-orbital",
+    "orbital": "4py",
+    "sampling_plane": {
+        "offset": {
+            "max": 1,
+            "min": -1,
+            "value": 0
+        },
+        "type": "yz"
+    },
+    "surface": {
+        "grid_size": 81,
+        "isovalue": 0,
+        "negative_color": "#177E72",
+        "positive_color": "#8E1B3E"
+    },
+    "title": "Hydrogen-like $4p_y$ orbital",
+    "version": 1
+}

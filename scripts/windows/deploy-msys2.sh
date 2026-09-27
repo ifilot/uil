@@ -741,6 +741,14 @@ copy_example_presentations() {
     local -a example_files=(
         getting-started.pdf
         pointer-and-annotations.pdf
+        molecule-visualizer.pdf
+        water-inline.xyz
+        methane-inline.xyz
+        carbon-dioxide-inline.xyz
+        benzene-inline.xyz
+        interactive-figure.pdf
+        atomic-orbitals.pdf
+        molecular-symmetry.pdf
     )
     local example_file
 
@@ -936,6 +944,11 @@ copy_app_license_files
 
 log "Copying example presentations"
 copy_example_presentations
+
+log "Copying LaTeX packages and orbital atlas"
+[[ -f latex/uilorbital-atlas/manifest.json ]] || die "generate the orbital atlas before deploying"
+mkdir -p "$STAGE_DIR/latex"
+cp -R latex/. "$STAGE_DIR/latex/"
 
 if (( GENERATE_THIRD_PARTY_NOTICES )); then
     log "Writing exhaustive third-party notices"

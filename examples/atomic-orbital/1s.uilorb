@@ -1,0 +1,21 @@
+{
+  "format": "uil.atomic-orbital",
+  "version": 1,
+  "title": "Hydrogen-like 1s orbital",
+  "orbital": "1s",
+  "surface": {
+    "isovalue": 0.0,
+    "positive_color": "#2563eb",
+    "negative_color": "#dc2626",
+    "grid_size": 65
+  },
+  "sampling_plane": {
+    "type": "xy",
+    "offset": { "min": -1.0, "max": 1.0, "value": 0.0 }
+  },
+  "contour": {
+    "colormap": "coolwarm",
+    "maximum": 0.1,
+    "levels": 12
+  }
+}
