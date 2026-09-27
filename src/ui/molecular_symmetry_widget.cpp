@@ -16,14 +16,20 @@
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QStyle>
+#include <QStyleOptionButton>
+#include <QStylePainter>
 #include <QTabWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <utility>
 
 #include "ui/molecule_widget.hpp"
 #include "molecule/molecule_camera.hpp"
+#include "ui/math_text.hpp"
 
 namespace {
 constexpr int kAnimationFrameMs = 16;
@@ -78,6 +84,68 @@ QString point_group_html(const QString& point_group) {
   const QString escaped = point_group.toHtmlEscaped();
   if (escaped.size() < 2 || !escaped.at(0).isLetter()) return escaped;
   return escaped.left(1) + QStringLiteral("<sub>") + escaped.mid(1) + QStringLiteral("</sub>");
+}
+
+struct OrbitalChoice {
+  const char* name;
+  const char* label;
+};
+
+constexpr std::array<OrbitalChoice, 9> kOrbitalChoices{{
+    {"1s", "s"},
+    {"2px", "$p_x$"},
+    {"2py", "$p_y$"},
+    {"2pz", "$p_z$"},
+    {"3dxy", "$d_{xy}$"},
+    {"3dxz", "$d_{xz}$"},
+    {"3dyz", "$d_{yz}$"},
+    {"3dx2-y2", "$d_{x^2-y^2}$"},
+    {"3dz2", "$d_{z^2}$"},
+}};
+
+class MathCheckBox final : public QCheckBox {
+ public:
+  explicit MathCheckBox(const QString& math_text, QWidget* parent = nullptr)
+      : QCheckBox(math_text, parent) {}
+
+  QSize sizeHint() const override {
+    QSize hint = QCheckBox::sizeHint();
+    const int plain_width = fontMetrics().horizontalAdvance(text());
+    const QSizeF formatted = ui_math_text::size(text(), font());
+    hint.rwidth() += int(std::ceil(formatted.width())) - plain_width;
+    hint.setHeight(std::max(hint.height(), int(std::ceil(formatted.height()))));
+    return hint;
+  }
+
+ protected:
+  void paintEvent(QPaintEvent*) override {
+    QStyleOptionButton option;
+    initStyleOption(&option);
+    const QRect label_rect = style()->subElementRect(QStyle::SE_CheckBoxContents, &option, this);
+    option.text.clear();
+
+    QStylePainter painter(this);
+    painter.drawControl(QStyle::CE_CheckBox, option);
+    ui_math_text::draw(painter, label_rect, text(), Qt::AlignLeft | Qt::AlignVCenter, font(),
+                       palette().color(isEnabled() ? QPalette::Active : QPalette::Disabled,
+                                       QPalette::WindowText));
+  }
+};
+
+QString simplified_orbital_name(const QString& name) {
+  return name == QStringLiteral("2s") ? QStringLiteral("1s") : name;
+}
+
+QVector<SymmetryOrbital> simplified_orbitals(const QVector<SymmetryOrbital>& orbitals) {
+  QVector<SymmetryOrbital> result;
+  for (auto orbital : orbitals) {
+    orbital.orbital = simplified_orbital_name(orbital.orbital);
+    const bool duplicate = std::any_of(result.cbegin(), result.cend(), [&](const auto& existing) {
+      return existing.atom == orbital.atom && existing.orbital == orbital.orbital;
+    });
+    if (!duplicate) result.push_back(orbital);
+  }
+  return result;
 }
 }  // namespace
 
@@ -139,27 +207,27 @@ MolecularSymmetryWidget::MolecularSymmetryWidget(QWidget* parent) : QWidget(pare
   molecule_widget_->set_context_menu_handler([this](const QPoint& position) {
     if (context_menu_handler_) context_menu_handler_(position);
   });
-  auto* spin_button = new QPushButton(QStringLiteral("Z rotation: off"), header_panel);
-  spin_button->setObjectName(QStringLiteral("molecularSymmetrySpinButton"));
-  spin_button->setCheckable(true);
-  spin_button->setFocusPolicy(Qt::NoFocus);
-  spin_button->setCursor(Qt::PointingHandCursor);
-  spin_button->setMinimumWidth(150);
-  spin_button->setStyleSheet(operation_button_style(QColor(39, 125, 131), true));
-  spin_button->setToolTip(
+  spin_button_ = new QPushButton(QStringLiteral("Z rotation: off"), header_panel);
+  spin_button_->setObjectName(QStringLiteral("molecularSymmetrySpinButton"));
+  spin_button_->setCheckable(true);
+  spin_button_->setFocusPolicy(Qt::NoFocus);
+  spin_button_->setCursor(Qt::PointingHandCursor);
+  spin_button_->setMinimumWidth(150);
+  spin_button_->setStyleSheet(operation_button_style(QColor(39, 125, 131), true));
+  spin_button_->setToolTip(
       QStringLiteral("Rotate continuously around the molecule's Z axis. Drag to change the view; "
                      "symmetry operations continue independently."));
-  connect(spin_button, &QPushButton::toggled, this, [this, spin_button](bool enabled) {
+  connect(spin_button_, &QPushButton::toggled, this, [this](bool enabled) {
     molecule_widget_->set_auto_rotation_enabled(enabled);
-    spin_button->setText(enabled ? QStringLiteral("Z rotation: on")
-                                 : QStringLiteral("Z rotation: off"));
+    spin_button_->setText(enabled ? QStringLiteral("Z rotation: on")
+                                  : QStringLiteral("Z rotation: off"));
   });
-  header_layout->addWidget(spin_button);
-  auto* tabs = new QTabWidget(this);
-  tabs->setObjectName(QStringLiteral("symmetryControlTabs"));
-  tabs->setMinimumWidth(340);
-  tabs->setMaximumWidth(500);
-  tabs->setStyleSheet(QStringLiteral(
+  header_layout->addWidget(spin_button_);
+  tabs_ = new QTabWidget(this);
+  tabs_->setObjectName(QStringLiteral("symmetryControlTabs"));
+  tabs_->setMinimumWidth(340);
+  tabs_->setMaximumWidth(500);
+  tabs_->setStyleSheet(QStringLiteral(
       "QTabWidget, QStackedWidget, QTabBar { background: white; }"
       "QTabWidget::pane { border: 1px solid #d5d8dd; background: white; border-radius: 7px; }"
       "QScrollArea > QWidget > QWidget, QScrollArea > QWidget { background: white; }"
@@ -170,7 +238,7 @@ MolecularSymmetryWidget::MolecularSymmetryWidget(QWidget* parent) : QWidget(pare
       "QTabBar::tab { background: #edf1f4; color: #59626e; padding: 10px 12px; border: 0; }"
       "QTabBar::tab:selected { background: #277d83; color: white; }"
       "QTabBar::tab:hover { background: #b7d4d6; color: #242a32; }"));
-  auto* menu = new QScrollArea(tabs);
+  auto* menu = new QScrollArea(tabs_);
   menu->setObjectName(QStringLiteral("symmetryOrbitalPanel"));
   menu->setWidgetResizable(true);
   menu->setFrameShape(QFrame::NoFrame);
@@ -210,18 +278,12 @@ MolecularSymmetryWidget::MolecularSymmetryWidget(QWidget* parent) : QWidget(pare
   orbital_summary_ = new QLabel(panel);
   orbital_summary_->setWordWrap(true);
   layout->addWidget(orbital_summary_);
-  layout->addWidget(new QLabel(QStringLiteral("2. Select orbitals on this atom"), panel));
-  orbital_advanced_ = new QCheckBox(QStringLiteral("Advanced: all basis functions"), panel);
-  orbital_advanced_->setObjectName(QStringLiteral("symmetryOrbitalAdvanced"));
-  orbital_advanced_->setToolTip(QStringLiteral(
-      "Include unoccupied / polarization functions. These are not ground-state occupancies."));
-  layout->addWidget(orbital_advanced_);
-  connect(orbital_advanced_, &QCheckBox::toggled, this, [this] { update_orbital_controls(); });
+  layout->addWidget(new QLabel(QStringLiteral("2. Select orbital shapes"), panel));
   auto* grid = new QGridLayout;
-  const auto names = symmetry_orbital_names();
-  for (int index = 0; index < names.size(); ++index) {
-    const QString name = names.at(index);
-    auto* check = new QCheckBox(name, panel);
+  for (int index = 0; index < int(kOrbitalChoices.size()); ++index) {
+    const QString name = QString::fromLatin1(kOrbitalChoices[size_t(index)].name);
+    auto* check =
+        new MathCheckBox(QString::fromLatin1(kOrbitalChoices[size_t(index)].label), panel);
     check->setObjectName(QStringLiteral("symmetryOrbital_") + name);
     orbital_checks_.push_back(check);
     grid->addWidget(check, index / 2, index % 2);
@@ -244,22 +306,14 @@ MolecularSymmetryWidget::MolecularSymmetryWidget(QWidget* parent) : QWidget(pare
   orbital_scale_->setRange(0.1, 3.0);
   orbital_scale_->setSingleStep(0.1);
   orbital_scale_->setValue(0.85);
-  orbital_scale_->setPrefix(QStringLiteral("Display radius: "));
+  orbital_scale_->setPrefix(QStringLiteral("Orbital size: "));
   orbital_scale_->setSuffix(QStringLiteral(" Å"));
   layout->addWidget(orbital_scale_);
-  auto* auto_size = new QPushButton(QStringLiteral("Use atom-based size"), panel);
-  auto_size->setToolTip(QStringLiteral("Restore the illustrative default: H/He 0.45 Å; other atoms 0.85 Å."));
-  layout->addWidget(auto_size);
-  connect(auto_size, &QPushButton::clicked, this, [this] {
-    const int atom = orbital_atom_->currentRow();
-    if (atom >= 0 && atom < definition_.geometry.atoms.size())
-      orbital_scale_->setValue(default_symmetry_orbital_radius(definition_.geometry.atoms.at(atom).element));
-  });
   auto* legend = new QLabel(
       QStringLiteral("<span style='color:#008e99'>Cyan: +ψ</span> · "
                      "<span style='color:#b026ff'>Purple: −ψ</span><br>"
-                     "50% transparent neon surfaces.<br>"
-                     "Axes follow the molecule. 2s uses a cutaway.<br>Up to 64 selected orbitals."),
+                     "Normalized shapes use one size control.<br>"
+                     "Axes follow the molecule.<br>Up to 64 selected orbitals."),
       panel);
   layout->addWidget(legend);
   auto* clear = new QPushButton(QStringLiteral("Clear all orbitals"), panel);
@@ -271,7 +325,7 @@ MolecularSymmetryWidget::MolecularSymmetryWidget(QWidget* parent) : QWidget(pare
     update_orbital_controls();
   });
   connect(restore, &QPushButton::clicked, this, [this] {
-    molecule_widget_->set_orbitals(definition_.orbitals);
+    molecule_widget_->set_orbitals(simplified_orbitals(definition_.orbitals));
     update_orbital_controls();
   });
   connect(orbital_atom_, &QListWidget::currentRowChanged, this,
@@ -340,9 +394,9 @@ MolecularSymmetryWidget::MolecularSymmetryWidget(QWidget* parent) : QWidget(pare
   operations_panel_layout->addWidget(operations_hint);
   operations_panel_layout->addWidget(status_label_);
   operations_panel_layout->addWidget(scroll_area, 1);
-  tabs->addTab(operations_panel, QStringLiteral("Symmetry operations"));
-  tabs->addTab(menu, QStringLiteral("Settings"));
-  body_layout->addWidget(tabs, 1);
+  tabs_->addTab(operations_panel, QStringLiteral("Symmetry operations"));
+  tabs_->addTab(menu, QStringLiteral("Settings"));
+  body_layout->addWidget(tabs_, 1);
   root->addLayout(body_layout, 1);
 
   operation_buttons_ = new QButtonGroup(this);
@@ -358,13 +412,17 @@ MolecularSymmetryWidget::MolecularSymmetryWidget(QWidget* parent) : QWidget(pare
   update_status();
 }
 
-void MolecularSymmetryWidget::set_definition(const MolecularSymmetryDefinition& definition) {
+void MolecularSymmetryWidget::set_definition(const MolecularSymmetryDefinition& definition,
+                                              const QString& slide_identity) {
   if (!definition.is_valid()) return;
+  if (!active_slide_identity_.isEmpty()) {
+    slide_states_.insert(active_slide_identity_, capture_slide_state());
+  }
   stop_animation(true);
   definition_ = definition;
   molecule_widget_->set_geometry(definition_.geometry);
   molecule_widget_->set_coordinate_origin(QVector3D());
-  molecule_widget_->set_orbitals(definition_.orbitals);
+  molecule_widget_->set_orbitals(simplified_orbitals(definition_.orbitals));
   {
     const QSignalBlocker blocker(orbital_atom_);
     orbital_atom_->clear();
@@ -376,13 +434,51 @@ void MolecularSymmetryWidget::set_definition(const MolecularSymmetryDefinition& 
     }
     orbital_atom_->setCurrentRow(0);
   }
-  orbital_advanced_->setChecked(false);
   update_orbital_controls();
   title_label_->setText(
       QStringLiteral("%1 &nbsp; <span style='font-size:16px;color:#737b86'>Point group</span> "
                      "<span style='color:#922d49'>%2</span>")
           .arg(definition_.title.toHtmlEscaped(), point_group_html(definition_.point_group)));
   rebuild_operation_buttons();
+  update_status();
+  active_slide_identity_ = slide_identity;
+  if (!slide_identity.isEmpty() && slide_states_.contains(slide_identity)) {
+    restore_slide_state(slide_states_.value(slide_identity));
+  }
+}
+
+void MolecularSymmetryWidget::clear_saved_slide_states() {
+  slide_states_.clear();
+  active_slide_identity_.clear();
+}
+
+MolecularSymmetryWidget::SlideState MolecularSymmetryWidget::capture_slide_state() const {
+  SlideState state;
+  state.orbitals = molecule_widget_->orbitals();
+  state.rotation = molecule_widget_->view_rotation();
+  state.camera_distance_factor = molecule_widget_->camera_distance_factor();
+  state.selected_atom = orbital_atom_->currentRow();
+  state.selected_operation = selected_operation_index_;
+  state.current_tab = tabs_->currentIndex();
+  state.auto_rotation = molecule_widget_->auto_rotation_enabled();
+  return state;
+}
+
+void MolecularSymmetryWidget::restore_slide_state(const SlideState& state) {
+  molecule_widget_->set_orbitals(simplified_orbitals(state.orbitals));
+  molecule_widget_->set_camera_view(state.rotation, state.camera_distance_factor);
+  spin_button_->setChecked(state.auto_rotation);
+  orbital_atom_->setCurrentRow(
+      std::clamp(state.selected_atom, 0, std::max(0, orbital_atom_->count() - 1)));
+  tabs_->setCurrentIndex(std::clamp(state.current_tab, 0, tabs_->count() - 1));
+  if (state.selected_operation >= 0 && state.selected_operation < definition_.operations.size()) {
+    selected_operation_index_ = state.selected_operation;
+    show_symmetry_element(definition_.operations.at(state.selected_operation));
+    if (auto* button = operation_buttons_->button(state.selected_operation)) {
+      button->setChecked(true);
+    }
+  }
+  update_orbital_controls();
   update_status();
 }
 
@@ -616,24 +712,20 @@ void MolecularSymmetryWidget::update_orbital_controls() {
   const QString element = atom > 0 && atom <= definition_.geometry.atoms.size()
                               ? definition_.geometry.atoms.at(atom - 1).element
                               : QString();
-  const auto allowed = occupied_symmetry_orbital_names(element);
-  orbital_summary_->setText(QStringLiteral("%1 selected · neutral-atom defaults").arg(selected.size()));
-  orbital_summary_->setToolTip(QStringLiteral("Supported occupied subshells of the neutral atom, not a molecular or ionic occupancy calculation."));
-  const auto names = symmetry_orbital_names();
+  orbital_summary_->setText(QStringLiteral("%1 selected").arg(selected.size()));
+  orbital_summary_->setToolTip(QStringLiteral(
+      "Principal quantum numbers are omitted because they do not change these symmetry shapes."));
   for (int index = 0; index < orbital_checks_.size(); ++index) {
     auto* check = orbital_checks_.at(index);
+    const QString name = QString::fromLatin1(kOrbitalChoices[size_t(index)].name);
     const QSignalBlocker blocker(check);
     const bool checked = std::any_of(selected.begin(), selected.end(), [&](const auto& entry) {
-      return entry.atom == atom && entry.orbital == names.at(index);
+      return entry.atom == atom && simplified_orbital_name(entry.orbital) == name;
     });
     check->setChecked(checked);
-    const bool available = allowed.contains(names.at(index)) || orbital_advanced_->isChecked();
-    check->setVisible(available || checked);
-    check->setToolTip(
-        !available && checked
-            ? QStringLiteral("Selected non-ground-state basis function; uncheck to remove.")
-            : QString());
-    check->setEnabled(atom > 0 && (checked || (available && selected.size() < 64)));
+    check->setVisible(true);
+    check->setToolTip(QStringLiteral("Normalized orbital symmetry shape"));
+    check->setEnabled(atom > 0 && (checked || selected.size() < 64));
   }
   const QSignalBlocker blocker(orbital_scale_);
   float scale = default_symmetry_orbital_radius(element);

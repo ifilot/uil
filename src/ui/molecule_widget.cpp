@@ -471,6 +471,16 @@ void MoleculeWidget::set_default_camera_distance_factor(float factor) {
 
 float MoleculeWidget::camera_distance_factor() const { return camera_distance_factor_; }
 
+QQuaternion MoleculeWidget::view_rotation() const { return rotation_; }
+
+void MoleculeWidget::set_camera_view(const QQuaternion& rotation, float distance_factor) {
+  rotation_ = rotation.isNull() ? default_rotation_ : rotation.normalized();
+  camera_distance_factor_ = std::clamp(distance_factor, 0.35f, 5.0f);
+  rotating_ = false;
+  setCursor(Qt::OpenHandCursor);
+  update();
+}
+
 void MoleculeWidget::reset_camera() {
   reset_view();
   update();

@@ -834,6 +834,9 @@ void AudienceWindow::set_slide_image(const QString& texture_key, const QImage& i
     update_atomic_orbital_overlay_geometry();
     update_molecular_symmetry_overlay_geometry();
     update();
+    if (is_fullscreen_) {
+        QTimer::singleShot(0, this, &AudienceWindow::present_fullscreen_frame);
+    }
 }
 
 void AudienceWindow::begin_slide_transition() {
@@ -872,6 +875,7 @@ void AudienceWindow::clear_slide_image() {
     clear_atomic_orbital_overlay();
     molecular_symmetry_snapshot_frame_ = {};
     clear_molecular_symmetry_overlay();
+    if (molecular_symmetry_widget_) molecular_symmetry_widget_->clear_saved_slide_states();
     emit annotation_overlay_changed({});
     update();
 }
@@ -1093,7 +1097,8 @@ void AudienceWindow::set_molecular_symmetry_overlay(
   }
   molecular_symmetry_snapshot_frame_ = {};
   molecular_symmetry_rect_ = slide_rect;
-  molecular_symmetry_widget_->set_definition(definition);
+  molecular_symmetry_widget_->set_definition(
+      definition, current_texture_key_.section(':', 0, 1));
   update_molecular_symmetry_overlay_geometry();
 }
 
@@ -1133,9 +1138,51 @@ void AudienceWindow::enter_fullscreen() {
         if (QWindow* handle = windowHandle()) {
             handle->requestActivate();
         }
+        present_fullscreen_frame();
     });
+    // On Windows the native fullscreen swap can finish after Qt's first queued
+    // paint. Present once more after the compositor has attached the OpenGL
+    // child surfaces; otherwise their first frame can remain black until input.
+    QTimer::singleShot(75, this, &AudienceWindow::present_fullscreen_frame);
     show_cursor_temporarily();
     qCInfo(logUi) << "Audience fullscreen entered";
+}
+
+void AudienceWindow::present_fullscreen_frame() {
+    if (!is_fullscreen_ || !isVisible()) {
+        return;
+    }
+
+    update_molecule_overlay_geometry();
+    update_interactive_figure_overlay_geometry();
+    update_atomic_orbital_overlay_geometry();
+    update_molecular_symmetry_overlay_geometry();
+
+    const auto present_widget = [](QWidget* widget) {
+        if (!widget || !widget->isVisible()) {
+            return;
+        }
+        widget->update();
+        widget->repaint();
+    };
+    present_widget(molecule_widget_.get());
+    present_widget(interactive_figure_widget_.get());
+    for (auto& overlay : atomic_orbital_overlays_) {
+        present_widget(overlay.widget.get());
+    }
+    if (molecular_symmetry_widget_ && molecular_symmetry_widget_->isVisible()) {
+        present_widget(dynamic_cast<MoleculeWidget*>(
+            molecular_symmetry_widget_->findChild<QWidget*>(
+                QStringLiteral("symmetryMoleculeOpenGLWidget"))));
+        present_widget(molecular_symmetry_widget_.get());
+    }
+
+    prepare_interactive_overlays_for_display();
+    if (QWindow* handle = windowHandle()) {
+        handle->requestUpdate();
+    }
+    update();
+    repaint();
 }
 
 void AudienceWindow::toggle_fullscreen() {

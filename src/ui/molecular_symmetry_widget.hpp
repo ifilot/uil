@@ -1,7 +1,9 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QHash>
 #include <QImage>
+#include <QQuaternion>
 #include <QWidget>
 #include <functional>
 
@@ -18,6 +20,8 @@ class QHideEvent;
 class QLabel;
 class MoleculeWidget;
 class QTimer;
+class QTabWidget;
+class QPushButton;
 
 /** @brief Interactive molecule renderer with clickable point-group operations. */
 class MolecularSymmetryWidget final : public QWidget {
@@ -26,8 +30,11 @@ class MolecularSymmetryWidget final : public QWidget {
  public:
   explicit MolecularSymmetryWidget(QWidget* parent = nullptr);
 
-  /** @brief Replaces the molecule and its complete operation set. */
-  void set_definition(const MolecularSymmetryDefinition& definition);
+  /** @brief Replaces the molecule and restores controls saved for @p slide_identity. */
+  void set_definition(const MolecularSymmetryDefinition& definition,
+                      const QString& slide_identity = {});
+  /** @brief Discards all per-slide interactive render settings. */
+  void clear_saved_slide_states();
   /** @brief Returns the active definition. */
   const MolecularSymmetryDefinition& definition() const;
   /** @brief Starts the operation at @p index. */
@@ -48,6 +55,18 @@ class MolecularSymmetryWidget final : public QWidget {
   void contextMenuEvent(QContextMenuEvent* event) override;
 
  private:
+  struct SlideState {
+    QVector<SymmetryOrbital> orbitals;
+    QQuaternion rotation;
+    float camera_distance_factor = 2.0f;
+    int selected_atom = 0;
+    int selected_operation = -1;
+    int current_tab = 0;
+    bool auto_rotation = false;
+  };
+
+  SlideState capture_slide_state() const;
+  void restore_slide_state(const SlideState& state);
   void rebuild_operation_buttons();
   void advance_animation();
   void stop_animation(bool clear_selection = false);
@@ -68,8 +87,11 @@ class MolecularSymmetryWidget final : public QWidget {
   QListWidget* orbital_atom_ = nullptr;
   QDoubleSpinBox* orbital_scale_ = nullptr;
   QLabel* orbital_summary_ = nullptr;
-  QCheckBox* orbital_advanced_ = nullptr;
   QVector<QCheckBox*> orbital_checks_;
+  QTabWidget* tabs_ = nullptr;
+  QPushButton* spin_button_ = nullptr;
+  QHash<QString, SlideState> slide_states_;
+  QString active_slide_identity_;
   bool result_visible_ = false;
   int active_operation_index_ = -1;
   int selected_operation_index_ = -1;

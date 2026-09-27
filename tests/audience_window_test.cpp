@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QContextMenuEvent>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QGuiApplication>
 #include <QLabel>
 #include <QMouseEvent>
@@ -572,6 +573,10 @@ void AudienceWindowTest::molecular_symmetry_settings_tabs_accept_mouse_clicks() 
     window.set_molecular_symmetry_overlay(definition, QRectF(0.08, 0.1, 0.84, 0.8));
     window.enter_fullscreen();
     QTest::qWait(200);
+    const QImage first_fullscreen_frame = window.grab().toImage();
+    QVERIFY(!first_fullscreen_frame.isNull());
+    QVERIFY(first_fullscreen_frame.pixelColor(first_fullscreen_frame.rect().center())
+            != QColor(Qt::black));
     auto* tabs = window.findChild<QTabWidget*>(QStringLiteral("symmetryControlTabs"));
     QVERIFY(tabs);
     // The page must fill the tab pane at every CI screen size; dark application
@@ -605,6 +610,26 @@ void AudienceWindowTest::molecular_symmetry_settings_tabs_accept_mouse_clicks() 
     QVERIFY(molecule);
     QCOMPARE(molecule->orbitals().last().atom, 2);
     QCOMPARE(molecule->orbitals().last().orbital, QStringLiteral("1s"));
+    auto* orbital_size = window.findChild<QDoubleSpinBox*>(QStringLiteral("symmetryOrbitalRadius"));
+    QVERIFY(orbital_size);
+    orbital_size->setValue(1.2);
+
+    window.set_slide_image(QStringLiteral("deck:1:1600x900:0"), slide);
+    window.clear_molecular_symmetry_overlay();
+    window.set_molecular_symmetry_overlay(definition, QRectF(0.08, 0.1, 0.84, 0.8));
+    QCOMPARE(molecule->orbitals(), definition.orbitals);
+    tabs->setCurrentIndex(0);
+    atoms->setCurrentRow(0);
+
+    window.set_slide_image(QStringLiteral("orbital-menu"), slide);
+    window.clear_molecular_symmetry_overlay();
+    window.set_molecular_symmetry_overlay(definition, QRectF(0.08, 0.1, 0.84, 0.8));
+    QCOMPARE(tabs->currentIndex(), 1);
+    QCOMPARE(atoms->currentRow(), 1);
+    QCOMPARE(molecule->orbitals().size(), 2);
+    QCOMPARE(molecule->orbitals().last().atom, 2);
+    QCOMPARE(molecule->orbitals().last().orbital, QStringLiteral("1s"));
+    QCOMPARE(molecule->orbitals().last().scale, 1.2f);
     QTest::mouseClick(window.windowHandle(), Qt::LeftButton, Qt::NoModifier, QPoint(20, 20));
     QCOMPARE(tabs->currentIndex(), 1);
     QVERIFY(atoms->isVisible());

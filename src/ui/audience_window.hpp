@@ -225,6 +225,8 @@ private:
     void evict_old_slides();
     /** @brief Applies the selected screen geometry for windowed or full-screen mode. */
     void apply_screen_geometry(bool fullscreen);
+    /** @brief Presents the current slide and active OpenGL children after a fullscreen swap. */
+    void present_fullscreen_frame();
     /** @brief Shows the cursor and restarts its automatic hide timer. */
     void show_cursor_temporarily();
     /** @brief Hides the cursor when presentation tools permit it. */

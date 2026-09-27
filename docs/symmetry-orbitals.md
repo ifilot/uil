@@ -3,21 +3,18 @@
 The side panel has **Symmetry operations** and **Settings** tabs. In Settings,
 select an atom in the visible list (one-based XYZ indices) and check its orbitals.
 Settings stay open when clicking elsewhere; switching tabs preserves selections.
-The supported basis is 1s, 2s, 2px, 2py, 2pz, 3dxy, 3dxz, 3dyz, 3dx2-y2, and 3dz2.
-By default the UI offers only supported subshells occupied in the neutral atom's
-ground configuration: 1s from H, 2s from Li, 2p from B, and 3d from Sc onward.
-These defaults follow [NIST configurations](https://math.nist.gov/DFTdata/atomdata/configuration.html).
-This is a teaching filter, not a molecular/ionic electron-occupancy calculation;
-all orientations of an occupied subshell are offered. Higher subshells such as
-3s, 3p and 4s are not implemented. **Advanced: all basis functions** explicitly
-enables unoccupied/polarization functions. Previously selected or slide-authored
-functions remain visible and removable even outside the default filter.
+The interactive selector presents the nine symmetry-distinct shapes s, px, py, pz, dxy, dxz,
+dyz, dx2-y2, and dz2. Principal quantum numbers are intentionally omitted in the UI because
+they do not change how these shapes transform under molecular symmetry operations. Existing
+files may continue to use the compatible 1s/2s, 2p, and 3d identifiers.
+Every shape is available for every atom. The baked meshes are normalized to unit radius,
+and the single **Orbital size** control scales all selected shapes on the current atom.
+Slide-provided defaults still use their authored sizes.
 Cyan means positive wavefunction and neon purple means negative wavefunction,
 not electric charge or density. Orbital surfaces use 50% opacity with emissive-style
 rim lighting; atoms and bonds retain their original materials. Near-facing shells
 are rendered in a depth-sorted translucent pass; the reference orbitals remain fainter.
-The radius control changes the display size of the selected atom's orbitals.
-The 2s negative shell has a quarter cutaway to reveal its positive inner region.
+The size control changes the display radius of the selected atom's orbitals.
 Atom spheres shrink where orbitals are displayed to avoid hiding the lobes.
 
 Slide authors can set starting selections in the `.uilsym` JSON:
@@ -32,8 +29,7 @@ Slide authors can set starting selections in the `.uilsym` JSON:
 `scale` is an illustrative outer radius in the molecule's angstrom coordinates,
 not a prediction of atomic size or an effective nuclear charge. When omitted it
 defaults to 0.45 for H/He and 0.85 for other elements, bounded to 0.1–3.0.
-Explicit authored sizes are preserved. **Use atom-based size** restores the default
-for the selected atom; the radius control allows manual adjustment.
+Explicit authored sizes are preserved; the size control allows manual adjustment.
 There may be up to 64 unique atom/orbital pairs.
 Invalid atom indices, unsupported names, and duplicate selections are rejected.
 Omitting `orbitals` preserves the original molecule-only presentation.

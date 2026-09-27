@@ -104,6 +104,10 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   void set_default_camera_distance_factor(float factor);
   /** @brief Returns the current camera-distance factor. */
   float camera_distance_factor() const;
+  /** @brief Returns the current molecule orientation. */
+  QQuaternion view_rotation() const;
+  /** @brief Restores a previously captured orientation and zoom. */
+  void set_camera_view(const QQuaternion& rotation, float distance_factor);
   /** @brief Restores the default view and zoom without changing molecular state. */
   void reset_camera();
   /** @brief Shows a symmetry element whose axis is expressed in molecule coordinates. */

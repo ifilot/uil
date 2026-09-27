@@ -10,12 +10,11 @@ Z points up on screen, X down-left, and Y down-right. Dragging still changes the
 **Reset camera** restores this view and the default zoom without changing the
 selected orbitals or symmetry operation. Continuous Z rotation retains its on/off state.
 
-The **Settings** tab supports per-atom selections of the real 1s, 2s, 2p,
-and 3d basis functions. Water starts with an oxygen 2px orbital: try its yz
+The **Settings** tab supports per-atom selections of normalized real s, p,
+and d symmetry shapes. Water starts with an oxygen px orbital: try its yz
 reflection to see the phase colors reverse while the oxygen stays fixed.
-Choose an atom from the visible list and check the desired orbitals. Default
-choices are filtered to the element's occupied neutral-atom subshells; advanced
-mode exposes the full supported basis. Switch to **Symmetry operations** to
+Choose an atom from the visible list, check the desired shapes, and adjust their
+shared size with the single scaler. Switch to **Symmetry operations** to
 animate the result. Clicking elsewhere does not dismiss Settings.
 The presenter preview and ordinary PDF readers show a static poster, not live controls.
 See [symmetry orbital authoring and basis functions](../../docs/symmetry-orbitals.md)
@@ -24,7 +23,8 @@ for the JSON defaults, sign conventions, and offline mesh regeneration.
 The header's **Z rotation** toggle spins the molecule continuously around its local
 Z axis. Camera dragging and symmetry playback remain available while it spins;
 the reference pose and symmetry elements rotate with the molecule. Toggle it off
-to hold the current orientation. Rotation pauses while the slide is hidden.
+to hold the current orientation. Rotation pauses while the slide is hidden. Camera,
+orbital, operation, and panel settings are restored when returning to a slide.
 
 Operations are grouped by type in the live controls. During playback a translucent
 original pose remains visible. Reflections flatten and restore atom surfaces along

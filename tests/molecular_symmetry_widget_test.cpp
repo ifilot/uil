@@ -7,6 +7,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QTabWidget>
 #include <QTest>
 #include <QTimer>
@@ -141,11 +142,13 @@ void MolecularSymmetryWidgetTest::exposes_and_plays_every_operation_when_opengl_
   QCOMPARE(molecule->orbitals().first().atom, 1);
   tabs->setCurrentIndex(1);
   auto* d = widget.findChild<QCheckBox*>(QStringLiteral("symmetryOrbital_3dxy"));
-  QVERIFY(d->isHidden());
+  QVERIFY(d->isVisible());
+  QCOMPARE(d->text(), QStringLiteral("$d_{xy}$"));
   atom_selector->setCurrentRow(1);
   QVERIFY(!orbital_check->isChecked());
-  QVERIFY(orbital_check->isHidden());
+  QVERIFY(orbital_check->isVisible());
   auto* hydrogen_s = widget.findChild<QCheckBox*>(QStringLiteral("symmetryOrbital_1s"));
+  QCOMPARE(hydrogen_s->text(), QStringLiteral("s"));
   hydrogen_s->click();
   QCOMPARE(molecule->orbitals().size(), 2);
   QCOMPARE(molecule->orbitals().last().atom, 2);
@@ -153,14 +156,10 @@ void MolecularSymmetryWidgetTest::exposes_and_plays_every_operation_when_opengl_
   hydrogen_s->click();
   atom_selector->setCurrentRow(0);
   QVERIFY(orbital_check->isChecked());
-  auto* advanced = widget.findChild<QCheckBox*>(QStringLiteral("symmetryOrbitalAdvanced"));
-  advanced->click();
-  QVERIFY(!d->isHidden());
   d->click();
   QCOMPARE(molecule->orbitals().size(), 2);
   d->click();
-  advanced->click();
-  QVERIFY(d->isHidden());
+  QCOMPARE(widget.findChildren<QCheckBox*>(QRegularExpression(QStringLiteral("^symmetryOrbital_"))).size(), 9);
   if (!qEnvironmentVariable("UIL_ORBITAL_TEST_IMAGES").isEmpty()) {
     QVERIFY(widget.grab().save(
         QDir(qEnvironmentVariable("UIL_ORBITAL_TEST_IMAGES")).filePath("orbital-settings.png")));

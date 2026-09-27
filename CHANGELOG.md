@@ -2,7 +2,7 @@
 
 Notable user-facing changes to `uil` are documented here.
 
-## 0.3.0 - Unreleased
+## 0.3.1 - Unreleased
 
 ### Added
 
