@@ -19,6 +19,10 @@ class MoleculeWidgetTest final : public QObject {
   void renders_supported_modes_when_opengl_is_available();
   /** @brief Exercises every baked basis and checks a fixed-center p phase reversal. */
   void renders_baked_orbitals();
+  /** @brief Checks that moving the widget to another window recreates its GL resources. */
+  void renders_after_reparenting_to_another_window();
+  /** @brief Verifies vibration resumes after hide/show unless paused or replaced meanwhile. */
+  void vibration_resumes_after_hide_and_show();
 };
 
 void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
@@ -58,6 +62,8 @@ void MoleculeWidgetTest::visualizer_controls_follow_public_state() {
   QTimer* rotation_timer = widget.findChild<QTimer*>(QStringLiteral("moleculeAutoRotationTimer"));
   QVERIFY(rotation_button);
   QVERIFY(rotation_timer);
+  // Coarse timers fire on Windows' 15.6 ms grid and visibly judder at 60 Hz.
+  QCOMPARE(rotation_timer->timerType(), Qt::PreciseTimer);
   QVERIFY(!widget.auto_rotation_enabled());
   rotation_button->click();
   QVERIFY(widget.auto_rotation_enabled());
@@ -125,6 +131,39 @@ void MoleculeWidgetTest::vibration_control_tracks_geometry_capability() {
   widget.set_vibration_playing(true);
   QVERIFY(widget.vibration_playing());
   widget.set_vibration_playing(false);
+  QVERIFY(!widget.vibration_playing());
+}
+
+void MoleculeWidgetTest::vibration_resumes_after_hide_and_show() {
+  if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+    QSKIP("The offscreen Qt platform cannot safely expose QOpenGLWidget");
+  }
+  MoleculeGeometry geometry;
+  geometry.atoms.push_back(
+      MoleculeAtom{QStringLiteral("H"), QVector3D(), QVector3D(0.1f, 0.0f, 0.0f)});
+  MoleculeWidget widget;
+  widget.resize(320, 240);
+  widget.set_geometry(geometry);
+  widget.show();
+  QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+  widget.set_vibration_playing(true);
+  widget.hide();
+  QVERIFY(!widget.vibration_playing());
+  widget.show();
+  QVERIFY(widget.vibration_playing());
+
+  // An explicit pause while hidden wins over the pending resume.
+  widget.hide();
+  widget.set_vibration_playing(false);
+  widget.show();
+  QVERIFY(!widget.vibration_playing());
+
+  // A new molecule never starts playing on its own.
+  widget.set_vibration_playing(true);
+  widget.hide();
+  widget.set_geometry(geometry);
+  widget.show();
   QVERIFY(!widget.vibration_playing());
 }
 
@@ -268,6 +307,57 @@ void MoleculeWidgetTest::renders_baked_orbitals() {
     }
   }
   QVERIFY(rounded_pixels < original.width() * original.height() / 1000);
+}
+
+void MoleculeWidgetTest::renders_after_reparenting_to_another_window() {
+  if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+    QSKIP("The offscreen Qt platform cannot safely expose QOpenGLWidget");
+  }
+  QWidget first_host;
+  QWidget second_host;
+  first_host.resize(480, 320);
+  second_host.resize(480, 320);
+  auto* widget = new MoleculeWidget(&first_host);
+  widget->resize(480, 320);
+  MoleculeGeometry geometry;
+  geometry.atoms = {
+      MoleculeAtom{QStringLiteral("O"), QVector3D(), QVector3D()},
+      MoleculeAtom{QStringLiteral("H"), QVector3D(0.95f, 0.0f, 0.0f), QVector3D()},
+  };
+  geometry.bonds = {MoleculeBond{0, 1}};
+  widget->set_geometry(geometry);
+  // Orbital meshes are created lazily and must also be released with the old context.
+  widget->set_orbitals({SymmetryOrbital{1, QStringLiteral("2pz"), 0.85f}});
+  first_host.show();
+  QTest::qWait(100);
+  if (!widget->isValid()) {
+    QSKIP("The active Qt platform does not provide a QOpenGLWidget context");
+  }
+  const QImage original = widget->grabFramebuffer();
+  QVERIFY(!original.isNull());
+
+  // A new top-level window replaces the context; the aboutToBeDestroyed hook releases the
+  // old names under their own context and initializeGL() rebuilds them.
+  widget->setParent(&second_host);
+  second_host.show();
+  widget->show();
+  QTest::qWait(100);
+  QTRY_VERIFY(widget->isValid());
+  const QImage recreated = widget->grabFramebuffer();
+  QCOMPARE(recreated.size(), original.size());
+  // Antialiasing may differ in another native window, so allow a small mean error; a
+  // missing renderer would replace the whole scene with a placeholder message.
+  quint64 difference = 0;
+  for (int y = 0; y < original.height(); ++y) {
+    for (int x = 0; x < original.width(); ++x) {
+      const QColor a = original.pixelColor(x, y);
+      const QColor b = recreated.pixelColor(x, y);
+      difference += std::abs(a.red() - b.red()) + std::abs(a.green() - b.green()) +
+                    std::abs(a.blue() - b.blue());
+    }
+  }
+  const double mean_error = double(difference) / (original.width() * original.height() * 3);
+  QVERIFY2(mean_error < 2.0, qPrintable(QString("Mean channel error: %1").arg(mean_error)));
 }
 
 #include "molecule_widget_test.moc"

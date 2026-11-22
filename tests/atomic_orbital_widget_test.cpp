@@ -10,6 +10,7 @@ class AtomicOrbitalWidgetTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief Checks rendering, plane offset, posters, and presentation-only updates; needs OpenGL. */
     void renders_and_resamples_when_opengl_is_available();
     /** @brief Checks exact frame restoration without redundant geometry uploads and bounded
      * eviction. */

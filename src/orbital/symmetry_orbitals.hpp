@@ -9,6 +9,7 @@ struct SymmetryOrbital {
   int atom = 1;
   QString orbital = QStringLiteral("2pz");
   float scale = 0.85f;
+  /** @brief Compares atom, basis name, and display radius. */
   bool operator==(const SymmetryOrbital&) const = default;
 };
 
@@ -17,8 +18,13 @@ inline QStringList symmetry_orbital_names() {
   return {"1s", "2s", "2px", "2py", "2pz", "3dxy", "3dxz", "3dyz", "3dx2-y2", "3dz2"};
 }
 
-/** @brief Supported occupied subshells of neutral ground-state atoms, not a molecular occupancy
- * model. */
+/**
+ * @brief Returns the supported subshells occupied in the neutral atom's ground configuration.
+ *
+ * MolecularSymmetryWidget offers only these by default; "Advanced: all basis functions" adds
+ * the rest. A teaching filter, not a molecular or ionic occupancy model. Unknown elements
+ * yield an empty list.
+ */
 inline QStringList occupied_symmetry_orbital_names(const QString& element) {
   const QStringList elements =
       QStringLiteral(

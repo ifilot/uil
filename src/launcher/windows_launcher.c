@@ -12,6 +12,17 @@
 #define UIL_SPLASH_HEIGHT 176
 #define UIL_ANIMATION_TIMER_ID 1
 #define UIL_ANIMATION_INTERVAL_MS 40
+/* Longest path GetModuleFileNameW can report (the UNICODE_STRING limit, in characters). */
+#define UIL_MAX_PATH_CAPACITY 32768
+/*
+ * How long the launcher keeps its always-on-top splash while waiting for the viewer's first
+ * paint. A viewer that is still starting after this keeps running; only the splash goes away.
+ */
+#define UIL_VIEWER_READY_TIMEOUT_MS 60000
+
+_Static_assert(
+    UIL_LAUNCHER_PROGRESS_MESSAGE == WM_APP + 0x155,
+    "launcher_protocol.h must spell the progress message as WM_APP + 0x155");
 
 static int loading_stage = UIL_LAUNCHER_STAGE_STARTING_VIEWER;
 static int displayed_progress = 0;
@@ -353,7 +364,12 @@ static void paint_loading_window(HWND window) {
     EndPaint(window, &paint);
 }
 
-/** @brief Handles messages for the native launcher loading window. */
+/**
+ * @brief Handles messages for the native launcher loading window.
+ *
+ * WM_CLOSE is ignored so the splash cannot be dismissed while the viewer starts; the launcher
+ * destroys it itself once the viewer is ready, exits, or exceeds UIL_VIEWER_READY_TIMEOUT_MS.
+ */
 static LRESULT CALLBACK loading_window_procedure(
     HWND window,
     UINT message,
@@ -436,39 +452,103 @@ static HWND create_loading_window(HINSTANCE instance) {
     return window;
 }
 
-/** @brief Resolves the viewer executable and its working directory beside the launcher. */
-static BOOL resolve_viewer_paths(
-    wchar_t* viewer_path,
-    DWORD viewer_capacity,
-    wchar_t* working_directory,
-    DWORD directory_capacity) {
-    DWORD path_length = GetModuleFileNameW(NULL, viewer_path, viewer_capacity);
-    wchar_t* separator;
+/** @brief Releases a process-heap allocation; NULL is ignored. */
+static void free_heap_buffer(void* buffer) {
+    if (buffer) {
+        HeapFree(GetProcessHeap(), 0, buffer);
+    }
+}
+
+/**
+ * @brief Returns the launcher's full module path in a process-heap buffer.
+ *
+ * The buffer grows until GetModuleFileNameW no longer truncates, so install locations longer
+ * than MAX_PATH are supported. The caller releases the result with free_heap_buffer().
+ *
+ * @return The NUL-terminated path, or NULL on allocation or API failure.
+ */
+static wchar_t* launcher_module_path(void) {
+    DWORD capacity = MAX_PATH;
+
+    for (;;) {
+        wchar_t* buffer = HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(wchar_t));
+        DWORD path_length;
+
+        if (!buffer) {
+            return NULL;
+        }
+        path_length = GetModuleFileNameW(NULL, buffer, capacity);
+        if (path_length > 0 && path_length < capacity) {
+            return buffer;
+        }
+        free_heap_buffer(buffer);
+        /* A result equal to the capacity means the path was truncated. */
+        if (path_length == 0 || capacity >= UIL_MAX_PATH_CAPACITY) {
+            return NULL;
+        }
+        capacity *= 2;
+    }
+}
+
+/**
+ * @brief Resolves the viewer executable and its working directory beside the launcher.
+ *
+ * Both outputs are allocated from the process heap and must be released with
+ * free_heap_buffer(); they are set to NULL when the function fails.
+ *
+ * @param viewer_path Receives the full path of `uil-viewer.exe`.
+ * @param working_directory Receives the launcher directory, including its trailing separator.
+ * @return TRUE when both paths were built and the viewer executable exists.
+ */
+static BOOL resolve_viewer_paths(wchar_t** viewer_path, wchar_t** working_directory) {
     static const wchar_t viewer_name[] = L"uil-viewer.exe";
+    wchar_t* module_path = launcher_module_path();
+    wchar_t* separator;
+    size_t directory_length;
 
-    if (path_length == 0 || path_length >= viewer_capacity) {
+    *viewer_path = NULL;
+    *working_directory = NULL;
+    if (!module_path) {
         return FALSE;
     }
-    separator = wcsrchr(viewer_path, L'\\');
+    separator = wcsrchr(module_path, L'\\');
     if (!separator) {
+        free_heap_buffer(module_path);
         return FALSE;
     }
 
-    if ((DWORD)(separator - viewer_path) + 1 >= directory_capacity) {
+    directory_length = (size_t)(separator - module_path) + 1;
+    *working_directory = HeapAlloc(
+        GetProcessHeap(),
+        0,
+        (directory_length + 1) * sizeof(wchar_t));
+    *viewer_path = HeapAlloc(
+        GetProcessHeap(),
+        0,
+        (directory_length + ARRAYSIZE(viewer_name)) * sizeof(wchar_t));
+    if (!*working_directory || !*viewer_path) {
+        free_heap_buffer(module_path);
+        free_heap_buffer(*working_directory);
+        free_heap_buffer(*viewer_path);
+        *working_directory = NULL;
+        *viewer_path = NULL;
         return FALSE;
     }
-    CopyMemory(
-        working_directory,
-        viewer_path,
-        ((size_t)(separator - viewer_path) + 1) * sizeof(wchar_t));
-    working_directory[separator - viewer_path + 1] = L'\0';
 
-    ++separator;
-    if ((size_t)(separator - viewer_path) + ARRAYSIZE(viewer_name) > viewer_capacity) {
+    CopyMemory(*working_directory, module_path, directory_length * sizeof(wchar_t));
+    (*working_directory)[directory_length] = L'\0';
+    CopyMemory(*viewer_path, module_path, directory_length * sizeof(wchar_t));
+    CopyMemory(*viewer_path + directory_length, viewer_name, sizeof(viewer_name));
+    free_heap_buffer(module_path);
+
+    if (GetFileAttributesW(*viewer_path) == INVALID_FILE_ATTRIBUTES) {
+        free_heap_buffer(*working_directory);
+        free_heap_buffer(*viewer_path);
+        *working_directory = NULL;
+        *viewer_path = NULL;
         return FALSE;
     }
-    CopyMemory(separator, viewer_name, sizeof(viewer_name));
-    return GetFileAttributesW(viewer_path) != INVALID_FILE_ATTRIBUTES;
+    return TRUE;
 }
 
 /** @brief Builds the viewer command line with readiness metadata and forwarded arguments. */
@@ -533,6 +613,7 @@ static BOOL build_viewer_command_line(
     return TRUE;
 }
 
+/** @brief Inputs and results shared with the worker thread that calls CreateProcessW. */
 typedef struct ViewerLaunchRequest {
     const wchar_t* viewer_path;
     wchar_t* command_line;
@@ -591,13 +672,38 @@ static BOOL wait_for_process_launch(HWND window, HANDLE completion_event) {
     }
 }
 
-/** @brief Pumps launcher messages until the viewer is ready or terminates. */
+/**
+ * @brief Pumps launcher messages until the viewer is ready, terminates, or times out.
+ *
+ * The splash window is destroyed in every case. When the viewer has not signalled readiness
+ * within UIL_VIEWER_READY_TIMEOUT_MS, the launcher stops waiting and leaves the viewer
+ * running, so a hung or very slow startup cannot trap the user behind a topmost splash.
+ *
+ * @return 0 when the viewer became ready or the wait timed out; otherwise a non-zero exit code
+ *         after reporting the failure to the user.
+ */
 static int wait_for_viewer(HWND window, HANDLE ready_event, HANDLE viewer_process) {
     HANDLE wait_handles[2] = {ready_event, viewer_process};
+    const ULONGLONG deadline = GetTickCount64() + UIL_VIEWER_READY_TIMEOUT_MS;
     MSG message;
 
     for (;;) {
-        DWORD result = MsgWaitForMultipleObjects(2, wait_handles, FALSE, INFINITE, QS_ALLINPUT);
+        const ULONGLONG now = GetTickCount64();
+        DWORD result;
+
+        if (now >= deadline) {
+            DestroyWindow(window);
+            return 0;
+        }
+        result = MsgWaitForMultipleObjects(
+            2,
+            wait_handles,
+            FALSE,
+            (DWORD)(deadline - now),
+            QS_ALLINPUT);
+        if (result == WAIT_TIMEOUT) {
+            continue;
+        }
         if (result == WAIT_OBJECT_0) {
             DestroyWindow(window);
             return 0;
@@ -627,14 +733,22 @@ static int wait_for_viewer(HWND window, HANDLE ready_event, HANDLE viewer_proces
     }
 }
 
-/** @brief Shows the native splash, starts the Qt viewer, and waits for readiness. */
+/**
+ * @brief Shows the native splash, starts the Qt viewer, and waits for readiness.
+ *
+ * The launcher forwards its own arguments to `uil-viewer.exe` next to it, preceded by the
+ * readiness metadata described in launcher_protocol.h, and exits once the viewer signals its
+ * first paint, exits, or exceeds UIL_VIEWER_READY_TIMEOUT_MS.
+ *
+ * @return 0 on success or timeout, otherwise a non-zero startup failure code.
+ */
 int WINAPI WinMain(
     HINSTANCE instance,
     HINSTANCE previous_instance,
     LPSTR command_line_argument,
     int show_command) {
-    wchar_t viewer_path[MAX_PATH];
-    wchar_t working_directory[MAX_PATH];
+    wchar_t* viewer_path;
+    wchar_t* working_directory;
     wchar_t event_name[128];
     wchar_t* viewer_command_line;
     HANDLE ready_event;
@@ -655,11 +769,7 @@ int WINAPI WinMain(
         return 1;
     }
 
-    if (!resolve_viewer_paths(
-            viewer_path,
-            ARRAYSIZE(viewer_path),
-            working_directory,
-            ARRAYSIZE(working_directory))) {
+    if (!resolve_viewer_paths(&viewer_path, &working_directory)) {
         DestroyWindow(loading_window);
         MessageBoxW(NULL, L"Could not find uil-viewer.exe beside the launcher.", L"uil startup error", MB_OK | MB_ICONERROR);
         return 1;
@@ -672,6 +782,8 @@ int WINAPI WinMain(
         GetTickCount64());
     ready_event = CreateEventW(NULL, TRUE, FALSE, event_name);
     if (!ready_event) {
+        free_heap_buffer(viewer_path);
+        free_heap_buffer(working_directory);
         DestroyWindow(loading_window);
         MessageBoxW(NULL, L"Could not create the viewer readiness event.", L"uil startup error", MB_OK | MB_ICONERROR);
         return 1;
@@ -691,9 +803,9 @@ int WINAPI WinMain(
             loading_window,
             launcher_creation_file_time(),
             file_time_value(splash_visible_time))) {
-        if (viewer_command_line) {
-            HeapFree(GetProcessHeap(), 0, viewer_command_line);
-        }
+        free_heap_buffer(viewer_command_line);
+        free_heap_buffer(viewer_path);
+        free_heap_buffer(working_directory);
         CloseHandle(ready_event);
         DestroyWindow(loading_window);
         MessageBoxW(NULL, L"Could not prepare the viewer command line.", L"uil startup error", MB_OK | MB_ICONERROR);
@@ -706,7 +818,9 @@ int WINAPI WinMain(
     launch_request.working_directory = working_directory;
     launch_request.completion_event = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!launch_request.completion_event) {
-        HeapFree(GetProcessHeap(), 0, viewer_command_line);
+        free_heap_buffer(viewer_command_line);
+        free_heap_buffer(viewer_path);
+        free_heap_buffer(working_directory);
         CloseHandle(ready_event);
         DestroyWindow(loading_window);
         MessageBoxW(NULL, L"Could not prepare viewer startup.", L"uil startup error", MB_OK | MB_ICONERROR);
@@ -722,7 +836,9 @@ int WINAPI WinMain(
         NULL);
     if (!launch_thread) {
         CloseHandle(launch_request.completion_event);
-        HeapFree(GetProcessHeap(), 0, viewer_command_line);
+        free_heap_buffer(viewer_command_line);
+        free_heap_buffer(viewer_path);
+        free_heap_buffer(working_directory);
         CloseHandle(ready_event);
         DestroyWindow(loading_window);
         MessageBoxW(NULL, L"Could not create the viewer startup worker.", L"uil startup error", MB_OK | MB_ICONERROR);
@@ -733,7 +849,9 @@ int WINAPI WinMain(
         WaitForSingleObject(launch_thread, INFINITE);
         CloseHandle(launch_thread);
         CloseHandle(launch_request.completion_event);
-        HeapFree(GetProcessHeap(), 0, viewer_command_line);
+        free_heap_buffer(viewer_command_line);
+        free_heap_buffer(viewer_path);
+        free_heap_buffer(working_directory);
         CloseHandle(ready_event);
         return 1;
     }
@@ -741,7 +859,9 @@ int WINAPI WinMain(
     WaitForSingleObject(launch_thread, INFINITE);
     CloseHandle(launch_thread);
     CloseHandle(launch_request.completion_event);
-    HeapFree(GetProcessHeap(), 0, viewer_command_line);
+    free_heap_buffer(viewer_command_line);
+    free_heap_buffer(viewer_path);
+    free_heap_buffer(working_directory);
     if (!launch_request.process_started) {
         CloseHandle(ready_event);
         DestroyWindow(loading_window);

@@ -5,17 +5,20 @@
 #include <QVector3D>
 #include <QVector>
 
+/** @brief Element symbol, position, and optional normal-mode displacement in angstrom. */
 struct MoleculeAtom {
   QString element;
   QVector3D position;
   QVector3D vibration;
 };
 
+/** @brief Undirected bond between two zero-based atom indices. */
 struct MoleculeBond {
   int first_atom = -1;
   int second_atom = -1;
 };
 
+/** @brief Parsed XYZ molecule with inferred bonds. */
 struct MoleculeGeometry {
   QString description;
   QVector<MoleculeAtom> atoms;

@@ -6,21 +6,38 @@
 
 class QTimer;
 
-/** @brief Polls for the Logitech Spotlight USB receiver without opening it. */
+/**
+ * @brief Polls for the Logitech Spotlight USB receiver without opening it.
+ *
+ * Presence is checked once on construction and then on a timer in the owning thread. Without
+ * hidapi support (`UIL_HAVE_HIDAPI`), detection is unavailable and the receiver is always
+ * reported absent.
+ */
 class SpotlightDetector final : public QObject {
     Q_OBJECT
 
 public:
+    /** @brief Callable returning whether the receiver is currently connected. */
     using PresenceProbe = std::function<bool()>;
 
-    /** @brief Constructs and starts the receiver-presence detector. */
+    /**
+     * @brief Constructs and starts the receiver-presence detector.
+     *
+     * Initializes hidapi when available and enumerates the receiver's USB vendor and product
+     * ID every 2 seconds.
+     */
     explicit SpotlightDetector(QObject* parent = nullptr);
-    /** @brief Constructs a detector around an injectable presence probe. */
+    /**
+     * @brief Constructs a detector around an injectable presence probe.
+     * @param presence_probe Probe called on every poll; an empty probe disables detection.
+     * @param poll_interval_ms Poll interval in milliseconds, clamped to at least 1.
+     * @param parent Owning QObject.
+     */
     SpotlightDetector(
         PresenceProbe presence_probe,
         int poll_interval_ms,
         QObject* parent = nullptr);
-    /** @brief Releases the HID enumeration library. */
+    /** @brief Releases the HID enumeration library when this detector initialized it. */
     ~SpotlightDetector() override;
 
     /** @brief Returns whether receiver enumeration is supported by this build. */
@@ -29,13 +46,18 @@ public:
     bool is_present() const;
 
 signals:
-    /** @brief Emitted when receiver presence changes. */
+    /**
+     * @brief Emitted when receiver presence changes.
+     *
+     * The initial check runs inside the constructor, before any connection can exist, so an
+     * already-connected receiver is reported through is_present() rather than this signal.
+     */
     void presence_changed(bool present);
 
 private:
     /** @brief Configures polling and performs the initial enumeration. */
     void start_polling(int poll_interval_ms);
-    /** @brief Enumerates the known Spotlight USB vendor and product ID. */
+    /** @brief Runs the presence probe and emits presence_changed() when the result changes. */
     void refresh();
 
     QTimer* poll_timer_ = nullptr;

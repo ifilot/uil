@@ -2,7 +2,7 @@
 
 Pronounced `/œyl/`.
 
-[![Version](https://img.shields.io/badge/version-v0.3.1-blue.svg)](https://github.com/ifilot/uil/releases)
+[![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)](https://github.com/ifilot/uil/releases)
 [![License: LGPL v3](https://img.shields.io/badge/license-LGPL--3.0--only-blue.svg)](LICENSE)
 [![Sanitizers](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml)
 
@@ -21,6 +21,8 @@ Windows 10 or newer is required.
 ## Present
 
 Open a `.pdf` or `.uil` file, select the audience display, and press `F5`.
+`F5` reloads the file before presenting, so a freshly rebuilt PDF is picked up;
+drawings you have not saved yet are kept.
 Right-click the audience view to choose the pointer, pencil, or eraser; change
 tool settings; browse all slides; or close the presentation. The laser pointer
 automatically disappears after three seconds without movement and reappears as

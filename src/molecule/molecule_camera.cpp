@@ -10,6 +10,7 @@ constexpr float kFramingMargin = 1.08f;
 constexpr float kMinimumCameraClearance = 1.05f;
 constexpr float kWheelZoomPerStep = 0.82f;
 
+/** @brief Converts degrees to radians. */
 float radians(float degrees) { return degrees * kPi / 180.0f; }
 }  // namespace
 

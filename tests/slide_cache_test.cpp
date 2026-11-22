@@ -40,6 +40,8 @@ private slots:
 
     /** @brief Verifies that the platform-adaptive default remains bounded. */
     void adaptive_default_is_bounded();
+    /** @brief Verifies that removing a page drops every size of it and only that page. */
+    void remove_page_drops_all_sizes_of_one_page();
 };
 
 void SlideCacheTest::lookup_updates_statistics() {
@@ -123,6 +125,25 @@ void SlideCacheTest::adaptive_default_is_bounded() {
     const qint64 budget = SlideCache::recommended_memory_limit_bytes();
     QVERIFY(budget >= 128LL * 1024LL * 1024LL);
     QVERIFY(budget <= 1024LL * 1024LL * 1024LL);
+}
+
+void SlideCacheTest::remove_page_drops_all_sizes_of_one_page() {
+    SlideCache cache(1024 * 1024);
+    const SlideCacheKey small{QStringLiteral("document"), 2, QSize(1, 1), 0};
+    const SlideCacheKey large{QStringLiteral("document"), 2, QSize(4, 4), 0};
+    const SlideCacheKey other_document{QStringLiteral("other"), 2, QSize(1, 1), 0};
+    cache.put(small, make_image(1, 1, Qt::red));
+    cache.put(large, make_image(4, 4, Qt::red));
+    cache.put(other_document, make_image(1, 1, Qt::red));
+    cache.put(make_key(3), make_image(1, 1, Qt::red));
+
+    QCOMPARE(cache.remove_page(QStringLiteral("document"), 2), 2);
+    QVERIFY(!cache.contains(small));
+    QVERIFY(!cache.contains(large));
+    QVERIFY(cache.contains(other_document));
+    QVERIFY(cache.contains(make_key(3)));
+    QCOMPARE(cache.estimated_memory_bytes(), 8);
+    QCOMPARE(cache.remove_page(QStringLiteral("document"), 2), 0);
 }
 
 QTEST_GUILESS_MAIN(SlideCacheTest)

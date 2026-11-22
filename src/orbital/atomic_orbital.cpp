@@ -16,12 +16,14 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr qsizetype kMaximumPayloadBytes = 1024 * 1024;
 constexpr double kProbabilityCutoff = 0.95;
 
+/** @brief Managlyph name suffix, LaTeX label, and real-harmonic m of one angular function. */
 struct AngularName {
     const char* suffix;
     const char* label;
     int m;
 };
 
+/** @brief Returns the angular functions for l = 0..4 in catalog order. */
 const std::array<QVector<AngularName>, 5>& angular_names() {
     static const std::array<QVector<AngularName>, 5> names{{
         {{"s", "s", 0}},
@@ -47,22 +49,26 @@ const std::array<QVector<AngularName>, 5>& angular_names() {
     return names;
 }
 
+/** @brief Assigns @p message to the optional error output. */
 void set_error(QString* error_message, const QString& message) {
     if (error_message) {
         *error_message = message;
     }
 }
 
+/** @brief Returns the numeric value of @p key, or @p fallback if missing or non-finite. */
 double finite_number(const QJsonObject& object, const QString& key, double fallback) {
     const double value = object.value(key).toDouble(fallback);
     return std::isfinite(value) ? value : fallback;
 }
 
+/** @brief Rounds a positive value to the nearest power of ten; other values pass through. */
 double nearest_order_of_magnitude(double value) {
     if (!std::isfinite(value) || value <= 0.0) return value;
     return std::pow(10.0, std::round(std::log10(value)));
 }
 
+/** @brief Returns whether @p value is a positive power of ten within relative 1e-10. */
 bool is_order_of_magnitude(double value) {
     if (!std::isfinite(value) || value <= 0.0) return false;
     const double exponent = std::round(std::log10(value));
@@ -70,10 +76,12 @@ bool is_order_of_magnitude(double value) {
         <= value * 1.0e-10;
 }
 
+/** @brief Returns value! as a double (via the gamma function). */
 double factorial(int value) {
     return std::tgamma(double(value) + 1.0);
 }
 
+/** @brief Evaluates the generalized Laguerre polynomial L_degree^(order)(x) by recurrence. */
 double associated_laguerre(int degree, int order, double x) {
     if (degree == 0) return 1.0;
     double previous = 1.0;
@@ -88,6 +96,11 @@ double associated_laguerre(int degree, int order, double x) {
     return current;
 }
 
+/**
+ * @brief Evaluates the associated Legendre function P_degree^order(x) for order >= 0.
+ *
+ * Includes the Condon-Shortley phase; @p x is clamped to [-1, 1].
+ */
 double associated_legendre(int degree, int order, double x) {
     x = std::clamp(x, -1.0, 1.0);
     double pmm = 1.0;
@@ -110,6 +123,7 @@ double associated_legendre(int degree, int order, double x) {
     return pmmp1;
 }
 
+/** @brief Evaluates the normalized hydrogen radial function R_nl at @p radius (bohr). */
 double radial_value(int n, int l, double radius) {
     const double rho = 2.0 * radius / double(n);
     const double normalization = std::sqrt(
@@ -119,13 +133,20 @@ double radial_value(int n, int l, double radius) {
         * associated_laguerre(n - l - 1, 2 * l + 1, rho);
 }
 
+/**
+ * @brief Chooses a sampling extent and isovalue from the radial distribution.
+ *
+ * Integrates r^2 R_nl^2 outward (Simpson's rule) until 95% of the probability is enclosed.
+ * @return The sampling half-extent in bohr (twice that radius rounded up, at least 2) and
+ *         |R_nl(r)| / sqrt(4 pi) at that radius, floored at 1e-8.
+ */
 std::pair<double, double> automatic_extent_and_isovalue(int n, int l) {
-    constexpr double maximum_radius = 200.0;
-    constexpr int steps = 100000;
-    const double step = maximum_radius / double(steps);
+    constexpr double kMaximumRadius = 200.0;
+    constexpr int kSteps = 100000;
+    const double step = kMaximumRadius / double(kSteps);
     double integral = 0.0;
     double radius = step;
-    for (int index = 0; index < steps; ++index) {
+    for (int index = 0; index < kSteps; ++index) {
         const double r0 = double(index) * step;
         const double r1 = r0 + step;
         const double rm = (r0 + r1) * 0.5;
@@ -142,10 +163,12 @@ std::pair<double, double> automatic_extent_and_isovalue(int n, int l) {
     return {extent, std::max(iso, 1.0e-8)};
 }
 
+/** @brief Returns the linear x-fastest index of a grid point in a cubic volume. */
 int volume_index(int size, int x, int y, int z) {
     return (z * size + y) * size + x;
 }
 
+/** @brief Linearly interpolates the isovalue crossing on an edge; uses the midpoint if flat. */
 QVector3D interpolated_point(
     const QVector3D& first,
     const QVector3D& second,
@@ -159,6 +182,7 @@ QVector3D interpolated_point(
     return first + (second - first) * amount;
 }
 
+/** @brief Returns the normalized wavefunction gradient by central differences. */
 QVector3D orbital_gradient(
     const AtomicOrbitalDefinition& definition,
     const QVector3D& position,
@@ -177,6 +201,12 @@ QVector3D orbital_gradient(
               - value(position.x(), position.y(), position.z() - delta))).normalized();
 }
 
+/**
+ * @brief Appends a triangle with analytic vertex normals pointing out of its phase lobe.
+ *
+ * Normals oppose the gradient for the positive surface and follow it for the negative one;
+ * the winding is flipped when needed to agree with them.
+ */
 void append_oriented_triangle(
     QVector<AtomicOrbitalVertex>* output,
     QVector3D a,
@@ -201,6 +231,7 @@ void append_oriented_triangle(
     output->append({{a, na}, {b, nb}, {c, nc}});
 }
 
+/** @brief Emits the zero, one, or two triangles where @p isovalue cuts a tetrahedron. */
 void polygonise_tetrahedron(
     const std::array<QVector3D, 4>& positions,
     const std::array<float, 4>& values,
@@ -249,6 +280,12 @@ void polygonise_tetrahedron(
     }
 }
 
+/**
+ * @brief Extracts one isosurface by marching tetrahedra (six per grid cell).
+ *
+ * A positive @p isovalue yields the positive-phase surface and a negative one the
+ * negative-phase surface.
+ */
 QVector<AtomicOrbitalVertex> build_surface(
     const QVector<float>& values,
     int size,
@@ -257,11 +294,11 @@ QVector<AtomicOrbitalVertex> build_surface(
     const AtomicOrbitalDefinition& definition) {
     QVector<AtomicOrbitalVertex> output;
     const float spacing = 2.0f * half_extent / float(size - 1);
-    static constexpr int tetrahedra[6][4] = {
+    static constexpr int kTetrahedra[6][4] = {
         {0, 2, 3, 7}, {0, 2, 6, 7}, {0, 4, 6, 7},
         {0, 6, 1, 2}, {0, 6, 1, 4}, {5, 6, 1, 4},
     };
-    static constexpr int corners[8][3] = {
+    static constexpr int kCorners[8][3] = {
         {0, 0, 0}, {0, 1, 0}, {1, 1, 0}, {1, 0, 0},
         {0, 0, 1}, {0, 1, 1}, {1, 1, 1}, {1, 0, 1},
     };
@@ -271,16 +308,16 @@ QVector<AtomicOrbitalVertex> build_surface(
                 std::array<QVector3D, 8> cube_positions;
                 std::array<float, 8> cube_values{};
                 for (int corner = 0; corner < 8; ++corner) {
-                    const int gx = x + corners[corner][0];
-                    const int gy = y + corners[corner][1];
-                    const int gz = z + corners[corner][2];
+                    const int gx = x + kCorners[corner][0];
+                    const int gy = y + kCorners[corner][1];
+                    const int gz = z + kCorners[corner][2];
                     cube_positions[corner] = QVector3D(
                         -half_extent + float(gx) * spacing,
                         -half_extent + float(gy) * spacing,
                         -half_extent + float(gz) * spacing);
                     cube_values[corner] = values.at(volume_index(size, gx, gy, gz));
                 }
-                for (const auto& tetrahedron : tetrahedra) {
+                for (const auto& tetrahedron : kTetrahedra) {
                     std::array<QVector3D, 4> tetra_positions;
                     std::array<float, 4> tetra_values{};
                     for (int vertex = 0; vertex < 4; ++vertex) {
@@ -297,11 +334,17 @@ QVector<AtomicOrbitalVertex> build_surface(
     return output;
 }
 
+/** @brief One control point of a piecewise-linear colormap. */
 struct ColorStop {
     double position;
     QColor color;
 };
 
+/**
+ * @brief Returns the control points of a named colormap; a "_r" suffix reverses it.
+ *
+ * Unknown names fall back to coolwarm.
+ */
 QVector<ColorStop> color_stops(const QString& requested_name) {
     QString name = requested_name;
     const bool reversed = name.endsWith(QStringLiteral("_r"));

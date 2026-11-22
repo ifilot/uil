@@ -5,6 +5,7 @@
 #include <numbers>
 
 namespace {
+/** @brief Describes the bond motion at @p phase (in periods, clamped to [0, 1]) for captions. */
 QString stage_description(double phase) {
     constexpr double near_turning_point = 0.035;
     const double wrapped = phase >= 1.0 ? 1.0 : std::clamp(phase, 0.0, 1.0);

@@ -52,11 +52,21 @@ public:
     void begin_slide_transition();
     /** @brief Renders newly configured OpenGL overlays before they are presented. */
     void prepare_interactive_overlays_for_display();
-    /** @brief Adds a rendered slide image to the local texture cache. */
+    /**
+     * @brief Offers a freshly rendered slide image to the window.
+     *
+     * The window only keeps the image when @p texture_key is the slide currently shown (for
+     * example a re-render with video posters); other slides are cached by AppController.
+     */
     void cache_slide_image(const QString& texture_key, const QImage& image);
     /** @brief Updates the page count and current page used by deck overview. */
     void set_document_overview(int page_count, int current_page);
-    /** @brief Stores a rendered thumbnail for deck overview. */
+    /**
+     * @brief Stores a rendered thumbnail for the slide grid.
+     *
+     * Thumbnails rendered for another view (another @p bounding_pixel_size, such as the
+     * presenter's strip) are ignored.
+     */
     void set_deck_overview_slide_image(int page_index, const QSize& bounding_pixel_size, const QImage& image);
     /** @brief Displays a decoded video frame over its slide rectangle. */
     void set_video_frame(const QImage& image, QRectF slide_rect);
@@ -161,7 +171,7 @@ signals:
     void last_requested();
     /** @brief Emitted when the user requests a specific page. */
     void page_requested(int page_index);
-    /** @brief Emitted when deck-overview thumbnails need rendering. */
+    /** @brief Emitted when deck-overview thumbnails need rendering; an empty size withdraws the request. */
     void deck_overview_renders_requested(
         const QSize& bounding_pixel_size,
         int focused_page_index,
@@ -171,8 +181,15 @@ signals:
     void play_pause_requested();
     /** @brief Emitted when audience render dimensions change. */
     void render_target_changed();
-    /** @brief Emitted when the current annotation overlay changes. */
+    /**
+     * @brief Publishes the current slide's annotation overlay.
+     *
+     * Emitted when the slide changes and, while drawing, at most every
+     * kAnnotationSyncIntervalMs plus once when a stroke ends.
+     */
     void annotation_overlay_changed(const QImage& image);
+    /** @brief Emitted whenever the user draws, erases or clears annotations on this window. */
+    void annotations_edited();
     /** @brief Emitted when the presentation window closes. */
     void presentation_closed();
 
@@ -216,13 +233,6 @@ private:
         White
     };
 
-    struct CachedSlide {
-        QString key;
-        QImage image;
-    };
-
-    /** @brief Evicts old slide textures when the local cache exceeds its limit. */
-    void evict_old_slides();
     /** @brief Applies the selected screen geometry for windowed or full-screen mode. */
     void apply_screen_geometry(bool fullscreen);
     /** @brief Presents the current slide and active OpenGL children after a fullscreen swap. */
@@ -245,6 +255,22 @@ private:
     const QImage* current_annotation_image() const;
     /** @brief Draws one annotation segment between two window positions. */
     void draw_annotation_segment(QPointF from_window_point, QPointF to_window_point);
+    /** @brief Publishes the current annotation overlay now and cancels any pending throttled update. */
+    void publish_annotation_overlay();
+    /** @brief Returns the window area covered by the laser pointer at @p position. */
+    QRect pointer_bounds(const QPointF& position) const;
+    /** @brief Returns the window area covered by the eraser cursor at @p position. */
+    QRect eraser_cursor_bounds(const QPointF& position) const;
+    /**
+     * @brief Applies @p target geometry to an overlay widget and shows it.
+     *
+     * Only re-stacks the widget when it was hidden or moved, so repeated calls from
+     * paintEvent() stay cheap for native OpenGL children.
+     * @return True when the widget was hidden or its geometry changed.
+     */
+    static bool place_overlay_widget(QWidget* widget, const QRect& target);
+    /** @brief Returns whether any OpenGL overlay is currently shown. */
+    bool has_visible_opengl_overlay() const;
     /** @brief Draws the presentation pointer. */
     void draw_pointer(QPainter& painter) const;
     /** @brief Shows the pointer at @p position and restarts its idle timeout. */
@@ -302,7 +328,6 @@ private:
 
     QString current_texture_key_;
     QImage current_slide_image_;
-    std::vector<CachedSlide> slide_cache_;
     QImage video_frame_;
     QRectF video_rect_;
     std::unique_ptr<MoleculeWidget> molecule_widget_;
@@ -342,6 +367,7 @@ private:
     QPointer<QScreen> screen_;
     QTimer cursor_hide_timer_;
     QTimer pointer_hide_timer_;
+    QTimer annotation_sync_timer_;
     BlankMode blank_mode_ = BlankMode::None;
     bool is_fullscreen_ = false;
     int annotation_thickness_ = 6;
@@ -356,6 +382,6 @@ private:
     bool interactive_figure_suspended_for_feature_menu_ = false;
     bool atomic_orbital_suspended_for_feature_menu_ = false;
     bool molecular_symmetry_suspended_for_feature_menu_ = false;
-    bool resume_molecule_vibration_after_menu_ = false;
     bool slide_transition_active_ = false;
+    bool fullscreen_slide_presented_ = false;
 };

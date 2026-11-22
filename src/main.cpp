@@ -149,12 +149,12 @@ void apply_application_theme(QApplication& app) {
     palette.setColor(QPalette::PlaceholderText, QColor(0x85, 0x85, 0x85));
     app.setPalette(palette);
 
-    QFile styleFile(QStringLiteral(":/styles/vscode.qss"));
-    if (styleFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        app.setStyleSheet(QString::fromUtf8(styleFile.readAll()));
+    QFile style_file(QStringLiteral(":/styles/vscode.qss"));
+    if (style_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        app.setStyleSheet(QString::fromUtf8(style_file.readAll()));
     }
 }
-}
+}  // namespace
 
 /** @brief Initializes Qt and runs the UIL desktop application. */
 int main(int argc, char* argv[]) {
@@ -234,7 +234,7 @@ int main(int argc, char* argv[]) {
     AudienceWindow audience_window;
     record_startup_checkpoint(QStringLiteral("construct_audience_window"));
     launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_AUDIENCE_READY);
-    PresenterWindow presenterWindow(&controller);
+    PresenterWindow presenter_window(&controller);
     record_startup_checkpoint(QStringLiteral("construct_presenter_window"));
     launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_PRESENTER_READY);
 
@@ -262,9 +262,9 @@ int main(int argc, char* argv[]) {
 
     audience_window.set_audience_screen(controller.selected_audience_screen());
     launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_SHOWING_PRESENTER);
-    presenterWindow.show();
+    presenter_window.show();
     if (loading_splash) {
-        loading_splash->finish(&presenterWindow);
+        loading_splash->finish(&presenter_window);
         performance_log::record_duration(
             QStringLiteral("startup.loading_window_visible"),
             loading_window_visible_timer.elapsed());

@@ -11,7 +11,7 @@ QHash<QString, QIcon>& icon_cache() {
     static QHash<QString, QIcon> cache;
     return cache;
 }
-}
+}  // namespace
 
 QString bluecurve::resource_path(const QString& name, int nominal_size) {
     return QStringLiteral(":/bluecurve/%1x%1/actions/%2.svg").arg(nominal_size).arg(name);

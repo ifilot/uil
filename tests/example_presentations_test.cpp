@@ -7,6 +7,7 @@
 #include <QTest>
 
 namespace {
+/** @brief Writes a small placeholder file used as an installed example. */
 bool write_fixture(const QString& path) {
     QFile file(path);
     return file.open(QIODevice::WriteOnly)
@@ -18,8 +19,11 @@ class ExamplePresentationsTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief Verifies that a missing examples directory yields no entries. */
     void missing_directory_has_no_examples();
+    /** @brief Verifies discovery, menu order, and absolute paths of known examples. */
     void discovers_known_examples_in_menu_order();
+    /** @brief Verifies that unknown files and same-named directories are skipped. */
     void ignores_unknown_files_and_directories();
 };
 

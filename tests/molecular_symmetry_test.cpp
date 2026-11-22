@@ -7,6 +7,7 @@
 #include <QTest>
 
 namespace {
+/** @brief Returns a valid C2v water payload with custom operation colours. */
 QByteArray water_payload() {
   return QByteArrayLiteral(R"json({
     "format": "uil.molecular-symmetry",
@@ -34,10 +35,15 @@ class MolecularSymmetryTest final : public QObject {
   Q_OBJECT
 
  private slots:
+  /** @brief Checks that a complete payload parses into geometry, colours, and operations. */
   void parses_complete_operation_set();
+  /** @brief Checks rotation and reflection matrices at partial and full progress. */
   void computes_fractional_transforms();
+  /** @brief Checks that an operation not mapping the molecule onto itself is rejected. */
   void rejects_operation_that_does_not_preserve_molecule();
+  /** @brief Checks that a malformed operation colour is rejected. */
   void rejects_invalid_operation_color();
+  /** @brief Parses every bundled example payload and checks its operation count. */
   void bundled_example_payloads_are_valid();
   /** @brief Validates author-defined orbital selections and rejects unsafe/ambiguous entries. */
   void parses_orbital_selections();
@@ -178,7 +184,8 @@ void MolecularSymmetryTest::baked_orbitals_preserve_phase() {
       }
     }
   }
-  const auto& radial = symmetry_orbital_mesh("2s");
+  const QString radial_name = QStringLiteral("2s");
+  const auto& radial = symmetry_orbital_mesh(radial_name);
   float positive_radius = 0, negative_radius = 2;
   for (const auto& vertex : radial.positive)
     positive_radius = std::max(positive_radius, vertex.position.length());

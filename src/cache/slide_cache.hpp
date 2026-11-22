@@ -8,12 +8,21 @@
 
 #include <optional>
 
+/**
+ * @brief Memory-bounded LRU cache of rendered slide images.
+ *
+ * Not synchronized: use it from one thread (the GUI thread in AppController).
+ */
 class SlideCache {
 public:
-    /** @brief Constructs a cache capped at @p memoryLimitBytes bytes. */
-    explicit SlideCache(qint64 memoryLimitBytes = -1);
+    /**
+     * @brief Constructs a cache capped at @p memory_limit_bytes bytes.
+     * @param[in] memory_limit_bytes Budget in bytes; a non-positive value selects
+     *            recommended_memory_limit_bytes().
+     */
+    explicit SlideCache(qint64 memory_limit_bytes = -1);
 
-    /** @brief Returns a platform-adaptive default cache budget. */
+    /** @brief Returns the default budget: 1/8 of physical memory within [128 MiB, 1 GiB] on Windows, 512 MiB elsewhere. */
     static qint64 recommended_memory_limit_bytes();
 
     /** @brief Returns whether an image is cached for @p key. */
@@ -24,6 +33,11 @@ public:
     void put(const SlideCacheKey& key, const QImage& image);
     /** @brief Removes every cached image and resets cache statistics. */
     void clear();
+    /**
+     * @brief Removes every cached size of one page of one document.
+     * @return Number of entries removed.
+     */
+    int remove_page(const QString& document_hash, int page_index);
 
     /** @brief Returns the estimated memory used by cached images. */
     qint64 estimated_memory_bytes() const;

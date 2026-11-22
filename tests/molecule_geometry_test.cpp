@@ -6,6 +6,7 @@
 #include <cmath>
 
 namespace {
+/** @brief Writes @p contents to @p path; returns whether every byte was written. */
 bool write_xyz(const QString& path, const QByteArray& contents) {
   QFile file(path);
   return file.open(QIODevice::WriteOnly | QIODevice::Truncate) &&

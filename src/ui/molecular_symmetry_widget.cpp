@@ -36,6 +36,7 @@ constexpr int kAnimationFrameMs = 16;
 constexpr int kFinalPoseHoldMs = 180;
 constexpr float kReferencePoseOpacity = 0.5f;
 
+/** @brief Returns the stable `operationType` property value exposed on operation buttons. */
 QString operation_style_name(MolecularSymmetryOperationType type) {
   switch (type) {
     case MolecularSymmetryOperationType::Identity:
@@ -52,6 +53,7 @@ QString operation_style_name(MolecularSymmetryOperationType type) {
   return {};
 }
 
+/** @brief Blends @p color with white, keeping @p color_percent percent of the colour. */
 QColor mix_with_white(const QColor& color, int color_percent) {
   const int white_percent = 100 - color_percent;
   return QColor((color.red() * color_percent + 255 * white_percent) / 100,
@@ -59,6 +61,10 @@ QColor mix_with_white(const QColor& color, int color_percent) {
                 (color.blue() * color_percent + 255 * white_percent) / 100);
 }
 
+/**
+ * @brief Returns a style sheet for a checkable button tinted with @p color.
+ * @param compact Uses smaller text and padding, for dense three-column layouts and the header.
+ */
 QString operation_button_style(const QColor& color, bool compact) {
   const QColor background = mix_with_white(color, 10);
   const QColor hover = mix_with_white(color, 18);
@@ -80,6 +86,7 @@ QString operation_button_style(const QColor& color, bool compact) {
       .arg(compact ? 2 : 5);
 }
 
+/** @brief Formats a Schoenflies symbol with everything after its first letter subscripted. */
 QString point_group_html(const QString& point_group) {
   const QString escaped = point_group.toHtmlEscaped();
   if (escaped.size() < 2 || !escaped.at(0).isLetter()) return escaped;
@@ -103,11 +110,14 @@ constexpr std::array<OrbitalChoice, 9> kOrbitalChoices{{
     {"3dz2", "$d_{z^2}$"},
 }};
 
+/** @brief Check box whose label is rendered as math text (sub- and superscripts). */
 class MathCheckBox final : public QCheckBox {
  public:
+  /** @brief Creates a check box labelled with @p math_text in ui_math_text markup. */
   explicit MathCheckBox(const QString& math_text, QWidget* parent = nullptr)
       : QCheckBox(math_text, parent) {}
 
+  /** @brief Widens the default hint by the difference between formatted and plain label width. */
   QSize sizeHint() const override {
     QSize hint = QCheckBox::sizeHint();
     const int plain_width = fontMetrics().horizontalAdvance(text());
@@ -118,6 +128,7 @@ class MathCheckBox final : public QCheckBox {
   }
 
  protected:
+  /** @brief Draws the native check indicator, then the label as math text. */
   void paintEvent(QPaintEvent*) override {
     QStyleOptionButton option;
     initStyleOption(&option);
@@ -132,10 +143,16 @@ class MathCheckBox final : public QCheckBox {
   }
 };
 
+/**
+ * @brief Maps an orbital name onto the simplified s/p/d selection shown by the player.
+ *
+ * Only the symmetry type matters here, so the 2s shell is presented as the s function (1s).
+ */
 QString simplified_orbital_name(const QString& name) {
   return name == QStringLiteral("2s") ? QStringLiteral("1s") : name;
 }
 
+/** @brief Applies simplified_orbital_name() and drops resulting duplicates per atom, keeping order. */
 QVector<SymmetryOrbital> simplified_orbitals(const QVector<SymmetryOrbital>& orbitals) {
   QVector<SymmetryOrbital> result;
   for (auto orbital : orbitals) {

@@ -749,6 +749,7 @@ copy_example_presentations() {
         interactive-figure.pdf
         atomic-orbitals.pdf
         molecular-symmetry.pdf
+        orbital-atlas.pdf
     )
     local example_file
 

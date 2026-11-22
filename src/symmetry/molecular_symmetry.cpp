@@ -15,10 +15,12 @@ constexpr qsizetype kMaximumPayloadBytes = 4 * 1024 * 1024;
 constexpr int kMaximumOperations = 96;
 constexpr double kPi = 3.14159265358979323846;
 
+/** @brief Assigns @p message to the optional error output. */
 void set_error(QString* error_message, const QString& message) {
   if (error_message) *error_message = message;
 }
 
+/** @brief Returns the right-handed rotation by @p radians about @p axis (normalized here). */
 QMatrix4x4 axis_angle_matrix(QVector3D axis, double radians) {
   axis.normalize();
   const double x = axis.x();
@@ -41,6 +43,11 @@ QMatrix4x4 axis_angle_matrix(QVector3D axis, double radians) {
   return matrix;
 }
 
+/**
+ * @brief Reduces C_n^k to the equivalent power in [-n/2, n/2].
+ *
+ * Animations then turn the short way round, e.g. C_3^2 plays as a -120 degree rotation.
+ */
 int shortest_signed_power(int power, int order) {
   int signed_power = power % order;
   if (signed_power > order / 2) signed_power -= order;
@@ -48,6 +55,10 @@ int shortest_signed_power(int power, int order) {
   return signed_power;
 }
 
+/**
+ * @brief Reads an optional `#RRGGBB` entry of `operation_colors` into @p color.
+ * @return True if the entry is absent or valid; false, with @p error_message set, otherwise.
+ */
 bool parse_operation_color(const QJsonObject& colors, const QString& name, QColor* color,
                            QString* error_message) {
   if (!colors.contains(name)) return true;
@@ -62,6 +73,11 @@ bool parse_operation_color(const QJsonObject& colors, const QString& name, QColo
   return true;
 }
 
+/**
+ * @brief Returns I - 2 * amount * n n^T for the plane with normal @p normal.
+ *
+ * @p amount 0 is the identity and 1 the full reflection; at 0.5 the matrix is singular.
+ */
 QMatrix4x4 reflection_matrix(QVector3D normal, double amount) {
   normal.normalize();
   QMatrix4x4 matrix;
@@ -76,6 +92,7 @@ QMatrix4x4 reflection_matrix(QVector3D normal, double amount) {
   return matrix;
 }
 
+/** @brief Parses a finite three-number JSON array into @p axis; returns false otherwise. */
 bool parse_axis(const QJsonValue& value, QVector3D* axis) {
   if (!axis || !value.isArray()) return false;
   const QJsonArray values = value.toArray();
@@ -88,6 +105,10 @@ bool parse_axis(const QJsonValue& value, QVector3D* axis) {
   return true;
 }
 
+/**
+ * @brief Returns whether the completed operation maps every atom onto an atom of the same
+ *        element, within 0.12 angstrom, about the coordinate origin.
+ */
 bool operation_maps_geometry(const MolecularSymmetryOperation& operation,
                              const MoleculeGeometry& geometry) {
   const QMatrix4x4 matrix = operation.matrix_at(1.0);

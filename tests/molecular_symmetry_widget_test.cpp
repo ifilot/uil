@@ -20,7 +20,9 @@ class MolecularSymmetryWidgetTest final : public QObject {
   Q_OBJECT
 
  private slots:
+  /** @brief Checks default radii and the neutral-atom occupied-subshell filter. */
   void filters_supported_ground_state_subshells();
+  /** @brief Checks the operation buttons, tabs, and playback of each operation; needs OpenGL. */
   void exposes_and_plays_every_operation_when_opengl_is_available();
 };
 

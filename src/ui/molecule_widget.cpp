@@ -39,14 +39,19 @@ constexpr int kDiscSlices = 64;
 constexpr int kToolbarButtonSize = 34;
 constexpr int kToolbarMargin = 8;
 constexpr int kAnimationIntervalMs = 16;
+// Longest wall-clock step applied in one tick. Larger gaps (a busy GUI thread or a
+// suspended timer) slow the animation briefly instead of making it jump.
+constexpr qint64 kMaximumAnimationStepNs = 100'000'000;
 constexpr float kVibrationCyclesPerSecond = 1.25f;
 constexpr float kAutoRotationDegreesPerSecond = 24.0f;
 
+/** @brief Interleaved vertex layout uploaded to the molecule shader. */
 struct MeshVertex {
   float position[3];
   float normal[3];
 };
 
+/** @brief Returns the display colour of a chemical element; unknown elements are grey-blue. */
 QColor element_color(const QString& element) {
   if (element == QStringLiteral("H")) {
     return QColor(245, 245, 245);
@@ -81,6 +86,7 @@ QColor element_color(const QString& element) {
   return QColor(125, 145, 165);
 }
 
+/** @brief Returns the illustrative ball radius in angstrom used for an element's atom sphere. */
 float element_display_radius(const QString& element) {
   if (element == QStringLiteral("H")) {
     return 0.28f;
@@ -100,6 +106,7 @@ float element_display_radius(const QString& element) {
   return 0.46f;
 }
 
+/** @brief Converts an sRGB colour to the linear RGB expected by the shader's lighting. */
 QVector3D linear_color(const QColor& color) {
   auto linear_channel = [](float channel) {
     return channel <= 0.04045f ? channel / 12.92f : std::pow((channel + 0.055f) / 1.055f, 2.4f);
@@ -108,6 +115,7 @@ QVector3D linear_color(const QColor& color) {
                    linear_channel(float(color.blueF())));
 }
 
+/** @brief Appends one position/normal pair to @p vertices. */
 void append_vertex(QVector<MeshVertex>* vertices, QVector3D position, QVector3D normal) {
   vertices->push_back(MeshVertex{
       {position.x(), position.y(), position.z()},
@@ -115,6 +123,7 @@ void append_vertex(QVector<MeshVertex>* vertices, QVector3D position, QVector3D 
   });
 }
 
+/** @brief Builds an indexed unit UV sphere centred at the origin. */
 void create_sphere_geometry(QVector<MeshVertex>* vertices, QVector<quint32>* indices) {
   vertices->reserve((kSphereStacks + 1) * (kSphereSlices + 1));
   indices->reserve(kSphereStacks * kSphereSlices * 6);
@@ -139,6 +148,7 @@ void create_sphere_geometry(QVector<MeshVertex>* vertices, QVector<quint32>* ind
   }
 }
 
+/** @brief Builds an indexed, capped unit-radius cylinder spanning z = 0 to z = 1. */
 void create_cylinder_geometry(QVector<MeshVertex>* vertices, QVector<quint32>* indices) {
   vertices->reserve((kCylinderSlices + 1) * 4 + 2);
   indices->reserve(kCylinderSlices * 12);
@@ -185,6 +195,7 @@ void create_cylinder_geometry(QVector<MeshVertex>* vertices, QVector<quint32>* i
   }
 }
 
+/** @brief Builds an indexed unit disc in the z = 0 plane with a +Z normal (mirror planes). */
 void create_disc_geometry(QVector<MeshVertex>* vertices, QVector<quint32>* indices) {
   vertices->reserve(kDiscSlices + 2);
   indices->reserve(kDiscSlices * 3);
@@ -200,6 +211,7 @@ void create_disc_geometry(QVector<MeshVertex>* vertices, QVector<quint32>* indic
 }
 }  // namespace
 
+/** @brief GPU vertex/index buffers and the VAO binding them to the molecule shader. */
 struct MoleculeWidget::Mesh {
   QOpenGLBuffer vertex_buffer{QOpenGLBuffer::VertexBuffer};
   QOpenGLBuffer index_buffer{QOpenGLBuffer::IndexBuffer};
@@ -207,6 +219,11 @@ struct MoleculeWidget::Mesh {
   int index_count = 0;
   QVector3D orbital_centroid;
 
+  /**
+   * @brief Uploads static geometry and records the attribute layout for @p program.
+   * @return False if a GL object cannot be created or the index list is empty.
+   * Requires the owning context to be current.
+   */
   bool create(QOpenGLShaderProgram* program, const QVector<MeshVertex>& vertices,
               const QVector<quint32>& indices) {
     if (!program || !vao.create() || !vertex_buffer.create() || !index_buffer.create()) {
@@ -238,6 +255,7 @@ struct MoleculeWidget::Mesh {
     return index_count > 0;
   }
 
+  /** @brief Deletes the GL objects; requires the context that created them to be current. */
   void destroy() {
     vao.destroy();
     vertex_buffer.destroy();
@@ -264,6 +282,9 @@ MoleculeWidget::MoleculeWidget(QWidget* parent) : QOpenGLWidget(parent) {
 }
 
 MoleculeWidget::~MoleculeWidget() {
+  // QOpenGLWidget's own destructor destroys the context after this object's members are
+  // gone; the cleanup hook must not run then.
+  disconnect(context_cleanup_connection_);
   if (vibration_timer_) {
     vibration_timer_->stop();
   }
@@ -355,10 +376,13 @@ void MoleculeWidget::set_world_axes_visible(bool visible) {
 bool MoleculeWidget::world_axes_visible() const { return world_axes_visible_; }
 
 void MoleculeWidget::set_vibration_playing(bool playing) {
+  if (!playing) {
+    resume_vibration_on_show_ = false;  // An explicit pause also cancels a pending resume.
+  }
   const bool should_play = playing && geometry_.has_vibration();
   if (vibration_timer_) {
     if (should_play && !vibration_timer_->isActive()) {
-      vibration_timer_->start();
+      start_animation_timer(vibration_timer_);
     } else if (!should_play && vibration_timer_->isActive()) {
       vibration_timer_->stop();
     }
@@ -379,7 +403,7 @@ void MoleculeWidget::set_auto_rotation_enabled(bool enabled) {
   auto_rotation_enabled_ = enabled;
   if (auto_rotation_timer_) {
     if (enabled && isVisible()) {
-      auto_rotation_timer_->start();
+      start_animation_timer(auto_rotation_timer_);
     } else {
       auto_rotation_timer_->stop();
     }
@@ -511,6 +535,17 @@ void MoleculeWidget::set_context_menu_handler(std::function<void(const QPoint&)>
 
 void MoleculeWidget::initializeGL() {
   initializeOpenGLFunctions();
+  // A reparent to another top-level window replaces the context. Release buffers and the
+  // shader while their own context is still alive, then initializeGL() runs again.
+  disconnect(context_cleanup_connection_);
+  context_cleanup_connection_ = connect(
+      context(), &QOpenGLContext::aboutToBeDestroyed, this,
+      [this] {
+        makeCurrent();
+        destroy_renderer();
+        doneCurrent();
+      },
+      Qt::DirectConnection);
   renderer_ready_ = create_renderer();
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
@@ -902,7 +937,9 @@ void MoleculeWidget::draw_eye(const QRect& pixel_viewport, float eye_offset,
             continue;
           }
         }
-        const QVector3D color = linear_color(phase == 0 ? QColor("#00f5ff") : QColor("#b026ff"));
+        static const QVector3D kPositivePhaseColor = linear_color(QColor(0x00, 0xf5, 0xff));
+        static const QVector3D kNegativePhaseColor = linear_color(QColor(0xb0, 0x26, 0xff));
+        const QVector3D color = phase == 0 ? kPositivePhaseColor : kNegativePhaseColor;
         QMatrix4x4 model = scene_model;
         model.translate(coordinate_origin_offset);
         if (!reference) model *= coordinate_transform_;
@@ -1114,28 +1151,42 @@ void MoleculeWidget::create_toolbar() {
   vibration_timer_ = new QTimer(this);
   vibration_timer_->setTimerType(Qt::PreciseTimer);
   vibration_timer_->setInterval(kAnimationIntervalMs);
-  connect(vibration_timer_, &QTimer::timeout, this, [this] {
-    constexpr float phase_step =
-        2.0f * kPi * kVibrationCyclesPerSecond * (float(kAnimationIntervalMs) / 1000.0f);
-    vibration_phase_ = std::fmod(vibration_phase_ + phase_step, 2.0f * kPi);
-    update();
-  });
+  connect(vibration_timer_, &QTimer::timeout, this, &MoleculeWidget::advance_animation);
 
   auto_rotation_timer_ = new QTimer(this);
   auto_rotation_timer_->setObjectName(QStringLiteral("moleculeAutoRotationTimer"));
   auto_rotation_timer_->setTimerType(Qt::PreciseTimer);
   auto_rotation_timer_->setInterval(kAnimationIntervalMs);
-  connect(auto_rotation_timer_, &QTimer::timeout, this, [this] {
-    constexpr float rotation_step =
-        kAutoRotationDegreesPerSecond * (float(kAnimationIntervalMs) / 1000.0f);
-    const QQuaternion z_rotation =
-        QQuaternion::fromAxisAndAngle(QVector3D(0.0f, 0.0f, 1.0f), rotation_step);
-    rotation_ = (rotation_ * z_rotation).normalized();
-    update();
-  });
+  connect(auto_rotation_timer_, &QTimer::timeout, this, &MoleculeWidget::advance_animation);
 
   update_toolbar_state();
   position_toolbar();
+}
+
+void MoleculeWidget::start_animation_timer(QTimer* timer) {
+  const bool animating = (vibration_timer_ && vibration_timer_->isActive()) ||
+                         (auto_rotation_timer_ && auto_rotation_timer_->isActive());
+  if (!animating || !animation_clock_.isValid()) animation_clock_.start();
+  timer->start();
+}
+
+void MoleculeWidget::advance_animation() {
+  // Both timers share one clock, so whichever fires advances every running animation by
+  // the time since the previous advance; motion speed is independent of tick rate.
+  if (!animation_clock_.isValid()) animation_clock_.start();
+  const qint64 step_ns = std::min(animation_clock_.nsecsElapsed(), kMaximumAnimationStepNs);
+  animation_clock_.restart();
+  const float seconds = float(double(step_ns) * 1.0e-9);
+  if (vibration_timer_ && vibration_timer_->isActive()) {
+    vibration_phase_ =
+        std::fmod(vibration_phase_ + 2.0f * kPi * kVibrationCyclesPerSecond * seconds, 2.0f * kPi);
+  }
+  if (auto_rotation_timer_ && auto_rotation_timer_->isActive()) {
+    const QQuaternion z_rotation = QQuaternion::fromAxisAndAngle(
+        QVector3D(0.0f, 0.0f, 1.0f), kAutoRotationDegreesPerSecond * seconds);
+    rotation_ = (rotation_ * z_rotation).normalized();
+  }
+  update();
 }
 
 void MoleculeWidget::position_toolbar() {
@@ -1230,7 +1281,9 @@ void MoleculeWidget::resizeEvent(QResizeEvent* event) {
 }
 
 void MoleculeWidget::hideEvent(QHideEvent* event) {
+  const bool was_playing = vibration_playing();
   set_vibration_playing(false);
+  resume_vibration_on_show_ = resume_vibration_on_show_ || was_playing;
   if (auto_rotation_timer_) {
     auto_rotation_timer_->stop();
   }
@@ -1239,8 +1292,12 @@ void MoleculeWidget::hideEvent(QHideEvent* event) {
 
 void MoleculeWidget::showEvent(QShowEvent* event) {
   QOpenGLWidget::showEvent(event);
-  if (auto_rotation_enabled_ && auto_rotation_timer_) {
-    auto_rotation_timer_->start();
+  if (auto_rotation_enabled_ && auto_rotation_timer_ && !auto_rotation_timer_->isActive()) {
+    start_animation_timer(auto_rotation_timer_);
+  }
+  if (resume_vibration_on_show_) {
+    resume_vibration_on_show_ = false;
+    set_vibration_playing(true);
   }
 }
 

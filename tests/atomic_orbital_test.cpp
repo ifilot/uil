@@ -8,13 +8,19 @@ class AtomicOrbitalTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief Checks the 55-entry catalog order from 1s through 5g. */
     void catalog_matches_managlyph_order_and_extends_through_5g();
+    /** @brief Checks 1s normalization, 2s and 2p nodes, and real-harmonic normalization. */
     void hydrogenic_values_have_expected_nodes_and_orientation();
+    /** @brief Checks parsed surface, plane, and contour options, including power-of-ten rounding. */
     void payload_parses_rendering_and_sampling_options();
+    /** @brief Checks that unknown orbitals, colormaps, and too-small contour limits are rejected. */
     void invalid_orbital_and_colormap_are_rejected();
     /** @brief Checks themed phase colors, reversal, and payload acceptance. */
     void garnet_colormaps_match_surface_phases();
+    /** @brief Checks that a 2s volume has both positive and negative isosurfaces. */
     void signed_isosurfaces_are_generated();
+    /** @brief Checks that every catalog orbital yields a valid volume on a 33-point grid. */
     void entire_catalog_generates_at_preview_resolution();
 };
 

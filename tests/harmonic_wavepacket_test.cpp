@@ -11,14 +11,23 @@ class HarmonicWavepacketTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief Verifies packet center and momentum at phases 0, 1/4, 1/2, and 1. */
     void characteristic_phases_match_coherent_state();
+    /** @brief Verifies that the sampled density integrates to one and peaks at its mean. */
     void gaussian_is_normalized_and_peaks_at_mean();
+    /** @brief Verifies one-period playback clamping, stopping, and looping. */
     void playback_clamps_and_stops_after_one_period();
+    /** @brief Verifies normalization of the first six oscillator eigenfunctions. */
     void first_six_basis_functions_are_normalized();
+    /** @brief Verifies the Poisson number-state weights of the coherent state. */
     void coherent_state_weights_follow_poisson_distribution();
+    /** @brief Verifies the relative phase of weighted basis components. */
     void real_components_follow_relative_phase();
+    /** @brief Verifies displaced-ground-state coefficients against the lecture derivation. */
     void displaced_state_coefficients_match_week_two_derivation();
+    /** @brief Verifies that the captured norm grows monotonically with the basis count. */
     void displaced_state_fit_converges_monotonically();
+    /** @brief Verifies parsing of a displaced-state expansion figure payload. */
     void displaced_state_interactive_payload_parses();
 };
 

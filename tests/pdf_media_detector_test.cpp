@@ -3,12 +3,24 @@
 #include "media/video_frame_extractor.hpp"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
+#include <array>
+
+#include <zlib.h>
+
 namespace {
+/**
+ * Upper bound for scanning each hostile fixture. Before the hardening these inputs crashed, ran
+ * for minutes, or took about 30 s; the margin absorbs heavily loaded CI machines.
+ */
+constexpr qint64 kScanTimeLimitMs = 5000;
+
 /** @brief Writes a synthetic PDF fixture to disk. */
 bool write_pdf_fixture(const QString& path, const QByteArray& contents) {
     QFile file(path);
@@ -111,6 +123,73 @@ QByteArray atomic_orbital_pdf_fixture() {
         + payload
         + QByteArrayLiteral("endstream\nendobj\n%%EOF\n");
 }
+
+/** @brief Returns one complete `N 0 obj ... endobj` definition. */
+QByteArray pdf_object(int object_number, const QByteArray& body) {
+    return QByteArray::number(object_number) + " 0 obj\n" + body + "\nendobj\n";
+}
+
+/** @brief Returns a Movie annotation body referencing @p file_name. */
+QByteArray movie_annotation_body(const QByteArray& file_name) {
+    return "<< /Type /Annot /Subtype /Movie /Rect [0 0 10 10] /F (" + file_name + ") >>";
+}
+
+/** @brief Returns a PDF whose page tree is a chain of @p depth nested /Pages nodes. */
+QByteArray deeply_nested_page_tree_fixture(int depth) {
+    QByteArray pdf = "%PDF-1.4\n" + pdf_object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    pdf.reserve(qsizetype(depth) * 72);
+    for (int level = 0; level < depth; ++level) {
+        pdf += pdf_object(
+            2 + level,
+            "<< /Type /Pages /Kids [" + QByteArray::number(3 + level) + " 0 R] /Count 1 >>");
+    }
+    const int leaf = 2 + depth;
+    pdf += pdf_object(leaf, "<< /Type /Page /Annots [" + QByteArray::number(leaf + 1) + " 0 R] >>");
+    pdf += pdf_object(leaf + 1, movie_annotation_body("deep.mov"));
+    return pdf + "%%EOF\n";
+}
+
+/** @brief Returns a valid one-page movie PDF followed by @p count headers sharing one `endobj`. */
+QByteArray unterminated_objects_fixture(int count) {
+    QByteArray pdf = "%PDF-1.4\n" + pdf_object(1, "<< /Type /Catalog /Pages 2 0 R >>")
+        + pdf_object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+        + pdf_object(3, "<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>")
+        + pdf_object(4, movie_annotation_body("clip.mov"));
+    const QByteArray padding(64, 'x');
+    pdf.reserve(pdf.size() + qsizetype(count) * 100);
+    for (int index = 0; index < count; ++index) {
+        pdf += QByteArray::number(100 + index) + " 0 obj\n<< /Filler (" + padding + ") >>\n";
+    }
+    return pdf + "endobj\n%%EOF\n";
+}
+
+/** @brief Returns @p size zero bytes compressed with zlib, without materializing them. */
+QByteArray deflated_zeros(qsizetype size) {
+    z_stream stream{};
+    if (deflateInit(&stream, Z_BEST_COMPRESSION) != Z_OK) {
+        return {};
+    }
+    const QByteArray zeros(1024 * 1024, '\0');
+    QByteArray output;
+    std::array<char, 65536> buffer{};
+    qsizetype remaining = size;
+    int result = Z_OK;
+    do {
+        const qsizetype chunk = std::min<qsizetype>(remaining, zeros.size());
+        stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(zeros.constData()));
+        stream.avail_in = uInt(chunk);
+        remaining -= chunk;
+        const int flush = remaining == 0 ? Z_FINISH : Z_NO_FLUSH;
+        do {
+            stream.next_out = reinterpret_cast<Bytef*>(buffer.data());
+            stream.avail_out = uInt(buffer.size());
+            result = deflate(&stream, flush);
+            output.append(buffer.data(), qsizetype(buffer.size() - stream.avail_out));
+        } while (stream.avail_out == 0);
+    } while (remaining > 0);
+    deflateEnd(&stream);
+    return result == Z_STREAM_END ? output : QByteArray{};
+}
 }
 
 class PdfMediaDetectorTest final : public QObject {
@@ -155,6 +234,24 @@ private slots:
     /** @brief Verifies all five bundled molecular-symmetry players end to end. */
     void bundled_molecular_symmetry_example_loads();
 
+    /** @brief Verifies that a 100k-level /Pages chain neither overflows the stack nor hangs. */
+    void deeply_nested_page_tree_is_bounded();
+
+    /** @brief Verifies that many `obj` headers sharing one `endobj` scan in linear time. */
+    void unterminated_objects_scan_quickly();
+
+    /** @brief Verifies that the object-header scanner stays linear on a long digit run. */
+    void long_digit_run_scans_quickly();
+
+    /** @brief Verifies that reference cycles in the page tree terminate with correct page order. */
+    void page_tree_reference_cycle_terminates();
+
+    /** @brief Verifies that decompression bombs in object streams share a bounded budget. */
+    void object_stream_decompression_is_bounded();
+
+    /** @brief Verifies that one large /Annots array shared by many pages is bounded. */
+    void shared_annotation_array_is_bounded();
+
 #if defined(UIL_HAVE_FFMPEG)
     /** @brief Verifies that the optional FFmpeg runtime can be loaded on first use. */
     void ffmpeg_runtime_loads_lazily();
@@ -166,10 +263,10 @@ void PdfMediaDetectorTest::annotation_helpers_report_state() {
     QVERIFY(!annotation.has_first_frame());
     QVERIFY(!annotation.is_mp4());
 
-    annotation.fileName = QStringLiteral("CLIP.MP4");
+    annotation.file_name = QStringLiteral("CLIP.MP4");
     QVERIFY(annotation.is_mp4());
 
-    annotation.fileName.clear();
+    annotation.file_name.clear();
     annotation.resolved_file_path = QStringLiteral("C:/media/clip.mp4");
     QVERIFY(annotation.is_mp4());
 
@@ -199,7 +296,7 @@ void PdfMediaDetectorTest::scans_linked_and_orphan_annotations() {
     QCOMPARE(linked.page_index, 0);
     QCOMPARE(linked.object_number, 5);
     QCOMPARE(linked.subtype, QStringLiteral("Movie"));
-    QCOMPARE(linked.fileName, QStringLiteral("movies/clip.mov"));
+    QCOMPARE(linked.file_name, QStringLiteral("movies/clip.mov"));
     QCOMPARE(linked.rect, QRectF(10, 20, 20, 30));
     QCOMPARE(linked.resolved_file_path,
              QFileInfo(QDir(package_root), QStringLiteral("movies/clip.mov")).absoluteFilePath());
@@ -208,7 +305,7 @@ void PdfMediaDetectorTest::scans_linked_and_orphan_annotations() {
     QCOMPARE(orphan.page_index, -1);
     QCOMPARE(orphan.object_number, 6);
     QCOMPARE(orphan.subtype, QStringLiteral("Sound"));
-    QCOMPARE(orphan.fileName, QStringLiteral("orphan.wav"));
+    QCOMPARE(orphan.file_name, QStringLiteral("orphan.wav"));
     QVERIFY(orphan.resolved_file_path.isEmpty());
 
     QVERIFY(result.summary().contains(QStringLiteral("page 1 Movie")));
@@ -453,6 +550,137 @@ void PdfMediaDetectorTest::bundled_molecular_symmetry_example_loads() {
         QCOMPARE(annotation.definition.operations.size(), expected_counts.at(index));
     }
     QVERIFY(result.summary().contains(QStringLiteral("embedded symmetry ready")));
+}
+
+void PdfMediaDetectorTest::deeply_nested_page_tree_is_bounded() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString pdf_path = directory.filePath(QStringLiteral("deep.pdf"));
+    constexpr int kDepth = 100000;
+    QVERIFY(write_pdf_fixture(pdf_path, deeply_nested_page_tree_fixture(kDepth)));
+
+    QElapsedTimer timer;
+    timer.start();
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QVERIFY2(timer.elapsed() < kScanTimeLimitMs, qPrintable(QString::number(timer.elapsed())));
+    QCOMPARE(result.annotations.size(), 1);
+    QCOMPARE(result.annotations.first().object_number, kDepth + 3);
+    QCOMPARE(result.annotations.first().file_name, QStringLiteral("deep.mov"));
+}
+
+void PdfMediaDetectorTest::unterminated_objects_scan_quickly() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString pdf_path = directory.filePath(QStringLiteral("unterminated.pdf"));
+    QVERIFY(write_pdf_fixture(pdf_path, unterminated_objects_fixture(100000)));
+
+    QElapsedTimer timer;
+    timer.start();
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QVERIFY2(timer.elapsed() < kScanTimeLimitMs, qPrintable(QString::number(timer.elapsed())));
+    QCOMPARE(result.annotations.size(), 1);
+    QCOMPARE(result.annotations.first().page_index, 0);
+    QCOMPARE(result.annotations.first().file_name, QStringLiteral("clip.mov"));
+}
+
+void PdfMediaDetectorTest::long_digit_run_scans_quickly() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString pdf_path = directory.filePath(QStringLiteral("digits.pdf"));
+    QVERIFY(write_pdf_fixture(
+        pdf_path,
+        movie_path_pdf_fixture(QByteArrayLiteral("clip.mov")) + QByteArray(4 * 1024 * 1024, '7')
+            + QByteArrayLiteral("\nendobj\n%%EOF\n")));
+
+    QElapsedTimer timer;
+    timer.start();
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QVERIFY2(timer.elapsed() < kScanTimeLimitMs, qPrintable(QString::number(timer.elapsed())));
+    QCOMPARE(result.annotations.size(), 1);
+    QCOMPARE(result.annotations.first().page_index, 0);
+}
+
+void PdfMediaDetectorTest::page_tree_reference_cycle_terminates() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString pdf_path = directory.filePath(QStringLiteral("cycle.pdf"));
+    QVERIFY(write_pdf_fixture(
+        pdf_path,
+        "%PDF-1.4\n" + pdf_object(1, "<< /Type /Catalog /Pages 2 0 R >>")
+            + pdf_object(2, "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>")
+            + pdf_object(3, "<< /Type /Page /Parent 2 0 R /Annots [5 0 R] >>")
+            + pdf_object(4, "<< /Type /Pages /Kids [2 0 R 4 0 R 6 0 R 1 0 R] /Count 1 >>")
+            + pdf_object(5, movie_annotation_body("first.mov"))
+            + pdf_object(6, "<< /Type /Page /Parent 4 0 R /Annots [7 0 R] >>")
+            + pdf_object(7, movie_annotation_body("second.mov")) + "%%EOF\n"));
+
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QCOMPARE(result.annotations.size(), 2);
+    QCOMPARE(result.annotations.at(0).object_number, 5);
+    QCOMPARE(result.annotations.at(0).page_index, 0);
+    QCOMPARE(result.annotations.at(1).object_number, 7);
+    QCOMPARE(result.annotations.at(1).page_index, 1);
+}
+
+void PdfMediaDetectorTest::object_stream_decompression_is_bounded() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QByteArray bomb = deflated_zeros(65LL * 1024 * 1024);
+    QVERIFY(!bomb.isEmpty());
+
+    QByteArray pdf = movie_path_pdf_fixture(QByteArrayLiteral("clip.mov"));
+    for (int index = 0; index < 128; ++index) {
+        pdf += pdf_object(
+            100 + index,
+            "<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /Length "
+                + QByteArray::number(bomb.size()) + " >>\nstream\n" + bomb + "\nendstream");
+    }
+    const QString pdf_path = directory.filePath(QStringLiteral("bombs.pdf"));
+    QVERIFY(write_pdf_fixture(pdf_path, pdf));
+
+    QElapsedTimer timer;
+    timer.start();
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QVERIFY2(timer.elapsed() < kScanTimeLimitMs, qPrintable(QString::number(timer.elapsed())));
+    QCOMPARE(result.annotations.size(), 1);
+    QCOMPARE(result.annotations.first().page_index, 0);
+}
+
+void PdfMediaDetectorTest::shared_annotation_array_is_bounded() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    constexpr int kPageCount = 20000;
+    constexpr int kReferencesPerPage = 2000;
+    constexpr int kFirstPage = 10;
+
+    QByteArray kids;
+    QByteArray pages;
+    for (int page = 0; page < kPageCount; ++page) {
+        kids += QByteArray::number(kFirstPage + page) + " 0 R ";
+        pages += pdf_object(kFirstPage + page, "<< /Type /Page /Parent 2 0 R /Annots 3 0 R >>");
+    }
+    QByteArray annotation_array = "[";
+    for (int reference = 0; reference < kReferencesPerPage; ++reference) {
+        annotation_array += "4 0 R ";
+    }
+    annotation_array += "]";
+    const QString pdf_path = directory.filePath(QStringLiteral("shared-annots.pdf"));
+    QVERIFY(write_pdf_fixture(
+        pdf_path,
+        "%PDF-1.4\n" + pdf_object(1, "<< /Type /Catalog /Pages 2 0 R >>")
+            + pdf_object(2, "<< /Type /Pages /Kids [" + kids + "] >>")
+            + pdf_object(3, annotation_array) + pdf_object(4, movie_annotation_body("clip.mov"))
+            + pages + "%%EOF\n"));
+
+    QElapsedTimer timer;
+    timer.start();
+    const PdfMediaScanResult result = scan_pdf_media_annotations(pdf_path);
+    QVERIFY2(timer.elapsed() < kScanTimeLimitMs, qPrintable(QString::number(timer.elapsed())));
+    QVERIFY(!result.annotations.isEmpty());
+    QVERIFY(result.annotations.size() <= 4096);
+    QCOMPARE(result.annotations.first().page_index, 0);
+    QCOMPARE(result.annotations.first().object_number, 4);
+    QCOMPARE(result.annotations.last().file_name, QStringLiteral("clip.mov"));
 }
 
 void PdfMediaDetectorTest::missing_pdf_returns_empty_result() {

@@ -56,6 +56,8 @@ private slots:
     void pointer_hides_after_powerpoint_interval();
     void pointer_motion_restarts_timeout();
     void annotation_coordinates_respect_letterboxing();
+    /** @brief Verifies strokes are mirrored at a throttled rate and published in full on release. */
+    void annotation_updates_are_throttled_while_drawing();
     void blank_screen_shortcuts_change_painted_output();
     void molecule_right_click_suspends_surface_while_menu_is_open();
     void molecule_tool_switch_restores_interaction_without_extra_click();
@@ -226,6 +228,35 @@ void AudienceWindowTest::annotation_coordinates_respect_letterboxing() {
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, QPoint(400, 300));
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, QPoint(400, 300));
     QCOMPARE(window.current_annotation_overlay_image().pixelColor(800, 450).alpha(), 0);
+}
+
+void AudienceWindowTest::annotation_updates_are_throttled_while_drawing() {
+    AudienceWindow window;
+    window.resize(800, 450);
+    QImage slide(800, 450, QImage::Format_RGB32);
+    slide.fill(Qt::white);
+    window.set_slide_image(QStringLiteral("deck:0:800x450:0"), slide);
+    window.set_pen_tool();
+
+    QSignalSpy overlay_spy(&window, &AudienceWindow::annotation_overlay_changed);
+    QSignalSpy edit_spy(&window, &AudienceWindow::annotations_edited);
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, QPoint(100, 100));
+    for (int x = 101; x <= 300; ++x) {
+        const QPointF position(x, 100);
+        QMouseEvent move(QEvent::MouseMove, position, window.mapToGlobal(position),
+                         Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&window, &move);
+    }
+    // Two hundred input events must not each copy the overlay to the presenter.
+    QVERIFY(overlay_spy.size() <= 1);
+    QVERIFY(edit_spy.size() >= 200);
+
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, QPoint(300, 100));
+    QVERIFY(!overlay_spy.isEmpty());
+    const QImage published = overlay_spy.constLast().constFirst().value<QImage>();
+    QVERIFY(!published.isNull());
+    QVERIFY(published.pixelColor(200, 100).alpha() > 0);
+    QVERIFY(published.pixelColor(299, 100).alpha() > 0);
 }
 
 void AudienceWindowTest::blank_screen_shortcuts_change_painted_output() {
@@ -512,7 +543,7 @@ void AudienceWindowTest::molecular_symmetry_overlay_preserves_presentation_contr
     };
     definition.operations = {
         MolecularSymmetryOperation{QStringLiteral("E"),
-                                   MolecularSymmetryOperationType::Identity},
+                                   MolecularSymmetryOperationType::Identity, 1, 1, QVector3D()},
     };
     QVERIFY(definition.is_valid());
     const QRectF overlay_rect(0.08, 0.1, 0.84, 0.8);
@@ -660,9 +691,13 @@ void AudienceWindowTest::multiple_atomic_orbitals() {
       {{first, QRectF(0.02, 0.2, 0.46, 0.5)}, {second, QRectF(0.52, 0.2, 0.46, 0.5)}});
   window.show();
   QCoreApplication::processEvents();
-  const auto orbitals = window.findChildren<AtomicOrbitalWidget*>();
+  auto orbitals = window.findChildren<AtomicOrbitalWidget*>();
   QCOMPARE(orbitals.size(), 2);
   for (auto* orbital : orbitals) QTRY_VERIFY(orbital->isVisible());
+  // Child order follows stacking (raise()), not creation; identify overlays by position.
+  std::sort(orbitals.begin(), orbitals.end(), [](const QWidget* lhs, const QWidget* rhs) {
+    return lhs->geometry().x() < rhs->geometry().x();
+  });
   QVERIFY(!orbitals[0]->geometry().intersects(orbitals[1]->geometry()));
   QCOMPARE(orbitals[0]->definition().orbital, QStringLiteral("1s"));
   QCOMPARE(orbitals[1]->definition().orbital, QStringLiteral("2s"));

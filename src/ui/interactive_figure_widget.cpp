@@ -31,34 +31,45 @@
 namespace {
 constexpr int kSliderSteps = 1000;
 constexpr int kAnimationIntervalMs = 16;
-constexpr double kPhaseStep = 0.035;
+// Travelling-wave speed of the sine figure (formerly 0.035 rad per 16 ms tick).
+constexpr double kSinePhaseRadiansPerSecond = 0.035 / 0.016;
+// Longest wall-clock step applied in one tick; longer stalls slow the wave briefly
+// instead of making it jump.
+constexpr qint64 kMaximumAnimationStepNs = 100'000'000;
 
+/** @brief Maps a slider position in [0, kSliderSteps] linearly onto [minimum, maximum]. */
 double slider_value(int position, double minimum, double maximum) {
     return minimum + (maximum - minimum) * double(position) / double(kSliderSteps);
 }
 
+/** @brief Inverse of slider_value(), rounded to the nearest slider step. */
 int slider_position(double value, double minimum, double maximum) {
     return int(std::lround((value - minimum) * kSliderSteps / (maximum - minimum)));
 }
 
+/** @brief Returns whether @p kind is played back along the harmonic-oscillator time axis. */
 bool is_harmonic_time_figure(InteractiveFigureDefinition::Kind kind) {
     return kind == InteractiveFigureDefinition::Kind::HarmonicBondWavepacket
         || kind == InteractiveFigureDefinition::Kind::HarmonicBasisStates;
 }
 
+/** @brief Returns whether @p kind shows a truncated basis expansion selected by N. */
 bool is_basis_expansion_figure(InteractiveFigureDefinition::Kind kind) {
     return kind == InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion
         || kind == InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion;
 }
 
+/** @brief Returns whether @p kind expands a displaced oscillator ground state. */
 bool is_harmonic_displaced_expansion(InteractiveFigureDefinition::Kind kind) {
     return kind == InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion;
 }
 
+/** @brief Returns the size of a LaTeX-subset label; GUI thread only (shared layout cache). */
 QSizeF math_text_size(const QString& text, const QFont& font) {
     return ui_math_text::size(text, font);
 }
 
+/** @brief Draws a LaTeX-subset label aligned in @p bounds; GUI thread only (shared cache). */
 void draw_math_text(
     QPainter& painter,
     const QRectF& bounds,
@@ -70,14 +81,26 @@ void draw_math_text(
 }
 }
 
+/**
+ * @brief Plot area of an interactive figure.
+ *
+ * Holds the figure state set by the owning widget and precomputes everything that does not
+ * change per frame: the rasterized SVG background, the harmonic basis samples, and the
+ * basis-expansion partial sums and their screen paths.
+ */
 class InteractiveFigureWidget::PlotCanvas final : public QWidget {
 public:
+    /** @brief Creates an empty, expanding canvas. */
     explicit PlotCanvas(QWidget* parent = nullptr)
         : QWidget(parent) {
         setMinimumSize(240, 140);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     }
 
+    /**
+     * @brief Loads a figure, resets its state to the declared initial values, and rebuilds
+     *        all sample caches synchronously.
+     */
     void set_definition(const InteractiveFigureDefinition& definition) {
         definition_ = definition;
         renderer_.load(definition.background_svg);
@@ -95,14 +118,25 @@ public:
         update();
     }
 
+    /** @brief Sets the sine-wave amplitude and repaints. */
     void set_amplitude(double value) { amplitude_ = value; update(); }
+    /** @brief Sets the sine-wave angular wavenumber and repaints. */
     void set_frequency(double value) { frequency_ = value; update(); }
-    void advance_phase() { phase_ = std::fmod(phase_ + kPhaseStep, 2.0 * std::numbers::pi); update(); }
+    /** @brief Moves the sine wave by @p seconds of travel and repaints. */
+    void advance_phase(double seconds) {
+        phase_ = std::fmod(phase_ + kSinePhaseRadiansPerSecond * seconds, 2.0 * std::numbers::pi);
+        update();
+    }
+    /** @brief Returns the sine wave to its initial phase and repaints. */
     void reset_phase() { phase_ = 0.0; update(); }
+    /** @brief Sets the harmonic playback phase, in oscillation periods, and repaints. */
     void set_harmonic_phase(double value) { harmonic_phase_ = value; update(); }
+    /** @brief Sets the harmonic initial stretch and repaints. */
     void set_stretch(double value) { stretch_ = value; update(); }
+    /** @brief Selects the number of basis functions in the shown partial sum and repaints. */
     void set_basis_count(int value) { basis_count_ = value; update(); }
 protected:
+    /** @brief Paints the cached background and then the active figure kind. */
     void paintEvent(QPaintEvent*) override {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
@@ -180,10 +214,10 @@ protected:
         }
 
         QPainterPath curve;
-        constexpr int samples = 600;
-        for (int sample = 0; sample <= samples; ++sample) {
+        constexpr int kSamples = 600;
+        for (int sample = 0; sample <= kSamples; ++sample) {
             const double x = definition_.x_min
-                + (definition_.x_max - definition_.x_min) * sample / samples;
+                + (definition_.x_max - definition_.x_min) * sample / kSamples;
             const double y = amplitude_ * std::sin(frequency_ * x - phase_);
             const QPointF point = map_point(x, y);
             if (sample == 0) {
@@ -254,23 +288,24 @@ protected:
     }
 
 private:
+    /** @brief Samples the six stationary oscillator states once per definition. */
     void rebuild_harmonic_basis_cache() {
         harmonic_basis_samples_.clear();
         harmonic_basis_maxima_.clear();
         if (definition_.kind != InteractiveFigureDefinition::Kind::HarmonicBasisStates) {
             return;
         }
-        constexpr int basis_count = 6;
-        constexpr int samples = 420;
-        harmonic_basis_samples_.resize(basis_count);
-        harmonic_basis_maxima_.resize(basis_count);
-        for (int n = 0; n < basis_count; ++n) {
+        constexpr int kBasisCount = 6;
+        constexpr int kSamples = 420;
+        harmonic_basis_samples_.resize(kBasisCount);
+        harmonic_basis_maxima_.resize(kBasisCount);
+        for (int n = 0; n < kBasisCount; ++n) {
             QVector<double>& values = harmonic_basis_samples_[n];
-            values.reserve(samples + 1);
+            values.reserve(kSamples + 1);
             double maximum = 0.0;
-            for (int i = 0; i <= samples; ++i) {
+            for (int i = 0; i <= kSamples; ++i) {
                 const double x = definition_.x_min
-                    + (definition_.x_max - definition_.x_min) * i / samples;
+                    + (definition_.x_max - definition_.x_min) * i / kSamples;
                 const double value = harmonic_basis_wavefunction(n, x);
                 values.push_back(value);
                 maximum = std::max(maximum, std::abs(value));
@@ -279,6 +314,7 @@ private:
         }
     }
 
+    /** @brief Rasterizes the SVG background when the size or device-pixel ratio changed. */
     void ensure_background_cache() {
         const qreal device_pixel_ratio = devicePixelRatioF();
         if (!background_cache_.isNull()
@@ -301,6 +337,7 @@ private:
         background_cache_device_pixel_ratio_ = device_pixel_ratio;
     }
 
+    /** @brief Paints the potential with the wavepacket's mean position and its density. */
     void paint_harmonic_wavepacket(QPainter& painter) {
         const HarmonicWavepacketObservation observation = evaluate_harmonic_wavepacket(
             harmonic_phase_, stretch_);
@@ -367,10 +404,10 @@ private:
         painter.save();
         painter.setClipRect(upper);
         QPainterPath potential;
-        constexpr int potential_samples = 500;
-        for (int i = 0; i <= potential_samples; ++i) {
+        constexpr int kPotentialSamples = 500;
+        for (int i = 0; i <= kPotentialSamples; ++i) {
             const double x = definition_.x_min
-                + (definition_.x_max - definition_.x_min) * i / potential_samples;
+                + (definition_.x_max - definition_.x_min) * i / kPotentialSamples;
             const QPointF point(map_x(x), map_upper_y(0.5 * x * x));
             i == 0 ? potential.moveTo(point) : potential.lineTo(point);
         }
@@ -484,8 +521,9 @@ private:
                          Qt::AlignLeft | Qt::AlignTop, QStringLiteral("Probability density"));
     }
 
+    /** @brief Paints the coherent-state density above its six weighted basis components. */
     void paint_harmonic_basis_states(QPainter& painter) {
-        constexpr int basis_count = 6;
+        constexpr int kBasisCount = 6;
         QFont title_font = painter.font();
         title_font.setBold(true);
         title_font.setPixelSize(std::clamp(height() / 20, 18, 34));
@@ -552,10 +590,10 @@ private:
         QPainterPath density_fill;
         QPainterPath density_outline;
         density_fill.moveTo(coherent_panel.left(), coherent_panel.bottom());
-        constexpr int samples = 420;
-        for (int i = 0; i <= samples; ++i) {
+        constexpr int kSamples = 420;
+        for (int i = 0; i <= kSamples; ++i) {
             const double x = definition_.x_min
-                + (definition_.x_max - definition_.x_min) * i / samples;
+                + (definition_.x_max - definition_.x_min) * i / kSamples;
             const double density = harmonic_probability_density(x, observation.mean_position);
             const QPointF point(map_x(coherent_panel, x), coherent_panel.bottom()
                 - density / definition_.density_y_max * coherent_panel.height());
@@ -589,10 +627,10 @@ private:
             QColor(30, 41, 59));
 
         double component_limit = 0.0;
-        std::array<double, basis_count> component_amplitudes{};
-        std::array<double, basis_count> component_phase_factors{};
-        std::array<double, basis_count> component_weights{};
-        for (int n = 0; n < basis_count; ++n) {
+        std::array<double, kBasisCount> component_amplitudes{};
+        std::array<double, kBasisCount> component_phase_factors{};
+        std::array<double, kBasisCount> component_weights{};
+        for (int n = 0; n < kBasisCount; ++n) {
             component_weights[n] = coherent_state_basis_weight(n, stretch_);
             component_amplitudes[n] = std::sqrt(component_weights[n]);
             component_phase_factors[n] = std::cos(
@@ -603,7 +641,7 @@ private:
         }
         component_limit = std::max(0.08, component_limit * 1.12);
 
-        for (int n = 0; n < basis_count; ++n) {
+        for (int n = 0; n < kBasisCount; ++n) {
             const int row = n / 3;
             const int column = n % 3;
             const QRectF panel(
@@ -615,12 +653,12 @@ private:
             painter.setClipRect(panel);
             draw_grid(panel, true);
             QPainterPath outline;
-            for (int i = 0; i <= samples; ++i) {
+            for (int i = 0; i <= kSamples; ++i) {
                 const double component = component_amplitudes[n]
                     * harmonic_basis_samples_.value(n).value(i)
                     * component_phase_factors[n];
                 const QPointF point(
-                    panel.left() + panel.width() * i / samples,
+                    panel.left() + panel.width() * i / kSamples,
                     panel.center().y()
                     - component / component_limit * panel.height() / 2.0);
                 if (i == 0) outline.moveTo(point); else outline.lineTo(point);
@@ -693,6 +731,11 @@ private:
         painter.restore();
     }
 
+    /**
+     * @brief Computes the target function and every partial sum for N in the declared range.
+     *
+     * Runs once per definition so that moving the N slider only selects a cached path.
+     */
     void rebuild_basis_expansion_cache() {
         basis_target_samples_.clear();
         basis_partial_sum_samples_.clear();
@@ -704,13 +747,13 @@ private:
             return;
         }
 
-        constexpr int sample_count = 1001;
+        constexpr int kSampleCount = 1001;
         basis_partial_sum_samples_.resize(definition_.basis_count_max + 1);
         basis_captured_fractions_.resize(definition_.basis_count_max + 1);
         for (int count = definition_.basis_count_min;
              count <= definition_.basis_count_max;
              ++count) {
-            basis_partial_sum_samples_[count].reserve(sample_count);
+            basis_partial_sum_samples_[count].reserve(kSampleCount);
         }
         if (is_harmonic_displaced_expansion(definition_.kind)) {
             QVector<double> coefficients;
@@ -723,11 +766,11 @@ private:
                 captured += coefficient * coefficient;
                 basis_captured_fractions_[n + 1] = std::clamp(captured, 0.0, 1.0);
             }
-            basis_target_samples_.reserve(sample_count);
-            for (int i = 0; i < sample_count; ++i) {
+            basis_target_samples_.reserve(kSampleCount);
+            for (int i = 0; i < kSampleCount; ++i) {
                 const double x = definition_.x_min
                     + (definition_.x_max - definition_.x_min) * i
-                        / double(sample_count - 1);
+                        / double(kSampleCount - 1);
                 basis_target_samples_.push_back(QPointF(
                     x, harmonic_displaced_ground_state(x, definition_.displacement)));
                 double partial_sum = 0.0;
@@ -762,8 +805,8 @@ private:
                 0.0,
                 1.0);
         }
-        for (int i = 0; i < sample_count; ++i) {
-            const double x = i / double(sample_count - 1);
+        for (int i = 0; i < kSampleCount; ++i) {
+            const double x = i / double(kSampleCount - 1);
             double partial_sum = 0.0;
             for (int n = 1; n <= definition_.basis_count_max; ++n) {
                 partial_sum += coefficients.at(n - 1)
@@ -775,6 +818,7 @@ private:
         }
     }
 
+    /** @brief Maps the cached samples to screen-space paths when @p plot_rect changed. */
     void ensure_basis_screen_path_cache(const QRectF& plot_rect) {
         if (basis_cached_plot_rect_ == plot_rect
             && basis_screen_paths_.size() == basis_partial_sum_samples_.size()) {
@@ -805,6 +849,7 @@ private:
         basis_cached_plot_rect_ = plot_rect;
     }
 
+    /** @brief Paints the target, the selected partial sum, and its captured fraction. */
     void paint_basis_expansion(QPainter& painter) {
         const bool harmonic_expansion = is_harmonic_displaced_expansion(definition_.kind);
         QFont title_font = painter.font();
@@ -1123,6 +1168,9 @@ InteractiveFigureWidget::InteractiveFigureWidget(QWidget* parent)
 
     animation_timer_ = new QTimer(this);
     animation_timer_->setObjectName(QStringLiteral("figureAnimationTimer"));
+    // The default coarse timer may fire up to 5% late, or at Windows' 15.6 ms granularity,
+    // which shows up as judder at 60 Hz.
+    animation_timer_->setTimerType(Qt::PreciseTimer);
     animation_timer_->setInterval(kAnimationIntervalMs);
     connect(animation_timer_, &QTimer::timeout, this, &InteractiveFigureWidget::advance_animation);
     connect(amplitude_slider_, &QSlider::valueChanged, this, [this](int position) {
@@ -1231,6 +1279,7 @@ void InteractiveFigureWidget::showEvent(QShowEvent* event) {
             playback_start_phase_ = harmonic_phase_;
             playback_elapsed_.restart();
         }
+        sine_frame_clock_.start();
         animation_timer_->start();
     }
     QWidget::showEvent(event);
@@ -1347,7 +1396,11 @@ void InteractiveFigureWidget::update_harmonic_status() {
 
 void InteractiveFigureWidget::advance_animation() {
     if (!is_harmonic_time_figure(definition_.kind)) {
-        canvas_->advance_phase();
+        if (!sine_frame_clock_.isValid()) sine_frame_clock_.start();
+        const qint64 step_ns =
+            std::min(sine_frame_clock_.nsecsElapsed(), kMaximumAnimationStepNs);
+        sine_frame_clock_.restart();
+        canvas_->advance_phase(double(step_ns) * 1.0e-9);
         return;
     }
     if (!playback_elapsed_.isValid()) {
@@ -1405,6 +1458,7 @@ void InteractiveFigureWidget::set_animation_running(bool running) {
         animation_button_->setText(running ? QStringLiteral("Pause") : QStringLiteral("Play"));
     }
     if (running && isVisible()) {
+        if (!animation_timer_->isActive()) sine_frame_clock_.start();
         animation_timer_->start();
     } else {
         animation_timer_->stop();

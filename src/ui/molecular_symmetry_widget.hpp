@@ -23,21 +23,38 @@ class QTimer;
 class QTabWidget;
 class QPushButton;
 
-/** @brief Interactive molecule renderer with clickable point-group operations. */
+/**
+ * @brief Interactive molecule renderer with clickable point-group operations.
+ *
+ * Wraps a MoleculeWidget (which owns all OpenGL resources and their context lifetime) together
+ * with operation buttons and an atom-orbital settings tab. GUI thread only. Operation playback
+ * is driven by a precise 16 ms timer that runs only while an operation animates; poses are
+ * computed from elapsed wall time, so playback speed does not depend on the tick rate.
+ */
 class MolecularSymmetryWidget final : public QWidget {
   Q_OBJECT
 
  public:
+  /** @brief Builds the header, molecule scene, operation list, and orbital settings tab. */
   explicit MolecularSymmetryWidget(QWidget* parent = nullptr);
 
-  /** @brief Replaces the molecule and restores controls saved for @p slide_identity. */
+  /**
+   * @brief Replaces the molecule and its complete operation set.
+   *
+   * Invalid definitions are ignored. A valid one first saves the render settings of the
+   * previous slide identity, then stops playback, clears the selected operation, resets the
+   * camera and restores the definition's default orbital selection. When settings were saved
+   * earlier for @p slide_identity, they are restored instead of the defaults.
+   * @param[in] definition Molecule, operations and default orbitals to show.
+   * @param[in] slide_identity Key for per-slide settings; empty disables saving and restoring.
+   */
   void set_definition(const MolecularSymmetryDefinition& definition,
                       const QString& slide_identity = {});
   /** @brief Discards all per-slide interactive render settings. */
   void clear_saved_slide_states();
   /** @brief Returns the active definition. */
   const MolecularSymmetryDefinition& definition() const;
-  /** @brief Starts the operation at @p index. */
+  /** @brief Starts or replays the operation at @p index; out-of-range indices are ignored. */
   void play_operation(int index);
   /** @brief Returns whether an operation animation is active. */
   bool is_animating() const;
@@ -45,16 +62,19 @@ class MolecularSymmetryWidget final : public QWidget {
   int active_operation_index() const;
   /** @brief Returns the selected operation whose element remains visible. */
   int selected_operation_index() const;
-  /** @brief Captures the composed OpenGL scene and operation controls. */
+  /** @brief Captures the composed OpenGL scene and operation controls (renders synchronously). */
   QImage capture_frame() const;
   /** @brief Delegates right-click menu requests to the presentation window. */
   void set_context_menu_handler(std::function<void(const QPoint&)> handler);
 
  protected:
+  /** @brief Stops a running operation so no timer runs while the widget is hidden. */
   void hideEvent(QHideEvent* event) override;
+  /** @brief Forwards right-clicks outside the scene to the presentation context menu. */
   void contextMenuEvent(QContextMenuEvent* event) override;
 
  private:
+  /** @brief Interactive render settings remembered per slide identity. */
   struct SlideState {
     QVector<SymmetryOrbital> orbitals;
     QQuaternion rotation;
@@ -65,12 +85,27 @@ class MolecularSymmetryWidget final : public QWidget {
     bool auto_rotation = false;
   };
 
+  /** @brief Captures orbitals, camera, selections, tab and auto-rotation of the current slide. */
   SlideState capture_slide_state() const;
+  /** @brief Re-applies settings captured by capture_slide_state(). */
   void restore_slide_state(const SlideState& state);
+  /** @brief Recreates the operation buttons, grouped by operation type, for definition_. */
   void rebuild_operation_buttons();
+  /**
+   * @brief Applies the active operation's pose for the elapsed playback time.
+   *
+   * After the final pose has been held, playback stops; with orbitals displayed the
+   * transformed result stays visible until the next operation or reset.
+   */
   void advance_animation();
+  /**
+   * @brief Stops playback and restores the untransformed molecule.
+   * @param clear_selection Also hides the symmetry element and unchecks every operation button.
+   */
   void stop_animation(bool clear_selection = false);
+  /** @brief Shows the axis, plane, or centre belonging to @p operation in its type colour. */
   void show_symmetry_element(const MolecularSymmetryOperation& operation);
+  /** @brief Refreshes the status line for the playing, held, or selected operation. */
   void update_status();
   /** @brief Synchronizes the persistent orbital menu with the selected atom. */
   void update_orbital_controls();

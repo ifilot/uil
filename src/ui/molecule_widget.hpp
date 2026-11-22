@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QElapsedTimer>
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLWidget>
@@ -29,7 +30,14 @@ class QTimer;
 class QToolButton;
 class QWheelEvent;
 
-/** @brief Displays an interactive ball-and-stick molecular geometry. */
+/**
+ * @brief Displays an interactive ball-and-stick molecular geometry.
+ *
+ * Renders with an OpenGL 3.3 core context owned by QOpenGLWidget. All methods must be called on
+ * the GUI thread. GL resources are created in initializeGL() and released when the context is
+ * about to be destroyed (for example when the widget moves to another top-level window), so the
+ * widget can be reparented safely. Animations advance by measured elapsed time, not per tick.
+ */
 class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core {
  public:
   /** @brief Stereo output modes supported by the embedded renderer. */
@@ -46,6 +54,7 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
 
   /** @brief Constructs a molecular rendering surface. */
   explicit MoleculeWidget(QWidget* parent = nullptr);
+  /** @brief Stops animation timers and releases GL resources under this widget's context. */
   ~MoleculeWidget() override;
 
   /** @brief Replaces the displayed molecular geometry and resets the view. */
@@ -66,11 +75,20 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   void set_world_axes_visible(bool visible);
   /** @brief Returns whether molecule-fixed Cartesian axes are visible. */
   bool world_axes_visible() const;
-  /** @brief Starts or pauses normal-mode animation when displacement data exists. */
+  /**
+   * @brief Starts or pauses normal-mode animation when displacement data exists.
+   *
+   * Requests to play a geometry without vibration vectors are ignored. Hiding the widget pauses
+   * playback; it is not resumed automatically.
+   */
   void set_vibration_playing(bool playing);
   /** @brief Returns whether normal-mode animation is running. */
   bool vibration_playing() const;
-  /** @brief Enables or disables continuous rotation around the molecule's Z axis. */
+  /**
+   * @brief Enables or disables continuous rotation around the molecule's Z axis.
+   *
+   * The setting persists while hidden: the timer stops on hide and resumes on show.
+   */
   void set_auto_rotation_enabled(bool enabled);
   /** @brief Returns whether continuous Z-axis rotation is enabled. */
   bool auto_rotation_enabled() const;
@@ -123,15 +141,24 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   void set_context_menu_handler(std::function<void(const QPoint&)> handler);
 
  protected:
-  /** @brief Initializes the OpenGL-backed widget. */
+  /**
+   * @brief Creates shaders and meshes for the (possibly recreated) current context.
+   *
+   * Also (re)connects QOpenGLContext::aboutToBeDestroyed so resources are released under the
+   * context that owns them. Called by Qt with the context current.
+   */
   void initializeGL() override;
-  /** @brief Paints the current molecular geometry. */
+  /** @brief Paints the current molecular geometry; called by Qt with the context current. */
   void paintGL() override;
   /** @brief Keeps the floating toolbar anchored to the top-right corner. */
   void resizeEvent(QResizeEvent* event) override;
-  /** @brief Stops animation while the molecule overlay is not visible. */
+  /**
+   * @brief Stops animation timers while the molecule overlay is not visible.
+   *
+   * vibration_playing() reports false while hidden; playback that was running resumes on show.
+   */
   void hideEvent(QHideEvent* event) override;
-  /** @brief Resumes enabled automatic rotation when the molecule becomes visible. */
+  /** @brief Resumes automatic rotation and any vibration that was playing when hidden. */
   void showEvent(QShowEvent* event) override;
   /** @brief Suppresses duplicate native context-menu handling after right-click delegation. */
   void contextMenuEvent(QContextMenuEvent* event) override;
@@ -151,11 +178,33 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
 
   /** @brief Restores the default orientation and zoom. */
   void reset_view();
-  /** @brief Creates shader and mesh resources for the current context. */
+  /**
+   * @brief Creates shader and mesh resources for the current context.
+   * @return False, with renderer_error_ set, when a shader or buffer cannot be created.
+   * Requires the widget's OpenGL context to be current.
+   */
   bool create_renderer();
-  /** @brief Releases resources while their OpenGL context is current. */
+  /**
+   * @brief Releases shader, mesh, and cached orbital buffers and marks the renderer unready.
+   *
+   * The caller must make the owning context current first; the destructor and the
+   * aboutToBeDestroyed hook installed by initializeGL() both do so.
+   */
   void destroy_renderer();
-  /** @brief Draws one transformed and colored mesh. */
+  /**
+   * @brief Advances continuous rotation and normal-mode phase by the elapsed wall time.
+   *
+   * Driven by the animation timers; gaps longer than a few frames are clamped so the molecule
+   * never jumps after a stall. Schedules a repaint.
+   */
+  void advance_animation();
+  /**
+   * @brief Starts @p timer, restarting the animation clock if no animation was running.
+   *
+   * This keeps the first frame after a pause or hide from replaying the idle interval.
+   */
+  void start_animation_timer(QTimer* timer);
+  /** @brief Draws one transformed and colored mesh; requires a bound shader program. */
   void draw_mesh(Mesh& mesh, const QMatrix4x4& model, const QVector3D& color,
                  const QMatrix4x4& view, const QMatrix4x4& projection, float opacity = 1.0f,
                  bool unlit = false, bool cutaway = false, bool neon = false);
@@ -194,6 +243,8 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   bool toolbar_expanded_ = true;
   bool builtin_controls_visible_ = true;
   bool auto_rotation_enabled_ = false;
+  // Set by hideEvent() when vibration was playing; cleared when a new geometry is loaded.
+  bool resume_vibration_on_show_ = false;
   bool reference_geometry_visible_ = false;
   float reference_geometry_opacity_ = 0.5f;
   StereoMode stereo_mode_ = StereoMode::Mono;
@@ -211,5 +262,7 @@ class MoleculeWidget final : public QOpenGLWidget, protected QOpenGLFunctions_3_
   QToolButton* reset_button_ = nullptr;
   QTimer* vibration_timer_ = nullptr;
   QTimer* auto_rotation_timer_ = nullptr;
+  QElapsedTimer animation_clock_;
+  QMetaObject::Connection context_cleanup_connection_;
   std::function<void(const QPoint&)> context_menu_handler_;
 };

@@ -6,12 +6,19 @@ class MoleculeCameraTest final : public QObject {
   Q_OBJECT
 
  private slots:
+  /** @brief Checks that the fitted distance keeps a centred bounding sphere in view. */
   void fit_distance_contains_centered_sphere();
+  /** @brief Checks that wheel zoom changes the camera distance and projected size. */
   void wheel_zoom_moves_camera_and_resizes_geometry();
+  /** @brief Checks that nearer geometry projects larger than farther geometry. */
   void perspective_makes_nearer_geometry_larger();
+  /** @brief Checks pixel-delta zoom and the zoom-factor limits. */
   void trackpad_zoom_and_limits_are_supported();
+  /** @brief Checks that anaglyph eye separation scales with camera distance. */
   void stereo_eye_separation_tracks_camera_distance();
+  /** @brief Checks the default camera frame: looking along -X with +Z up. */
   void default_view_uses_negative_x_with_positive_z_up();
+  /** @brief Checks that the isometric rotation keeps +Z up with equal axis depths. */
   void isometric_view_has_z_up_and_equal_axis_depths();
 };
 

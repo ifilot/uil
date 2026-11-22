@@ -26,14 +26,22 @@ a status-label update, and a repaint. It no longer recomputes the expansion.
 
 `AppController` asks `RenderScheduler` for the current slide and a small set of
 likely neighbours. Requests carry priorities, duplicate requests are coalesced,
-and obsolete document generations are discarded. The scheduler uses two to four
-workers and keeps a PDF backend open per worker while it remains on the same
-document. This is a sound critical-path design.
+and obsolete document generations are discarded. Navigation drops queued
+full-size renders that are no longer near the current slide, and the presenter's
+thumbnail strip is queued behind the next slides. The scheduler renders from an
+in-memory copy of the PDF taken when the deck was opened.
+
+QtPdf serializes every PDFium call behind one process-wide lock, so additional
+render threads add document parses and memory without adding throughput. The
+scheduler therefore uses a single worker for PDF pages, which also bounds how
+long a current-slide request can wait behind speculative work to one page render.
+Rendered pages are converted to premultiplied ARGB on that worker so that the
+GUI thread can paint them without per-paint format conversion.
 
 Rendered PDF pages enter `SlideCache`, a memory-bounded LRU cache. The default
-budget is 512 MiB on Linux. On Windows it is one eighth of physical RAM, clamped
-to 128 MiB through 1 GiB. Cache keys include the document, page, pixel size, and
-rotation, which avoids incorrect reuse.
+budget is 512 MiB on Linux and other non-Windows platforms. On Windows it is one
+eighth of physical RAM, clamped to 128 MiB through 1 GiB. Cache keys include
+the document, page, pixel size, and rotation, which avoids incorrect reuse.
 
 The normal presentation look-ahead is deliberately small: current, next,
 previous, and next-plus-one. The deck overview separately requests visible
@@ -55,16 +63,16 @@ this cache, and resizing replaces rather than accumulates images.
 ## Recommended idle prefetch policy
 
 Do not eagerly render an entire deck. A 100-slide, full-HD deck can exceed the
-LRU budget, evict the useful near-slide set, and occupy every non-preemptive PDF
+LRU budget, evict the useful near-slide set, and occupy the non-preemptive PDF
 worker just before the presenter navigates.
 
 A safe background policy is:
 
 1. Start an idle timer roughly 600--800 ms after the last navigation, resize, or
    overview scroll.
-2. Keep at most one speculative full-size render in flight. This leaves the
-   remaining workers available to current-slide, next-slide, thumbnail, media,
-   and UI-critical work.
+2. Keep at most one speculative full-size render queued at a time, so that
+   current-slide, next-slide and thumbnail requests are never stuck behind a
+   batch of speculative pages.
 3. Walk outward from the already predicted set, biased forward: `+3, -2, +4,
    -3, ...`.
 4. Submit idle work at a priority below every visible or predictive request.
@@ -80,16 +88,15 @@ faster and avoids cross-thread GUI objects.
 
 ## Next easy improvements, in priority order
 
+Math-label layout is already cached: `ui_math_text` keeps a small GUI-thread LRU
+of laid-out documents keyed by text, font and colour.
+
 1. Cache the static plot layer (grid, axes, ticks, legend, and unchanged labels)
    per size/DPI. Animated frames would then paint only the changing curves and
    markers over one cached image.
-2. Cache math-label layout. `draw_math_text()` currently builds a
-   `QTextDocument` on each call. A small cache keyed by text, font, colour, and
-   alignment—or `QStaticText` where rich text is unnecessary—would remove
-   repeated parsing and layout.
-3. Add the one-in-flight idle PDF prefetch policy above. It should be measured
+2. Add the one-in-flight idle PDF prefetch policy above. It should be measured
    before widening the window.
-4. Consider an optional disk page cache keyed by document content hash, page,
+3. Consider an optional disk page cache keyed by document content hash, page,
    pixel size, device-pixel ratio, rotation, renderer version, and colour mode.
    This improves reopening large decks, but requires eviction, atomic writes,
    and privacy-aware lifecycle controls, so it is not an "easy" first change.

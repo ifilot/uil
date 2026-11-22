@@ -15,7 +15,7 @@
 #include <iterator>
 #include <memory>
 
-Q_LOGGING_CATEGORY(logRenderScheduler, "render.scheduler")
+Q_LOGGING_CATEGORY(log_render_scheduler, "render.scheduler")
 
 namespace {
 struct WorkerPdfContext {
@@ -34,9 +34,15 @@ RenderScheduler::RenderScheduler(
     : QObject(parent),
       render_function_(std::move(render_function)) {
     const int ideal_thread_count = QThread::idealThreadCount();
-    maximum_worker_count_ = maximum_worker_count > 0
-        ? std::clamp(maximum_worker_count, 1, 4)
-        : std::clamp(ideal_thread_count > 0 ? ideal_thread_count / 2 : 2, 2, 4);
+    if (maximum_worker_count > 0) {
+        maximum_worker_count_ = std::clamp(maximum_worker_count, 1, 4);
+    } else if (!render_function_) {
+        // QtPdf guards every PDFium call with one process-wide mutex, so extra workers only
+        // add document parses and memory while the current slide waits behind stale work.
+        maximum_worker_count_ = 1;
+    } else {
+        maximum_worker_count_ = std::clamp(ideal_thread_count > 0 ? ideal_thread_count / 2 : 2, 2, 4);
+    }
     render_pool_.setMaxThreadCount(maximum_worker_count_);
     render_pool_.setExpiryTimeout(30'000);
     performance_log::record_event(
@@ -111,6 +117,24 @@ void RenderScheduler::request_render(const RenderRequest& request, int priority)
     }
 }
 
+int RenderScheduler::retain_pending(const PendingFilter& keep) {
+    if (!keep) {
+        return 0;
+    }
+
+    int removed = 0;
+    QMutexLocker locker(&mutex_);
+    for (auto it = pending_jobs_.begin(); it != pending_jobs_.end();) {
+        if (keep(it->request)) {
+            ++it;
+        } else {
+            it = pending_jobs_.erase(it);
+            ++removed;
+        }
+    }
+    return removed;
+}
+
 void RenderScheduler::run_worker() {
     WorkerPdfContext context;
     while (true) {
@@ -144,7 +168,10 @@ void RenderScheduler::run_worker() {
                 && context.generation == request.generation;
             if (!backend_reused) {
                 auto backend = std::make_unique<QtPdfBackend>();
-                if (!backend->open(request.document_path, &error_message)) {
+                const bool opened = request.document_data.isEmpty()
+                    ? backend->open(request.document_path, &error_message)
+                    : backend->open_data(request.document_data, &error_message);
+                if (!opened) {
                     error_message = QStringLiteral("Could not open worker PDF: %1").arg(error_message);
                     context = WorkerPdfContext{};
                 } else {

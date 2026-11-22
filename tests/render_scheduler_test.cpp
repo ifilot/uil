@@ -28,7 +28,8 @@ RenderRequest make_request(int page_index, int generation) {
         page_index,
         QSize(16, 9),
         0,
-        generation};
+        generation,
+        {}};
 }
 
 /** @brief Returns a non-null image for a synthetic render request. */
@@ -56,6 +57,8 @@ private slots:
     void invalid_requests_are_ignored();
     /** @brief Verifies destruction safely waits for an active worker. */
     void destruction_waits_for_active_render();
+    /** @brief Verifies pruning removes only rejected pending requests, never running ones. */
+    void retain_pending_drops_rejected_requests();
 };
 
 void RenderSchedulerTest::pending_request_can_be_promoted() {
@@ -261,6 +264,53 @@ void RenderSchedulerTest::destruction_waits_for_active_render() {
 
     QMutexLocker locker(&state->mutex);
     QVERIFY(state->blocker_finished);
+}
+
+void RenderSchedulerTest::retain_pending_drops_rejected_requests() {
+    auto state = std::make_shared<BlockingRenderState>();
+    RenderScheduler scheduler(
+        nullptr,
+        [state](const RenderRequest& request, QString*) {
+            QMutexLocker locker(&state->mutex);
+            state->started_pages.append(request.page_index);
+            if (request.page_index == 0) {
+                state->blocker_started = true;
+                state->changed.wakeAll();
+                while (!state->blocker_released) {
+                    state->changed.wait(&state->mutex);
+                }
+            }
+            return synthetic_image();
+        },
+        1);
+
+    const int generation = scheduler.generation();
+    scheduler.request_render(make_request(0, generation), 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(([&state] {
+        QMutexLocker locker(&state->mutex);
+        return state->blocker_started;
+    })(), 5000);
+    for (int page = 1; page <= 5; ++page) {
+        scheduler.request_render(make_request(page, generation), 100 - page);
+    }
+
+    const int removed = scheduler.retain_pending([](const RenderRequest& request) {
+        return request.page_index % 2 == 0;
+    });
+    QCOMPARE(removed, 3);
+    {
+        QMutexLocker locker(&state->mutex);
+        state->blocker_released = true;
+        state->changed.wakeAll();
+    }
+
+    QTRY_VERIFY_WITH_TIMEOUT(([&state] {
+        QMutexLocker locker(&state->mutex);
+        return state->started_pages.size() == 3;
+    })(), 5000);
+    QTest::qWait(50);
+    QMutexLocker locker(&state->mutex);
+    QCOMPARE(state->started_pages, QList<int>({0, 2, 4}));
 }
 
 QTEST_GUILESS_MAIN(RenderSchedulerTest)

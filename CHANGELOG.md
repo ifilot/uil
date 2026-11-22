@@ -2,18 +2,70 @@
 
 Notable user-facing changes to `uil` are documented here.
 
-## 0.3.1 - Unreleased
+## 1.0.0 - 2026-11-22
+
+First stable release.
 
 ### Changed
 
+- Smoother drawing: pen and eraser strokes repaint only the area they touch, and the
+  presenter preview follows along ten times per second instead of copying the whole
+  annotation layer on every mouse movement.
+- Smoother laser pointer and video: only the pointer and the video area are repainted.
+- Faster slide changes: a cached slide is shown on the next event-loop turn, rendered
+  slides are painted 1:1 without rescaling, and holding an arrow key no longer queues
+  renders for every slide passed.
+- The presenter's thumbnail strip no longer delays rendering of the next slides, and
+  the presenter and audience slide grids no longer evict each other's thumbnails.
+- PDF pages render on a single background worker from an in-memory copy of the
+  deck, which uses less memory and keeps the current slide from waiting behind
+  speculative work.
+- Smoother video playback: decoding uses multiple CPU cores, frames are drawn without
+  per-pixel blending, and frames are timed against a steady clock, dropping late ones.
+- Smoother interactive figures and orbital views: math labels are laid out once and
+  reused, the atomic-orbital colour bar and axes are no longer rebuilt every frame, and
+  animations run at a constant speed regardless of timer jitter.
 - Simplified molecular-symmetry orbital selection to the `s`, `p`, and `d`
   symmetry types, with normalized render sizes and properly formatted notation.
+- The Windows startup splash now disappears after 60 seconds if the viewer has not
+  finished loading, and installs in folders with paths longer than 260 characters start
+  correctly.
+- The LaTeX packages `uilfigure`, `uilmolecule`, `uilorbital`, and `uilsymmetry` are
+  versioned 1.0, and the browsable orbital atlas (`orbital-atlas.pdf`) is now installed
+  in the `examples` folder.
 
 ### Fixed
 
+- Unsaved drawings are no longer lost: **F5** (reload and present) keeps them, and
+  closing uil or opening another presentation asks whether to save them first.
+- **Export as PDF** writes the file atomically, refuses to overwrite the open
+  presentation, and suggests the folder of the `.uil` package instead of a temporary
+  folder.
+- Saving a `.uil` package right after opening a PDF now includes its videos and
+  molecule files.
+- Rebuilding the PDF while it is open no longer mixes old and new slides; the new
+  version is picked up on reload.
+- Video poster frames now appear on slides that were rendered before the media scan
+  finished.
+- Fixed a thin transparent or garbage strip at the right edge of videos whose width is
+  not a multiple of eight.
+- HD videos now show accurate colours: the colour space and range recorded in the file are
+  honoured, and untagged HD video uses the BT.709 standard instead of the SD one.
+- A playing molecule vibration now resumes after the view was hidden, for example by
+  switching to the pointer and back, just like automatic rotation.
+- Changing slides during video playback stops the video promptly, and a single corrupt
+  video frame no longer ends playback.
+- Malformed or hostile PDFs (deeply nested or cyclic page trees, unterminated objects,
+  decompression bombs, huge annotation arrays) can no longer crash, hang, or exhaust
+  memory in the background media scan.
+- `.uil` manifests with absurd overlay page numbers are ignored safely.
+- Fixed molecule views releasing OpenGL resources under the wrong context when moved
+  to another window.
 - Preserve molecular-symmetry render settings independently while switching slides.
 - Present OpenGL content immediately after entering fullscreen so starting a deck
   with F5 no longer leaves the audience display black until pointer input.
+- The cursor now hides again during video playback on slides with a molecular-symmetry
+  player.
 
 ## 0.3.0 - 2026-09-27
 

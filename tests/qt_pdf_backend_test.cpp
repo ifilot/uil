@@ -23,6 +23,8 @@ private slots:
     void reports_missing_and_malformed_documents();
     void reports_password_protected_document();
     void supports_mixed_page_sizes();
+    /** @brief Verifies in-memory loading is independent of the file and yields premultiplied pages. */
+    void opens_in_memory_copy_independent_of_file();
 };
 
 void QtPdfBackendTest::opens_bundled_presentations_data() {
@@ -113,6 +115,36 @@ void QtPdfBackendTest::supports_mixed_page_sizes() {
     QVERIFY(portrait.height() > portrait.width());
     QCOMPARE(backend.render_page(0, QSize(400, 225)).size(), QSize(400, 225));
     QCOMPARE(backend.render_page(1, QSize(300, 500)).size(), QSize(300, 500));
+}
+
+void QtPdfBackendTest::opens_in_memory_copy_independent_of_file() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("deck.pdf"));
+    QVERIFY(QFile::copy(example_path(QStringLiteral("getting-started.pdf")), path));
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QByteArray data = file.readAll();
+    file.close();
+
+    QtPdfBackend backend;
+    QString error_message;
+    QVERIFY2(backend.open_data(data, &error_message), qPrintable(error_message));
+    QCOMPARE(backend.page_count(), 4);
+
+    // Rewriting the source must not affect the open document.
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write("not a pdf");
+    file.close();
+    const QImage image = backend.render_page(3, QSize(320, 180));
+    QVERIFY(!image.isNull());
+    QCOMPARE(image.format(), QImage::Format_ARGB32_Premultiplied);
+
+    QtPdfBackend malformed;
+    QVERIFY(!malformed.open_data(QByteArrayLiteral("not a pdf"), &error_message));
+    QVERIFY(!error_message.isEmpty());
+    QCOMPARE(malformed.page_count(), 0);
 }
 
 QTEST_GUILESS_MAIN(QtPdfBackendTest)

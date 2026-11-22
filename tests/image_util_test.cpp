@@ -46,6 +46,11 @@ void ImageUtilTest::invalid_dimensions_return_empty_geometry() {
     QVERIFY(contained_size_for_aspect(QSizeF(16, 9), QSize()).isEmpty());
     QVERIFY(centered_rect_for_image(QSize(), QRect(10, 20, 100, 100)).isEmpty());
     QVERIFY(centered_rect_for_image(QSize(16, 9), QRect()).isEmpty());
+
+    // Zero-area sources, such as a null QImage, have no aspect ratio to preserve.
+    QVERIFY(!contained_size_for_aspect(QSizeF(0, 0), QSize(100, 100)).isValid());
+    QVERIFY(!contained_size_for_aspect(QSizeF(16, 0), QSize(100, 100)).isValid());
+    QVERIFY(centered_rect_for_image(QSize(0, 0), QRect(10, 20, 100, 100)).isNull());
 }
 
 void ImageUtilTest::centered_rectangle_preserves_bounds_origin() {

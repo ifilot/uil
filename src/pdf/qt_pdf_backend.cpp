@@ -3,22 +3,50 @@
 #include <QLoggingCategory>
 #include <QPdfDocumentRenderOptions>
 
-Q_LOGGING_CATEGORY(logPdf, "pdf")
+Q_LOGGING_CATEGORY(log_pdf, "pdf")
 
 QtPdfBackend::QtPdfBackend() = default;
 QtPdfBackend::~QtPdfBackend() = default;
 
 bool QtPdfBackend::open(const QString& path, QString* error_message) {
-    const QPdfDocument::Error error = document_.load(path);
+    document_.close();
+    buffer_.close();
+    return finish_open(document_.load(path), path, error_message);
+}
+
+bool QtPdfBackend::open_data(const QByteArray& data, QString* error_message) {
+    document_.close();
+    buffer_.close();
+    buffer_.setData(data);
+    if (!buffer_.open(QIODevice::ReadOnly)) {
+        if (error_message) {
+            *error_message = QStringLiteral("Could not read PDF data");
+        }
+        return false;
+    }
+
+    // QBuffer is random access, so QPdfDocument parses it synchronously here.
+    document_.load(&buffer_);
+    const QPdfDocument::Error error = document_.status() == QPdfDocument::Status::Ready
+        ? QPdfDocument::Error::None
+        : (document_.error() == QPdfDocument::Error::None ? QPdfDocument::Error::Unknown
+                                                          : document_.error());
+    return finish_open(error, QStringLiteral("<memory>"), error_message);
+}
+
+bool QtPdfBackend::finish_open(
+    QPdfDocument::Error error,
+    const QString& source,
+    QString* error_message) {
     if (error != QPdfDocument::Error::None) {
         if (error_message) {
             *error_message = error_to_string(error);
         }
-        qCWarning(logPdf) << "Failed to open PDF" << path << error_to_string(error);
+        qCWarning(log_pdf) << "Failed to open PDF" << source << error_to_string(error);
         return false;
     }
 
-    qCInfo(logPdf) << "Opened PDF" << path << "pages:" << document_.pageCount();
+    qCInfo(log_pdf) << "Opened PDF" << source << "pages:" << document_.pageCount();
     return true;
 }
 
@@ -39,7 +67,13 @@ QImage QtPdfBackend::render_page(int page_index, QSize target_pixel_size) {
     }
 
     QPdfDocumentRenderOptions options;
-    return document_.render(page_index, target_pixel_size, options);
+    QImage image = document_.render(page_index, target_pixel_size, options);
+    // QtPdf returns non-premultiplied ARGB32, which QPainter would otherwise convert on every
+    // paint. Convert once here, off the GUI thread.
+    if (!image.isNull() && image.format() != QImage::Format_ARGB32_Premultiplied) {
+        image.convertTo(QImage::Format_ARGB32_Premultiplied);
+    }
+    return image;
 }
 
 QString QtPdfBackend::error_to_string(QPdfDocument::Error error) {

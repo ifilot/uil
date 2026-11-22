@@ -12,17 +12,19 @@ namespace {
 constexpr qsizetype kMaximumFigureBytes = 4 * 1024 * 1024;
 constexpr qsizetype kMaximumSvgBytes = 2 * 1024 * 1024;
 
+/** @brief Stores an error message when an output pointer was supplied. */
 void set_error(QString* error_message, const QString& message) {
     if (error_message) {
         *error_message = message;
     }
 }
 
+/** @brief Returns the finite number stored under @p key, or @p fallback when absent or invalid. */
 double finite_number(const QJsonObject& object, const QString& key, double fallback) {
     const double value = object.value(key).toDouble(fallback);
     return std::isfinite(value) ? value : fallback;
 }
-}
+}  // namespace
 
 bool InteractiveFigureDefinition::is_valid() const {
     if (background_svg.isEmpty() || !(x_max > x_min)) {

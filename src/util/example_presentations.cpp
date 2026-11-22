@@ -6,6 +6,7 @@
 #include <array>
 
 namespace {
+/** @brief Compile-time menu title and file name of one bundled example. */
 struct ExampleDefinition {
     const char* title;
     const char* file_name;

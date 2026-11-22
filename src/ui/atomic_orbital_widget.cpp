@@ -16,6 +16,7 @@
 #include <QResizeEvent>
 #include <QSlider>
 #include <QSurfaceFormat>
+#include <QtMath>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -41,6 +42,7 @@ constexpr int kTitlePixelSize = 28;
 constexpr int kPanelLabelPixelSize = 20;
 constexpr int kLegendPixelSize = 17;
 
+/** @brief Converts an sRGB colour to the linear RGB expected by the surface shader. */
 QVector3D linear_color(const QColor& color) {
     const auto linear_channel = [](float channel) {
         return channel <= 0.04045f
@@ -53,6 +55,7 @@ QVector3D linear_color(const QColor& color) {
         linear_channel(float(color.blueF())));
 }
 
+/** @brief Returns the lower-case plane name used in labels ("xy", "xz", or "yz"). */
 QString plane_name(AtomicOrbitalDefinition::Plane plane) {
     switch (plane) {
     case AtomicOrbitalDefinition::Plane::XZ: return QStringLiteral("xz");
@@ -62,6 +65,7 @@ QString plane_name(AtomicOrbitalDefinition::Plane plane) {
     return QStringLiteral("xy");
 }
 
+/** @brief Returns the `$...$` math label of a catalog orbital, or of @p name if unknown. */
 QString orbital_math_label(const QString& name) {
     AtomicOrbitalCatalogEntry entry;
     if (resolve_atomic_orbital(name, &entry)) {
@@ -70,6 +74,7 @@ QString orbital_math_label(const QString& name) {
     return QStringLiteral("$%1$").arg(name);
 }
 
+/** @brief Formats a positive power of ten as a signed colour-bar label such as "+1×10^-2". */
 QString signed_order_label(double value, bool positive) {
     const int exponent = int(std::lround(std::log10(value)));
     return QStringLiteral("$%1\\,1\\times10^{%2}$")
@@ -77,6 +82,7 @@ QString signed_order_label(double value, bool positive) {
         .arg(exponent);
 }
 
+/** @brief Returns the `plane` uniform value understood by the contour shader. */
 int plane_index(AtomicOrbitalDefinition::Plane plane) {
     switch (plane) {
     case AtomicOrbitalDefinition::Plane::XY: return 0;
@@ -87,11 +93,17 @@ int plane_index(AtomicOrbitalDefinition::Plane plane) {
 }
 }  // namespace
 
+/** @brief Non-indexed triangle list of one phase surface and the VAO that binds it. */
 struct AtomicOrbitalWidget::Mesh {
     QOpenGLBuffer vertex_buffer{QOpenGLBuffer::VertexBuffer};
     QOpenGLVertexArrayObject vao;
     int vertex_count = 0;
 
+    /**
+     * @brief Uploads @p vertices and records the attribute layout for @p program.
+     * @return False for an empty surface or if a GL object cannot be created.
+     * Requires the owning context to be current.
+     */
     bool create(
         QOpenGLShaderProgram* program,
         const QVector<AtomicOrbitalVertex>& vertices) {
@@ -118,6 +130,7 @@ struct AtomicOrbitalWidget::Mesh {
         return true;
     }
 
+    /** @brief Deletes the GL objects; requires the context that created them to be current. */
     void destroy() {
         vao.destroy();
         vertex_buffer.destroy();
@@ -125,6 +138,7 @@ struct AtomicOrbitalWidget::Mesh {
     }
 };
 
+/** @brief A previously displayed volume kept on the GPU for instant re-display. */
 struct AtomicOrbitalWidget::CachedGpuVolume {
   AtomicOrbitalDefinition definition;
   std::unique_ptr<Mesh> positive;
@@ -160,6 +174,7 @@ AtomicOrbitalWidget::AtomicOrbitalWidget(QWidget* parent) : QOpenGLWidget(parent
     setMinimumSize(160, 100);
     setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
     create_controls();
+    orbital_label_ = orbital_math_label(definition_.orbital);
     reset_view();
 }
 
@@ -189,6 +204,7 @@ void AtomicOrbitalWidget::set_prepared_definition(const AtomicOrbitalDefinition&
                               uploaded_bytes_ > 0 &&
                               same_geometry(uploaded_definition_, definition);
   definition_ = definition;
+  orbital_label_ = orbital_math_label(definition_.orbital);
   update_plane_buttons();
   volume_ = volume;
   renderer_error_ = error;
@@ -309,7 +325,7 @@ void AtomicOrbitalWidget::initializeGL() {
 
 bool AtomicOrbitalWidget::create_renderer() {
     destroy_renderer();
-    static constexpr char surface_vertex[] = R"glsl(#version 330 core
+    static constexpr char kSurfaceVertexShader[] = R"glsl(#version 330 core
 layout(location = 0) in vec3 vertex_position;
 layout(location = 1) in vec3 vertex_normal;
 uniform mat4 model_view_projection;
@@ -325,7 +341,7 @@ void main() {
     view_normal = normalize(normal_matrix * vertex_normal);
     gl_Position = model_view_projection * vec4(vertex_position, 1.0);
 })glsl";
-    static constexpr char surface_fragment[] = R"glsl(#version 330 core
+    static constexpr char kSurfaceFragmentShader[] = R"glsl(#version 330 core
 in vec3 view_position;
 in vec3 view_normal;
 in vec3 object_position;
@@ -344,7 +360,7 @@ void main() {
     vec3 linear_rgb = base_color * (0.24 + 0.74 * diffuse) + vec3(0.4 * specular);
     fragment_color = vec4(pow(clamp(linear_rgb, 0.0, 1.0), vec3(1.0 / 2.2)), 0.96);
 })glsl";
-    static constexpr char plane_vertex[] = R"glsl(#version 330 core
+    static constexpr char kPlaneVertexShader[] = R"glsl(#version 330 core
 layout(location = 0) in vec3 vertex_position;
 uniform mat4 model_view_projection;
 out vec3 object_position;
@@ -352,7 +368,7 @@ void main() {
     object_position = vertex_position;
     gl_Position = model_view_projection * vec4(vertex_position, 1.0);
 })glsl";
-    static constexpr char sampling_functions[] = R"glsl(
+    static constexpr char kSamplingFunctions[] = R"glsl(
 vec3 plane_world(vec2 uv, int plane, float offset, float extent) {
     vec2 p = (uv * 2.0 - 1.0) * extent;
     if (plane == 0) return vec3(p.x, p.y, offset * extent);
@@ -383,7 +399,7 @@ vec4 sampled_color(vec3 object_position, sampler3D volume_texture,
 }
 )glsl";
     const QByteArray plane_fragment = QByteArrayLiteral("#version 330 core\n")
-        + QByteArray(sampling_functions)
+        + QByteArray(kSamplingFunctions)
         + QByteArrayLiteral(R"glsl(
 in vec3 object_position;
 uniform sampler3D volume_texture;
@@ -398,7 +414,7 @@ void main() {
         extent, minimum_value, maximum_value, contour_levels);
     fragment_color = vec4(color.rgb, 0.58);
 })glsl");
-    static constexpr char contour_vertex[] = R"glsl(#version 330 core
+    static constexpr char kContourVertexShader[] = R"glsl(#version 330 core
 out vec2 uv;
 void main() {
     vec2 positions[4] = vec2[4](vec2(-1.0,-1.0), vec2(1.0,-1.0),
@@ -406,19 +422,19 @@ void main() {
     uv = positions[gl_VertexID] * 0.5 + 0.5;
     gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
 })glsl";
-    static constexpr char axis_vertex[] = R"glsl(#version 330 core
+    static constexpr char kAxisVertexShader[] = R"glsl(#version 330 core
 layout(location = 0) in vec3 vertex_position;
 uniform mat4 model_view_projection;
 void main() {
     gl_Position = model_view_projection * vec4(vertex_position, 1.0);
 })glsl";
-    static constexpr char axis_fragment[] = R"glsl(#version 330 core
+    static constexpr char kAxisFragmentShader[] = R"glsl(#version 330 core
 out vec4 fragment_color;
 void main() {
     fragment_color = vec4(0.025, 0.025, 0.025, 1.0);
 })glsl";
     const QByteArray contour_fragment = QByteArrayLiteral("#version 330 core\n")
-        + QByteArray(sampling_functions)
+        + QByteArray(kSamplingFunctions)
         + QByteArrayLiteral(R"glsl(
 in vec2 uv;
 uniform sampler3D volume_texture;
@@ -446,10 +462,10 @@ void main() {
         }
         return program;
     };
-    surface_program_ = make_program(surface_vertex, surface_fragment);
-    plane_program_ = make_program(plane_vertex, plane_fragment);
-    contour_program_ = make_program(contour_vertex, contour_fragment);
-    axis_program_ = make_program(axis_vertex, axis_fragment);
+    surface_program_ = make_program(kSurfaceVertexShader, kSurfaceFragmentShader);
+    plane_program_ = make_program(kPlaneVertexShader, plane_fragment);
+    contour_program_ = make_program(kContourVertexShader, contour_fragment);
+    axis_program_ = make_program(kAxisVertexShader, kAxisFragmentShader);
     if (!surface_program_ || !plane_program_ || !contour_program_ || !axis_program_) {
         qWarning().noquote() << "Atomic-orbital shader initialization failed:" << renderer_error_;
         destroy_renderer();
@@ -493,8 +509,11 @@ void AtomicOrbitalWidget::destroy_renderer() {
   plane_vao_.destroy();
   quad_vao_.destroy();
   plane_buffer_.destroy();
+  plane_buffer_current_ = false;
   axis_vao_.destroy();
   axis_buffer_.destroy();
+  axis_buffer_extent_ = 0.0f;
+  axis_vertex_count_ = 0;
   if (volume_texture_) glDeleteTextures(1, &volume_texture_);
   if (colormap_texture_) glDeleteTextures(1, &colormap_texture_);
   volume_texture_ = 0;
@@ -624,9 +643,12 @@ void AtomicOrbitalWidget::update_plane_buffer() {
         a = {o, -e, -e}; b = {o, e, -e}; c = {o, -e, e}; d = {o, e, e};
     }
     const std::array<QVector3D, 6> vertices{{a, b, c, c, b, d}};
+    if (plane_buffer_current_ && vertices == plane_buffer_vertices_) return;
     plane_buffer_.bind();
     plane_buffer_.allocate(vertices.data(), int(sizeof(vertices)));
     plane_buffer_.release();
+    plane_buffer_vertices_ = vertices;
+    plane_buffer_current_ = true;
 }
 
 void AtomicOrbitalWidget::paintGL() {
@@ -805,49 +827,54 @@ void AtomicOrbitalWidget::draw_world_axes(
     const QMatrix4x4& view,
     const QMatrix4x4& projection) {
     if (!axis_program_ || !axis_vao_.isCreated()) return;
-    const float length = volume_.half_extent * 0.72f;
-    const float glyph_size = volume_.half_extent * 0.052f;
-    const float label_gap = volume_.half_extent * 0.045f;
-    const QVector3D eye_direction = QVector3D(2.8f, -3.2f, 2.35f).normalized();
-    const QVector3D forward = -eye_direction;
-    const QVector3D right = QVector3D::crossProduct(
-        forward, QVector3D(0, 0, 1)).normalized();
-    const QVector3D up = QVector3D::crossProduct(right, forward).normalized();
+    // The axes are fixed in object space, so their lines only change with the extent.
+    if (axis_vertex_count_ == 0 || axis_buffer_extent_ != volume_.half_extent) {
+        const float length = volume_.half_extent * 0.72f;
+        const float glyph_size = volume_.half_extent * 0.052f;
+        const float label_gap = volume_.half_extent * 0.045f;
+        const QVector3D eye_direction = QVector3D(2.8f, -3.2f, 2.35f).normalized();
+        const QVector3D forward = -eye_direction;
+        const QVector3D right = QVector3D::crossProduct(
+            forward, QVector3D(0, 0, 1)).normalized();
+        const QVector3D up = QVector3D::crossProduct(right, forward).normalized();
 
-    QVector<QVector3D> vertices;
-    vertices.reserve(28);
-    const auto line = [&vertices](const QVector3D& from, const QVector3D& to) {
-        vertices.append(from);
-        vertices.append(to);
-    };
-    const QVector3D origin;
-    const QVector3D x_end(length, 0, 0);
-    const QVector3D y_end(0, length, 0);
-    const QVector3D z_end(0, 0, length);
-    line(origin, x_end);
-    line(origin, y_end);
-    line(origin, z_end);
+        QVector<QVector3D> vertices;
+        vertices.reserve(28);
+        const auto line = [&vertices](const QVector3D& from, const QVector3D& to) {
+            vertices.append(from);
+            vertices.append(to);
+        };
+        const QVector3D origin;
+        const QVector3D x_end(length, 0, 0);
+        const QVector3D y_end(0, length, 0);
+        const QVector3D z_end(0, 0, length);
+        line(origin, x_end);
+        line(origin, y_end);
+        line(origin, z_end);
 
-    const auto glyph_point = [&](const QVector3D& center, float x, float y) {
-        return center + right * (x * glyph_size) + up * (y * glyph_size);
-    };
-    const QVector3D x_label = x_end + QVector3D(label_gap, 0, 0);
-    line(glyph_point(x_label, -0.55f, -0.65f), glyph_point(x_label, 0.55f, 0.65f));
-    line(glyph_point(x_label, -0.55f, 0.65f), glyph_point(x_label, 0.55f, -0.65f));
+        const auto glyph_point = [&](const QVector3D& center, float x, float y) {
+            return center + right * (x * glyph_size) + up * (y * glyph_size);
+        };
+        const QVector3D x_label = x_end + QVector3D(label_gap, 0, 0);
+        line(glyph_point(x_label, -0.55f, -0.65f), glyph_point(x_label, 0.55f, 0.65f));
+        line(glyph_point(x_label, -0.55f, 0.65f), glyph_point(x_label, 0.55f, -0.65f));
 
-    const QVector3D y_label = y_end + QVector3D(0, label_gap, 0);
-    line(glyph_point(y_label, -0.55f, 0.65f), glyph_point(y_label, 0.0f, 0.05f));
-    line(glyph_point(y_label, 0.55f, 0.65f), glyph_point(y_label, 0.0f, 0.05f));
-    line(glyph_point(y_label, 0.0f, 0.05f), glyph_point(y_label, 0.0f, -0.68f));
+        const QVector3D y_label = y_end + QVector3D(0, label_gap, 0);
+        line(glyph_point(y_label, -0.55f, 0.65f), glyph_point(y_label, 0.0f, 0.05f));
+        line(glyph_point(y_label, 0.55f, 0.65f), glyph_point(y_label, 0.0f, 0.05f));
+        line(glyph_point(y_label, 0.0f, 0.05f), glyph_point(y_label, 0.0f, -0.68f));
 
-    const QVector3D z_label = z_end + QVector3D(0, 0, label_gap);
-    line(glyph_point(z_label, -0.52f, 0.65f), glyph_point(z_label, 0.52f, 0.65f));
-    line(glyph_point(z_label, 0.52f, 0.65f), glyph_point(z_label, -0.52f, -0.65f));
-    line(glyph_point(z_label, -0.52f, -0.65f), glyph_point(z_label, 0.52f, -0.65f));
+        const QVector3D z_label = z_end + QVector3D(0, 0, label_gap);
+        line(glyph_point(z_label, -0.52f, 0.65f), glyph_point(z_label, 0.52f, 0.65f));
+        line(glyph_point(z_label, 0.52f, 0.65f), glyph_point(z_label, -0.52f, -0.65f));
+        line(glyph_point(z_label, -0.52f, -0.65f), glyph_point(z_label, 0.52f, -0.65f));
 
-    axis_buffer_.bind();
-    axis_buffer_.allocate(vertices.constData(), int(vertices.size() * sizeof(QVector3D)));
-    axis_buffer_.release();
+        axis_buffer_.bind();
+        axis_buffer_.allocate(vertices.constData(), int(vertices.size() * sizeof(QVector3D)));
+        axis_buffer_.release();
+        axis_buffer_extent_ = volume_.half_extent;
+        axis_vertex_count_ = int(vertices.size());
+    }
 
     glEnable(GL_DEPTH_TEST);
     glLineWidth(std::max(1.0f, float(devicePixelRatioF()) * 2.0f));
@@ -856,7 +883,7 @@ void AtomicOrbitalWidget::draw_world_axes(
         "model_view_projection", projection * view * model);
     {
         QOpenGLVertexArrayObject::Binder binder(&axis_vao_);
-        glDrawArrays(GL_LINES, 0, vertices.size());
+        glDrawArrays(GL_LINES, 0, axis_vertex_count_);
     }
     axis_program_->release();
     glLineWidth(1.0f);
@@ -881,7 +908,7 @@ void AtomicOrbitalWidget::draw_labels_and_colorbar() {
   ui_math_text::draw(
       painter, left_logical_viewport().adjusted(6, 2, -4, -3),
       QStringLiteral("%1 orbital + fixed $%2$ plane")
-          .arg(orbital_math_label(definition_.orbital), plane_name(definition_.plane)),
+          .arg(orbital_label_, plane_name(definition_.plane)),
       Qt::AlignLeft | Qt::AlignTop, label_font, QColor(QStringLiteral("#1f2937")));
   ui_math_text::draw(painter, right_logical_viewport().adjusted(6, 2, -4, -3),
                      QStringLiteral("Signed $\\psi$ contour ($a_0^{-3/2}$)"),
@@ -893,13 +920,8 @@ void AtomicOrbitalWidget::draw_labels_and_colorbar() {
 
   const QRect right = right_logical_viewport();
   const QRect bar(right.right() - 43, right.top() + 50, 16, std::max(10, right.height() - 72));
-  const QVector<QColor> colors = atomic_orbital_colormap(definition_.colormap);
-  for (int y = 0; y < bar.height(); ++y) {
-    const int index = std::clamp(
-        int(std::lround((1.0 - double(y) / std::max(1, bar.height() - 1)) * 255.0)), 0, 255);
-    painter.setPen(colors.value(index, Qt::white));
-    painter.drawLine(bar.left(), bar.top() + y, bar.right(), bar.top() + y);
-  }
+  // One cached image instead of one antialiased line per pixel row on every frame.
+  painter.drawImage(QPointF(bar.left() - 1, bar.top() - 1), colorbar_image(bar.size()));
     painter.setPen(QColor(55, 65, 81));
     QFont legend_font = painter.font();
     legend_font.setBold(false);
@@ -932,6 +954,37 @@ void AtomicOrbitalWidget::draw_labels_and_colorbar() {
         painter.drawText(rect().adjusted(20, 30, -20, -kControlHeight),
                          Qt::AlignCenter | Qt::TextWordWrap, renderer_error_);
     }
+}
+
+const QImage& AtomicOrbitalWidget::colorbar_image(const QSize& logical_size) {
+  const qreal ratio = devicePixelRatioF();
+  const QSize pixel_size(qCeil((logical_size.width() + 2) * ratio),
+                         qCeil((logical_size.height() + 2) * ratio));
+  if (!colorbar_cache_.isNull() && colorbar_cache_.size() == pixel_size &&
+      qFuzzyCompare(colorbar_cache_.devicePixelRatio(), ratio) &&
+      colorbar_cache_colormap_ == definition_.colormap) {
+    return colorbar_cache_;
+  }
+  QImage image(pixel_size, QImage::Format_ARGB32_Premultiplied);
+  image.setDevicePixelRatio(ratio);
+  image.fill(Qt::transparent);
+  {
+    // Same strokes as the former per-frame loop, offset by the one-pixel margin that holds
+    // the antialiased caps.
+    QPainter image_painter(&image);
+    image_painter.setRenderHint(QPainter::Antialiasing, true);
+    const QVector<QColor> colors = atomic_orbital_colormap(definition_.colormap);
+    const int height = logical_size.height();
+    for (int y = 0; y < height; ++y) {
+      const int index = std::clamp(
+          int(std::lround((1.0 - double(y) / std::max(1, height - 1)) * 255.0)), 0, 255);
+      image_painter.setPen(colors.value(index, Qt::white));
+      image_painter.drawLine(1, 1 + y, logical_size.width(), 1 + y);
+    }
+  }
+  colorbar_cache_ = std::move(image);
+  colorbar_cache_colormap_ = definition_.colormap;
+  return colorbar_cache_;
 }
 
 void AtomicOrbitalWidget::create_controls() {

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 
+/** @brief Helpers for the audience deck-overview grid. */
 namespace deck_overview {
 
 /**
@@ -19,8 +20,11 @@ namespace deck_overview {
  * @tparam WidgetRange An ordered range containing QWidget-derived pointers.
  * @param widgets Widgets ordered by their zero-based page index.
  * @param viewport Viewport against which visibility is measured.
- * @param fallback_index Page returned when no widget currently intersects.
- * @return The inclusive first and last visible page indices.
+ * @param fallback_index Page returned when no widget currently intersects; clamped to the
+ *        valid page range.
+ * @return The inclusive first and last visible page indices; `{fallback, fallback}` when no
+ *         widget intersects the viewport; `{-1, -1}` when @p widgets is empty or @p viewport is
+ *         null. Null entries in @p widgets count as pages but are never visible.
  */
 template <typename WidgetRange>
 QPair<int, int> visible_page_range(
