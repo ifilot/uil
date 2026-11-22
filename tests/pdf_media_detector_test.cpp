@@ -14,12 +14,26 @@
 
 #include <zlib.h>
 
+#if defined(__SANITIZE_ADDRESS__)
+#define UIL_TEST_UNDER_SANITIZER 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer) || __has_feature(undefined_behavior_sanitizer)
+#define UIL_TEST_UNDER_SANITIZER 1
+#endif
+#endif
+
 namespace {
 /**
  * Upper bound for scanning each hostile fixture. Before the hardening these inputs crashed, ran
- * for minutes, or took about 30 s; the margin absorbs heavily loaded CI machines.
+ * for minutes, or took about 30 s; the margin absorbs heavily loaded CI machines. Sanitizer builds
+ * run these byte-scanning loops several times slower (about 7 s on CI runners), so they only guard
+ * against hangs; the strict bound is enforced by the regular builds.
  */
+#ifdef UIL_TEST_UNDER_SANITIZER
+constexpr qint64 kScanTimeLimitMs = 30000;
+#else
 constexpr qint64 kScanTimeLimitMs = 5000;
+#endif
 
 /** @brief Writes a synthetic PDF fixture to disk. */
 bool write_pdf_fixture(const QString& path, const QByteArray& contents) {
