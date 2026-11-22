@@ -10,6 +10,8 @@ class AtomicOrbitalWidgetTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief Checks rendering, plane offset, posters, and presentation-only updates; needs OpenGL.
+     */
     void renders_and_resamples_when_opengl_is_available();
     /** @brief Checks exact frame restoration without redundant geometry uploads and bounded
      * eviction. */
@@ -42,8 +44,7 @@ void AtomicOrbitalWidgetTest::renders_and_resamples_when_opengl_is_available() {
     const QImage centered = widget.capture_frame();
     QVERIFY(!centered.isNull());
 
-    auto* slider = widget.findChild<QSlider*>(
-        QStringLiteral("atomicOrbitalOffsetSlider"));
+    auto* slider = widget.findChild<QSlider*>(QStringLiteral("atomicOrbitalOffsetSlider"));
     QVERIFY(slider);
     slider->setValue(700);
     QTest::qWait(50);
@@ -52,13 +53,13 @@ void AtomicOrbitalWidgetTest::renders_and_resamples_when_opengl_is_available() {
     QVERIFY(offset != centered);
     const double saved_offset = widget.plane_offset();
     for (const bool surface_only : {false, true}) {
-      const QImage poster = widget.capture_poster(surface_only);
-      QVERIFY(!poster.isNull());
-      QCOMPARE(poster.pixelColor(0, 0), QColor(Qt::white));
-      QVERIFY(poster != offset);
-      QVERIFY(slider->isVisible());
-      QCOMPARE(widget.plane_offset(), saved_offset);
-      QCOMPARE(widget.capture_frame(), offset);
+        const QImage poster = widget.capture_poster(surface_only);
+        QVERIFY(!poster.isNull());
+        QCOMPARE(poster.pixelColor(0, 0), QColor(Qt::white));
+        QVERIFY(poster != offset);
+        QVERIFY(slider->isVisible());
+        QCOMPARE(widget.plane_offset(), saved_offset);
+        QCOMPARE(widget.capture_frame(), offset);
     }
     // A presentation-only change reuses the shared mesh/volume buffers, but must
     // refresh palette and sampling-plane resources and still produce a valid frame.
@@ -79,12 +80,9 @@ void AtomicOrbitalWidgetTest::renders_and_resamples_when_opengl_is_available() {
     QVERIFY(widget.renderer_available());
     QVERIFY(widget.capture_frame() != themed_frame);
 
-    auto* xy_button = widget.findChild<QPushButton*>(
-        QStringLiteral("atomicOrbitalPlaneXYButton"));
-    auto* xz_button = widget.findChild<QPushButton*>(
-        QStringLiteral("atomicOrbitalPlaneXZButton"));
-    auto* yz_button = widget.findChild<QPushButton*>(
-        QStringLiteral("atomicOrbitalPlaneYZButton"));
+    auto* xy_button = widget.findChild<QPushButton*>(QStringLiteral("atomicOrbitalPlaneXYButton"));
+    auto* xz_button = widget.findChild<QPushButton*>(QStringLiteral("atomicOrbitalPlaneXZButton"));
+    auto* yz_button = widget.findChild<QPushButton*>(QStringLiteral("atomicOrbitalPlaneYZButton"));
     QVERIFY(xy_button);
     QVERIFY(xz_button);
     QVERIFY(yz_button);
@@ -108,98 +106,93 @@ void AtomicOrbitalWidgetTest::renders_and_resamples_when_opengl_is_available() {
     const QImage before_rotation = widget.capture_frame();
     const QPointF press_position(180.0, 180.0);
     const QPointF move_position(300.0, 225.0);
-    QMouseEvent press_event(
-        QEvent::MouseButtonPress, press_position,
-        QPointF(widget.mapToGlobal(press_position.toPoint())),
-        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent press_event(QEvent::MouseButtonPress, press_position,
+                            QPointF(widget.mapToGlobal(press_position.toPoint())), Qt::LeftButton,
+                            Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&widget, &press_event);
-    QMouseEvent move_event(
-        QEvent::MouseMove, move_position,
-        QPointF(widget.mapToGlobal(move_position.toPoint())),
-        Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent move_event(QEvent::MouseMove, move_position,
+                           QPointF(widget.mapToGlobal(move_position.toPoint())), Qt::NoButton,
+                           Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&widget, &move_event);
-    QMouseEvent release_event(
-        QEvent::MouseButtonRelease, move_position,
-        QPointF(widget.mapToGlobal(move_position.toPoint())),
-        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QMouseEvent release_event(QEvent::MouseButtonRelease, move_position,
+                              QPointF(widget.mapToGlobal(move_position.toPoint())), Qt::LeftButton,
+                              Qt::NoButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&widget, &release_event);
     const QImage after_rotation = widget.capture_frame();
-    const QRect left_crop(
-        before_rotation.width() * 3 / 100, before_rotation.height() * 15 / 100,
-        before_rotation.width() * 38 / 100, before_rotation.height() * 48 / 100);
-    const QRect right_crop(
-        before_rotation.width() * 53 / 100, before_rotation.height() * 15 / 100,
-        before_rotation.width() * 35 / 100, before_rotation.height() * 48 / 100);
+    const QRect left_crop(before_rotation.width() * 3 / 100, before_rotation.height() * 15 / 100,
+                          before_rotation.width() * 38 / 100, before_rotation.height() * 48 / 100);
+    const QRect right_crop(before_rotation.width() * 53 / 100, before_rotation.height() * 15 / 100,
+                           before_rotation.width() * 35 / 100, before_rotation.height() * 48 / 100);
     QVERIFY(before_rotation.copy(left_crop) != after_rotation.copy(left_crop));
     QCOMPARE(before_rotation.copy(right_crop), after_rotation.copy(right_crop));
 }
 
 void AtomicOrbitalWidgetTest::gpu_cache_reuses_and_evicts_geometry() {
-  if (QGuiApplication::platformName() == QStringLiteral("offscreen"))
-    QSKIP("Requires QOpenGLWidget");
-  QWidget new_host;
-  new_host.resize(900, 480);
-  AtomicOrbitalWidget widget;
-  widget.resize(900, 480);
-  AtomicOrbitalDefinition first;
-  first.grid_size = 129;
-  const auto first_volume = build_atomic_orbital_volume(first);
-  widget.set_prepared_definition(first, first_volume);
-  widget.show();
-  QTest::qWait(100);
-  if (!widget.isValid()) QSKIP("No OpenGL context");
-  const auto original = widget.capture_frame();
-  QVERIFY(widget.renderer_available());
-  QCOMPARE(widget.geometry_upload_count(), quint64(1));
-  auto second = first;
-  second.n = 2;
-  widget.set_definition(second);
-  QVERIFY(widget.renderer_available());
-  QCOMPARE(widget.geometry_upload_count(), quint64(2));
-  widget.set_prepared_definition(first, first_volume);
-  QCOMPARE(widget.geometry_upload_count(), quint64(2));
-  QCOMPARE(widget.capture_frame(), original);
-  auto themed = first;
-  themed.colormap = "garnet_slate";
-  widget.set_prepared_definition(themed, first_volume);
-  QCOMPARE(widget.geometry_upload_count(), quint64(2));
-  QVERIFY(widget.capture_frame() != original);
-  // Each 129-cubed texture alone exceeds 8 MiB. Four inactive textures cannot
-  // fit the 32 MiB budget, so scanning through five orbitals must evict 1s.
-  for (int n = 2; n <= 5; ++n) {
-    auto definition = first;
-    definition.n = n;
-    widget.set_definition(definition);
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen"))
+        QSKIP("Requires QOpenGLWidget");
+    QWidget new_host;
+    new_host.resize(900, 480);
+    AtomicOrbitalWidget widget;
+    widget.resize(900, 480);
+    AtomicOrbitalDefinition first;
+    first.grid_size = 129;
+    const auto first_volume = build_atomic_orbital_volume(first);
+    widget.set_prepared_definition(first, first_volume);
+    widget.show();
+    QTest::qWait(100);
+    if (!widget.isValid()) QSKIP("No OpenGL context");
+    const auto original = widget.capture_frame();
     QVERIFY(widget.renderer_available());
-    QVERIFY(widget.gpu_cache_bytes() <= 32 * 1024 * 1024);
-  }
-  const auto uploads = widget.geometry_upload_count();
-  widget.set_prepared_definition(first, first_volume);
-  QCOMPARE(widget.geometry_upload_count(), uploads + 1);
-  QCOMPARE(widget.capture_frame(), original);
-  QVERIFY(widget.gpu_cache_bytes() <= 32 * 1024 * 1024);
-  // Reparenting may recreate the GL context. Cached names must be destroyed in
-  // their original context, and the current volume must be uploaded again safely.
-  widget.setParent(&new_host);
-  new_host.show();
-  widget.show();
-  QTRY_VERIFY(widget.renderer_available());
-  const auto recreated = widget.capture_frame();
-  QCOMPARE(recreated.size(), original.size());
-  // Qt may choose different antialiasing for a child widget in another native
-  // window. Check the whole image within a small average channel tolerance;
-  // the same-context cache round trips above must remain pixel-identical.
-  quint64 difference = 0;
-  for (int y = 0; y < original.height(); ++y) {
-    for (int x = 0; x < original.width(); ++x) {
-      const QColor a = original.pixelColor(x, y);
-      const QColor b = recreated.pixelColor(x, y);
-      difference += std::abs(a.red() - b.red()) + std::abs(a.green() - b.green()) +
-                    std::abs(a.blue() - b.blue());
+    QCOMPARE(widget.geometry_upload_count(), quint64(1));
+    auto second = first;
+    second.n = 2;
+    widget.set_definition(second);
+    QVERIFY(widget.renderer_available());
+    QCOMPARE(widget.geometry_upload_count(), quint64(2));
+    widget.set_prepared_definition(first, first_volume);
+    QCOMPARE(widget.geometry_upload_count(), quint64(2));
+    QCOMPARE(widget.capture_frame(), original);
+    auto themed = first;
+    themed.colormap = "garnet_slate";
+    widget.set_prepared_definition(themed, first_volume);
+    QCOMPARE(widget.geometry_upload_count(), quint64(2));
+    QVERIFY(widget.capture_frame() != original);
+    // Each 129-cubed texture alone exceeds 8 MiB. Four inactive textures cannot
+    // fit the 32 MiB budget, so scanning through five orbitals must evict 1s.
+    for (int n = 2; n <= 5; ++n) {
+        auto definition = first;
+        definition.n = n;
+        widget.set_definition(definition);
+        QVERIFY(widget.renderer_available());
+        QVERIFY(widget.gpu_cache_bytes() <= 32 * 1024 * 1024);
     }
-  }
-  const double mean_error = double(difference) / (original.width() * original.height() * 3);
-  QVERIFY2(mean_error < 2.0, qPrintable(QString("Mean channel error: %1").arg(mean_error)));
+    const auto uploads = widget.geometry_upload_count();
+    widget.set_prepared_definition(first, first_volume);
+    QCOMPARE(widget.geometry_upload_count(), uploads + 1);
+    QCOMPARE(widget.capture_frame(), original);
+    QVERIFY(widget.gpu_cache_bytes() <= 32 * 1024 * 1024);
+    // Reparenting may recreate the GL context. Cached names must be destroyed in
+    // their original context, and the current volume must be uploaded again safely.
+    widget.setParent(&new_host);
+    new_host.show();
+    widget.show();
+    QTRY_VERIFY(widget.renderer_available());
+    const auto recreated = widget.capture_frame();
+    QCOMPARE(recreated.size(), original.size());
+    // Qt may choose different antialiasing for a child widget in another native
+    // window. Check the whole image within a small average channel tolerance;
+    // the same-context cache round trips above must remain pixel-identical.
+    quint64 difference = 0;
+    for (int y = 0; y < original.height(); ++y) {
+        for (int x = 0; x < original.width(); ++x) {
+            const QColor a = original.pixelColor(x, y);
+            const QColor b = recreated.pixelColor(x, y);
+            difference += std::abs(a.red() - b.red()) + std::abs(a.green() - b.green()) +
+                          std::abs(a.blue() - b.blue());
+        }
+    }
+    const double mean_error = double(difference) / (original.width() * original.height() * 3);
+    QVERIFY2(mean_error < 2.0, qPrintable(QString("Mean channel error: %1").arg(mean_error)));
 }
 
 QTEST_MAIN(AtomicOrbitalWidgetTest)

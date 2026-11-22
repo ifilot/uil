@@ -15,8 +15,8 @@
 #include <QThread>
 #include <QUuid>
 
-#include <cstdio>
 #include <algorithm>
+#include <cstdio>
 #include <utility>
 
 namespace {
@@ -71,21 +71,16 @@ void message_handler(QtMsgType type, const QMessageLogContext& context, const QS
 
     {
         QMutexLocker locker(&state.mutex);
-        const double elapsed_ms = state.timer.isValid()
-            ? double(state.timer.nsecsElapsed()) / 1'000'000.0
-            : 0.0;
+        const double elapsed_ms =
+            state.timer.isValid() ? double(state.timer.nsecsElapsed()) / 1'000'000.0 : 0.0;
         const quintptr thread_id = reinterpret_cast<quintptr>(QThread::currentThreadId());
         const QString category = context.category && context.category[0] != '\0'
-            ? QString::fromUtf8(context.category)
-            : QStringLiteral("default");
+                                     ? QString::fromUtf8(context.category)
+                                     : QStringLiteral("default");
         line = QStringLiteral("%1 +%2ms [%3] [%4] [thread=0x%5] %6\n")
-                   .arg(
-                       QDateTime::currentDateTime().toString(Qt::ISODateWithMs),
-                       QString::number(elapsed_ms, 'f', 3),
-                       severity_name(type),
-                       category,
-                       QString::number(thread_id, 16),
-                       single_line_message(message));
+                   .arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs),
+                        QString::number(elapsed_ms, 'f', 3), severity_name(type), category,
+                        QString::number(thread_id, 16), single_line_message(message));
 
         if (state.file.isOpen()) {
             state.file.write(line.toUtf8());
@@ -133,10 +128,11 @@ bool initialize(const QString& log_directory) {
             return true;
         }
 
-        const QString directory_path = log_directory.isEmpty()
-            ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
-                  .filePath(QStringLiteral("logs"))
-            : log_directory;
+        const QString directory_path =
+            log_directory.isEmpty()
+                ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
+                      .filePath(QStringLiteral("logs"))
+                : log_directory;
         QDir directory(directory_path);
         if (!directory.mkpath(QStringLiteral("."))) {
             return false;
@@ -163,18 +159,17 @@ bool initialize(const QString& log_directory) {
         session_id = state.session_id;
     }
 
-    record_event(QStringLiteral("session.started"), {
-        {QStringLiteral("application"), QCoreApplication::applicationName()},
-        {QStringLiteral("application_version"), QCoreApplication::applicationVersion()},
-        {QStringLiteral("log_file"), active_path},
-        {QStringLiteral("pid"), QCoreApplication::applicationPid()},
-        {QStringLiteral("session_id"), session_id}
-    });
+    record_event(QStringLiteral("session.started"),
+                 {{QStringLiteral("application"), QCoreApplication::applicationName()},
+                  {QStringLiteral("application_version"), QCoreApplication::applicationVersion()},
+                  {QStringLiteral("log_file"), active_path},
+                  {QStringLiteral("pid"), QCoreApplication::applicationPid()},
+                  {QStringLiteral("session_id"), session_id}});
     if (QCoreApplication::instance()) {
         QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, [] {
-            performance_log::record_event(QStringLiteral("session.ending"), {
-                {QStringLiteral("session_elapsed_ms"), performance_log::session_elapsed_ms()}
-            });
+            performance_log::record_event(
+                QStringLiteral("session.ending"),
+                {{QStringLiteral("session_elapsed_ms"), performance_log::session_elapsed_ms()}});
             performance_log::flush();
         });
     }
@@ -222,27 +217,22 @@ void flush() {
 }
 
 void record_event(const QString& name, const QVariantMap& fields) {
-    QJsonObject payload{
-        {QStringLiteral("kind"), QStringLiteral("event")},
-        {QStringLiteral("name"), name},
-        {QStringLiteral("fields"), QJsonObject::fromVariantMap(fields)}
-    };
+    QJsonObject payload{{QStringLiteral("kind"), QStringLiteral("event")},
+                        {QStringLiteral("name"), name},
+                        {QStringLiteral("fields"), QJsonObject::fromVariantMap(fields)}};
     record_payload(std::move(payload));
 }
 
 void record_duration(const QString& name, qint64 duration_ms, const QVariantMap& fields) {
-    QJsonObject payload{
-        {QStringLiteral("duration_ms"), duration_ms},
-        {QStringLiteral("kind"), QStringLiteral("duration")},
-        {QStringLiteral("name"), name},
-        {QStringLiteral("fields"), QJsonObject::fromVariantMap(fields)}
-    };
+    QJsonObject payload{{QStringLiteral("duration_ms"), duration_ms},
+                        {QStringLiteral("kind"), QStringLiteral("duration")},
+                        {QStringLiteral("name"), name},
+                        {QStringLiteral("fields"), QJsonObject::fromVariantMap(fields)}};
     record_payload(std::move(payload));
 }
 
 ScopedSpan::ScopedSpan(QString name, QVariantMap fields)
-    : name_(std::move(name)),
-      fields_(std::move(fields)) {
+    : name_(std::move(name)), fields_(std::move(fields)) {
     timer_.start();
 }
 
@@ -255,9 +245,7 @@ void ScopedSpan::add_field(const QString& key, const QVariant& value) {
     fields_.insert(key, value);
 }
 
-void ScopedSpan::set_outcome(const QString& outcome) {
-    outcome_ = outcome;
-}
+void ScopedSpan::set_outcome(const QString& outcome) { outcome_ = outcome; }
 
 void ScopedSpan::checkpoint(const QString& checkpoint_name, const QVariantMap& fields) {
     const qint64 total_ms = timer_.elapsed();
@@ -267,15 +255,11 @@ void ScopedSpan::checkpoint(const QString& checkpoint_name, const QVariantMap& f
     }
     checkpoint_fields.insert(QStringLiteral("checkpoint"), checkpoint_name);
     checkpoint_fields.insert(QStringLiteral("total_ms"), total_ms);
-    record_duration(
-        name_ + QStringLiteral(".") + checkpoint_name,
-        total_ms - last_checkpoint_ms_,
-        checkpoint_fields);
+    record_duration(name_ + QStringLiteral(".") + checkpoint_name, total_ms - last_checkpoint_ms_,
+                    checkpoint_fields);
     last_checkpoint_ms_ = total_ms;
 }
 
-qint64 ScopedSpan::elapsed_ms() const {
-    return timer_.elapsed();
-}
+qint64 ScopedSpan::elapsed_ms() const { return timer_.elapsed(); }
 
 }  // namespace performance_log

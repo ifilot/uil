@@ -1,12 +1,15 @@
 #include "app_controller.hpp"
 
+#include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QPainter>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "package/uil_package.hpp"
 #include "pdf/qt_pdf_backend.hpp"
 #include "ui/atomic_orbital_widget.hpp"
 #include "ui/audience_window.hpp"
@@ -41,6 +44,14 @@ private slots:
     void failed_open_preserves_current_document();
     void saves_and_reopens_annotation_package();
     void exports_annotated_pdf();
+    /** @brief Verifies F5-style reloads keep unsaved annotations and saving clears the flag. */
+    void reload_preserves_unsaved_annotations();
+    /** @brief Verifies the open deck renders from its snapshot until it is reloaded. */
+    void rendering_ignores_file_rewrites_until_reload();
+    /** @brief Verifies export refuses the open file and never leaves partial output. */
+    void export_protects_open_presentation();
+    /** @brief Verifies an immediate save still bundles assets found by the media scan. */
+    void save_waits_for_media_scan();
 };
 
 void AppControllerTest::empty_controller_rejects_document_operations() {
@@ -55,12 +66,11 @@ void AppControllerTest::empty_controller_rejects_document_operations() {
     QCOMPARE(page_spy.size(), 0);
 
     QString error_message;
-    QVERIFY(!controller.save_uil_package(
-        QStringLiteral("unused.uil"), {}, {}, true, &error_message));
+    QVERIFY(
+        !controller.save_uil_package(QStringLiteral("unused.uil"), {}, {}, true, &error_message));
     QCOMPARE(error_message, QStringLiteral("No presentation is open"));
     error_message.clear();
-    QVERIFY(!controller.export_annotated_pdf(
-        QStringLiteral("unused.pdf"), {}, &error_message));
+    QVERIFY(!controller.export_annotated_pdf(QStringLiteral("unused.pdf"), {}, &error_message));
     QCOMPARE(error_message, QStringLiteral("No presentation is open"));
 }
 
@@ -69,15 +79,12 @@ void AppControllerTest::opens_renders_and_navigates_bundled_document() {
     QSignalSpy document_spy(&controller, &AppController::document_changed);
     QSignalSpy page_spy(&controller, &AppController::page_changed);
     QImage rendered_image;
-    connect(
-        &controller,
-        &AppController::current_slide_image_changed,
-        this,
-        [&rendered_image](const QImage& image) {
-            if (!image.isNull()) {
-                rendered_image = image;
-            }
-        });
+    connect(&controller, &AppController::current_slide_image_changed, this,
+            [&rendered_image](const QImage& image) {
+                if (!image.isNull()) {
+                    rendered_image = image;
+                }
+            });
 
     const QString path = example_path(QStringLiteral("getting-started.pdf"));
     QVERIFY(controller.open_pdf(path));
@@ -127,9 +134,7 @@ void AppControllerTest::opens_bundled_molecule_presentation() {
     AppController controller;
     PdfMediaScanResult scan_result;
     connect(&controller, &AppController::media_scan_changed, this,
-            [&scan_result](const PdfMediaScanResult& result) {
-                scan_result = result;
-            });
+            [&scan_result](const PdfMediaScanResult& result) { scan_result = result; });
 
     const QString path = example_path(QStringLiteral("molecule-visualizer.pdf"));
     QVERIFY(controller.open_pdf(path));
@@ -166,9 +171,7 @@ void AppControllerTest::opens_bundled_atomic_orbital_presentation() {
     AppController controller;
     PdfMediaScanResult scan_result;
     connect(&controller, &AppController::media_scan_changed, this,
-            [&scan_result](const PdfMediaScanResult& result) {
-                scan_result = result;
-            });
+            [&scan_result](const PdfMediaScanResult& result) { scan_result = result; });
 
     const QString path = example_path(QStringLiteral("atomic-orbitals.pdf"));
     QVERIFY(controller.open_pdf(path));
@@ -207,9 +210,7 @@ void AppControllerTest::opens_bundled_molecular_symmetry_presentation() {
     AppController controller;
     PdfMediaScanResult scan_result;
     connect(&controller, &AppController::media_scan_changed, this,
-            [&scan_result](const PdfMediaScanResult& result) {
-                scan_result = result;
-            });
+            [&scan_result](const PdfMediaScanResult& result) { scan_result = result; });
 
     const QString path = example_path(QStringLiteral("molecular-symmetry.pdf"));
     QVERIFY(controller.open_pdf(path));
@@ -228,12 +229,11 @@ void AppControllerTest::opens_bundled_molecular_symmetry_presentation() {
     window.resize(1280, 720);
     controller.set_audience_window(&window);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(
-        window.findChild<MolecularSymmetryWidget*>(
-            QStringLiteral("molecularSymmetryWidget")) != nullptr,
-        5000);
-    auto* player = window.findChild<MolecularSymmetryWidget*>(
-        QStringLiteral("molecularSymmetryWidget"));
+    QTRY_VERIFY_WITH_TIMEOUT(window.findChild<MolecularSymmetryWidget*>(
+                                 QStringLiteral("molecularSymmetryWidget")) != nullptr,
+                             5000);
+    auto* player =
+        window.findChild<MolecularSymmetryWidget*>(QStringLiteral("molecularSymmetryWidget"));
     QTRY_VERIFY_WITH_TIMEOUT(player->isVisible(), 5000);
     QCOMPARE(player->definition().point_group, QStringLiteral("C2v"));
     controller.next_page();
@@ -242,70 +242,70 @@ void AppControllerTest::opens_bundled_molecular_symmetry_presentation() {
 }
 
 void AppControllerTest::orbital_atlas_navigation() {
-  if (QGuiApplication::platformName() == QStringLiteral("offscreen"))
-    QSKIP("Requires QOpenGLWidget");
-  AppController controller;
-  AudienceWindow window;
-  PdfMediaScanResult scan;
-  connect(&controller, &AppController::media_scan_changed, this,
-          [&](const PdfMediaScanResult& result) { scan = result; });
-  controller.set_audience_window(&window);
-  window.show();
-  QVERIFY(controller.open_pdf(example_path("orbital-atlas.pdf")));
-  QTRY_COMPARE_WITH_TIMEOUT(scan.atomic_orbital_annotations.size(), 55, 10000);
-  const auto matches_page = [&](int page) {
-    QVector<AtomicOrbitalDefinition> expected;
-    for (const auto& annotation : scan.atomic_orbital_annotations)
-      if (annotation.page_index == page) expected.push_back(annotation.definition);
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen"))
+        QSKIP("Requires QOpenGLWidget");
+    AppController controller;
+    AudienceWindow window;
+    PdfMediaScanResult scan;
+    connect(&controller, &AppController::media_scan_changed, this,
+            [&](const PdfMediaScanResult& result) { scan = result; });
+    controller.set_audience_window(&window);
+    window.show();
+    QVERIFY(controller.open_pdf(example_path("orbital-atlas.pdf")));
+    QTRY_COMPARE_WITH_TIMEOUT(scan.atomic_orbital_annotations.size(), 55, 10000);
+    const auto matches_page = [&](int page) {
+        QVector<AtomicOrbitalDefinition> expected;
+        for (const auto& annotation : scan.atomic_orbital_annotations)
+            if (annotation.page_index == page) expected.push_back(annotation.definition);
+        const auto widgets = window.findChildren<AtomicOrbitalWidget*>();
+        if (widgets.size() < expected.size()) return false;
+        for (int i = 0; i < widgets.size(); ++i) {
+            if (i < expected.size()) {
+                if (!widgets[i]->isVisible() || widgets[i]->definition() != expected[i])
+                    return false;
+            } else if (widgets[i]->isVisible())
+                return false;
+        }
+        return true;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(matches_page(0), 15000);
+    QElapsedTimer timer;
+    timer.start();
+    controller.go_to_page(13);
+    controller.go_to_page(7);
+    controller.go_to_page(12);
+    const double jump_ms = timer.nsecsElapsed() / 1e6;
+    QTRY_VERIFY_WITH_TIMEOUT(matches_page(12), 15000);
+    controller.go_to_page(0);
+    QTRY_VERIFY_WITH_TIMEOUT(matches_page(0), 15000);
     const auto widgets = window.findChildren<AtomicOrbitalWidget*>();
-    if (widgets.size() < expected.size()) return false;
-    for (int i = 0; i < widgets.size(); ++i) {
-      if (i < expected.size()) {
-        if (!widgets[i]->isVisible() || widgets[i]->definition() != expected[i]) return false;
-      } else if (widgets[i]->isVisible())
-        return false;
-    }
-    return true;
-  };
-  QTRY_VERIFY_WITH_TIMEOUT(matches_page(0), 15000);
-  QElapsedTimer timer;
-  timer.start();
-  controller.go_to_page(13);
-  controller.go_to_page(7);
-  controller.go_to_page(12);
-  const double jump_ms = timer.nsecsElapsed() / 1e6;
-  QTRY_VERIFY_WITH_TIMEOUT(matches_page(12), 15000);
-  controller.go_to_page(0);
-  QTRY_VERIFY_WITH_TIMEOUT(matches_page(0), 15000);
-  const auto widgets = window.findChildren<AtomicOrbitalWidget*>();
-  QVector<quint64> uploads;
-  for (const auto* widget : widgets) uploads.push_back(widget->geometry_upload_count());
-  timer.restart();
-  controller.go_to_page(12);
-  const double warm_ms = timer.nsecsElapsed() / 1e6;
-  QTRY_VERIFY_WITH_TIMEOUT(matches_page(12), 15000);
-  for (int i = 0; i < widgets.size(); ++i)
-    QCOMPARE(widgets[i]->geometry_upload_count(), uploads[i]);
-  qInfo(
-      "Atlas: three cold navigation requests %.3f ms total; cached four-orbital transition %.3f ms",
-      jump_ms, warm_ms);
-  // Opening an unrelated document while work is in flight cannot revive old orbitals.
-  controller.go_to_page(8);
-  QVERIFY(controller.open_pdf(example_path("getting-started.pdf")));
-  QTRY_VERIFY(scan.atomic_orbital_annotations.isEmpty());
-  for (auto* widget : window.findChildren<AtomicOrbitalWidget*>()) QVERIFY(widget->isHidden());
+    QVector<quint64> uploads;
+    for (const auto* widget : widgets) uploads.push_back(widget->geometry_upload_count());
+    timer.restart();
+    controller.go_to_page(12);
+    const double warm_ms = timer.nsecsElapsed() / 1e6;
+    QTRY_VERIFY_WITH_TIMEOUT(matches_page(12), 15000);
+    for (int i = 0; i < widgets.size(); ++i)
+        QCOMPARE(widgets[i]->geometry_upload_count(), uploads[i]);
+    qInfo(
+        "Atlas: three cold navigation requests %.3f ms total; cached four-orbital transition %.3f "
+        "ms",
+        jump_ms, warm_ms);
+    // Opening an unrelated document while work is in flight cannot revive old orbitals.
+    controller.go_to_page(8);
+    QVERIFY(controller.open_pdf(example_path("getting-started.pdf")));
+    QTRY_VERIFY(scan.atomic_orbital_annotations.isEmpty());
+    for (auto* widget : window.findChildren<AtomicOrbitalWidget*>()) QVERIFY(widget->isHidden());
 }
 
 void AppControllerTest::failed_open_preserves_current_document() {
     AppController controller;
-    const QString valid_path =
-        example_path(QStringLiteral("pointer-and-annotations.pdf"));
+    const QString valid_path = example_path(QStringLiteral("pointer-and-annotations.pdf"));
     QVERIFY(controller.open_pdf(valid_path));
     QCOMPARE(controller.page_count(), 3);
     QSignalSpy status_spy(&controller, &AppController::status_message_changed);
 
-    QVERIFY(!controller.open_pdf(
-        example_path(QStringLiteral("missing.pdf"))));
+    QVERIFY(!controller.open_pdf(example_path(QStringLiteral("missing.pdf"))));
     QCOMPARE(controller.current_path(), valid_path);
     QCOMPARE(controller.page_count(), 3);
     QVERIFY(!status_spy.isEmpty());
@@ -321,12 +321,9 @@ void AppControllerTest::saves_and_reopens_annotation_package() {
     QVERIFY(source.open_pdf(example_path(QStringLiteral("getting-started.pdf"))));
     const QImage overlay = test_overlay();
     QString error_message;
-    QVERIFY2(source.save_uil_package(
-        package_path,
-        {{1, overlay}},
-        QSet<int>{1},
-        false,
-        &error_message), qPrintable(error_message));
+    QVERIFY2(
+        source.save_uil_package(package_path, {{1, overlay}}, QSet<int>{1}, false, &error_message),
+        qPrintable(error_message));
     QVERIFY(QFileInfo::exists(package_path));
 
     AppController restored;
@@ -351,18 +348,175 @@ void AppControllerTest::exports_annotated_pdf() {
     QVERIFY(directory.isValid());
     const QString output_path = directory.filePath(QStringLiteral("export.pdf"));
     AppController controller;
-    QVERIFY(controller.open_pdf(
-        example_path(QStringLiteral("pointer-and-annotations.pdf"))));
+    QVERIFY(controller.open_pdf(example_path(QStringLiteral("pointer-and-annotations.pdf"))));
     QString error_message;
-    QVERIFY2(controller.export_annotated_pdf(
-        output_path,
-        {{0, test_overlay()}},
-        &error_message), qPrintable(error_message));
+    QVERIFY2(controller.export_annotated_pdf(output_path, {{0, test_overlay()}}, &error_message),
+             qPrintable(error_message));
 
     QtPdfBackend exported;
     QVERIFY2(exported.open(output_path, &error_message), qPrintable(error_message));
     QCOMPARE(exported.page_count(), 3);
     QVERIFY(!exported.render_page(0, QSize(640, 360)).isNull());
+}
+
+void AppControllerTest::reload_preserves_unsaved_annotations() {
+    AppController controller;
+    QVERIFY(controller.open_pdf(example_path(QStringLiteral("getting-started.pdf"))));
+    QVERIFY(!controller.has_unsaved_annotations());
+
+    // An unmodified reload must not invent annotations.
+    QVERIFY(controller.reload_current_document(AnnotationState{{{1, test_overlay()}}, {}, true}));
+    QVERIFY(controller.loaded_overlay_images().isEmpty());
+
+    controller.mark_annotations_modified();
+    QVERIFY(controller.has_unsaved_annotations());
+    const QImage overlay = test_overlay();
+    QVERIFY(controller.reload_current_document(
+        AnnotationState{{{1, overlay}, {99, overlay}}, QSet<int>{1, 42}, false}));
+    QVERIFY(controller.has_unsaved_annotations());
+    QCOMPARE(controller.loaded_overlay_images().keys(), QList<int>{1});
+    QCOMPARE(controller.loaded_overlay_images().value(1), overlay);
+    QCOMPARE(controller.loaded_hidden_overlay_pages(), QSet<int>{1});
+    QVERIFY(!controller.loaded_overlays_globally_visible());
+
+    // Without explicit presenter state the controller's own state is carried over.
+    QVERIFY(controller.reload_current_document());
+    QCOMPARE(controller.loaded_overlay_images().keys(), QList<int>{1});
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString package_path = directory.filePath(QStringLiteral("saved.uil"));
+    QString error_message;
+    QVERIFY2(
+        controller.save_uil_package(package_path, controller.loaded_overlay_images(),
+                                    controller.loaded_hidden_overlay_pages(),
+                                    controller.loaded_overlays_globally_visible(), &error_message),
+        qPrintable(error_message));
+    QVERIFY(!controller.has_unsaved_annotations());
+    QCOMPARE(controller.document_display_path(), QFileInfo(package_path).absoluteFilePath());
+
+    controller.clear_annotation_overlay_for_page(1);
+    QVERIFY(controller.has_unsaved_annotations());
+    QVERIFY(controller.open_pdf(package_path));
+    QVERIFY(!controller.has_unsaved_annotations());
+    QVERIFY(controller.current_path() != controller.document_display_path());
+    QCOMPARE(controller.loaded_overlay_images().keys(), QList<int>{1});
+}
+
+void AppControllerTest::rendering_ignores_file_rewrites_until_reload() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("deck.pdf"));
+    QVERIFY(QFile::copy(example_path(QStringLiteral("getting-started.pdf")), path));
+
+    AppController controller;
+    QImage rendered_image;
+    connect(&controller, &AppController::current_slide_image_changed, this,
+            [&rendered_image](const QImage& image) {
+                if (!image.isNull()) {
+                    rendered_image = image;
+                }
+            });
+    QVERIFY(controller.open_pdf(path));
+    QCOMPARE(controller.page_count(), 4);
+
+    // Simulate a LaTeX rebuild that shortens the deck while it is open.
+    QVERIFY(QFile::remove(path));
+    QVERIFY(QFile::copy(example_path(QStringLiteral("pointer-and-annotations.pdf")), path));
+    QVERIFY(QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner));
+
+    rendered_image = {};
+    controller.go_to_page(3);
+    QTRY_VERIFY_WITH_TIMEOUT(!rendered_image.isNull(), 5000);
+    QCOMPARE(controller.page_count(), 4);
+
+    // Saving packages the presented deck, so overlays keep matching their slides.
+    const QString package_path = directory.filePath(QStringLiteral("snapshot.uil"));
+    QString error_message;
+    QVERIFY2(
+        controller.save_uil_package(package_path, {{3, test_overlay()}}, {}, true, &error_message),
+        qPrintable(error_message));
+    AppController restored;
+    QVERIFY(restored.open_pdf(package_path));
+    QCOMPARE(restored.page_count(), 4);
+    QVERIFY(restored.loaded_overlay_images().contains(3));
+
+    QVERIFY(controller.open_pdf(path));
+    QCOMPARE(controller.page_count(), 3);
+}
+
+void AppControllerTest::export_protects_open_presentation() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("deck.pdf"));
+    QVERIFY(QFile::copy(example_path(QStringLiteral("pointer-and-annotations.pdf")), path));
+    QFile original(path);
+    QVERIFY(original.open(QIODevice::ReadOnly));
+    const QByteArray original_bytes = original.readAll();
+    original.close();
+
+    AppController controller;
+    QVERIFY(controller.open_pdf(path));
+    QString error_message;
+    QVERIFY(!controller.export_annotated_pdf(path, {{0, test_overlay()}}, &error_message));
+    QVERIFY(!error_message.isEmpty());
+    QVERIFY(original.open(QIODevice::ReadOnly));
+    QCOMPARE(original.readAll(), original_bytes);
+    original.close();
+
+    const QString missing_directory_path = directory.filePath(QStringLiteral("missing/export.pdf"));
+    QVERIFY(!controller.export_annotated_pdf(missing_directory_path, {}, &error_message));
+    QVERIFY(!QFileInfo::exists(missing_directory_path));
+
+    const QString output_path = directory.filePath(QStringLiteral("export.pdf"));
+    QVERIFY2(controller.export_annotated_pdf(output_path, {}, &error_message),
+             qPrintable(error_message));
+    QVERIFY(QFileInfo(output_path).size() > 0);
+    QCOMPARE(QDir(directory.path()).entryList(QDir::Files).size(), 2);
+}
+
+void AppControllerTest::save_waits_for_media_scan() {
+    const QString pdf_path = example_path(QStringLiteral("molecule-visualizer.pdf"));
+    QSet<QString> expected_assets;
+    {
+        AppController scanned;
+        bool scan_done = false;
+        connect(
+            &scanned, &AppController::media_scan_changed, this,
+            [&](const PdfMediaScanResult& result) {
+                if (!result.molecule_annotations.isEmpty()) {
+                    for (const PdfMoleculeAnnotation& annotation : result.molecule_annotations) {
+                        if (!annotation.resolved_file_path.isEmpty()) {
+                            expected_assets.insert(annotation.resolved_file_path);
+                        }
+                    }
+                    scan_done = true;
+                }
+            });
+        QVERIFY(scanned.open_pdf(pdf_path));
+        QTRY_VERIFY_WITH_TIMEOUT(scan_done, 10000);
+    }
+    QVERIFY(!expected_assets.isEmpty());
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString package_path = directory.filePath(QStringLiteral("molecules.uil"));
+    {
+        AppController source;
+        QVERIFY(source.open_pdf(pdf_path));
+        // Save before the event loop could deliver the background media scan.
+        QString error_message;
+        QVERIFY2(source.save_uil_package(package_path, {}, {}, true, &error_message),
+                 qPrintable(error_message));
+    }
+
+    QTemporaryDir extracted;
+    QVERIFY(extracted.isValid());
+    UilPackageOpenResult package;
+    QString error_message;
+    QVERIFY2(extract_uil_package(package_path, extracted, &package, &error_message),
+             qPrintable(error_message));
+    QCOMPARE(package.molecule_asset_paths.size(), expected_assets.size());
 }
 
 QTEST_MAIN(AppControllerTest)

@@ -1,5 +1,5 @@
-#include "util/launcher_readiness.hpp"
 #include "util/performance_log.hpp"
+#include "util/launcher_readiness.hpp"
 
 #include <QFile>
 #include <QTemporaryDir>
@@ -29,13 +29,10 @@ void PerformanceLogTest::writes_structured_session_log() {
     performance_log::set_process_start_offset_ms(100);
     QVERIFY(performance_log::process_elapsed_ms() >= 100);
 
-    performance_log::record_event(
-        QStringLiteral("test.event"),
-        {{QStringLiteral("answer"), 42}});
+    performance_log::record_event(QStringLiteral("test.event"), {{QStringLiteral("answer"), 42}});
     {
-        performance_log::ScopedSpan span(
-            QStringLiteral("test.span"),
-            {{QStringLiteral("item_count"), 3}});
+        performance_log::ScopedSpan span(QStringLiteral("test.span"),
+                                         {{QStringLiteral("item_count"), 3}});
         span.checkpoint(QStringLiteral("checkpoint"));
         span.set_outcome(QStringLiteral("verified"));
     }
@@ -56,17 +53,13 @@ void PerformanceLogTest::writes_structured_session_log() {
 
 #ifdef Q_OS_WIN
 void PerformanceLogTest::signals_native_launcher_readiness_event() {
-    const QString event_name = QStringLiteral("Local\\uil-readiness-test-%1")
-                                   .arg(QCoreApplication::applicationPid());
-    HANDLE event_handle = CreateEventW(
-        nullptr,
-        TRUE,
-        FALSE,
-        reinterpret_cast<LPCWSTR>(event_name.utf16()));
+    const QString event_name =
+        QStringLiteral("Local\\uil-readiness-test-%1").arg(QCoreApplication::applicationPid());
+    HANDLE event_handle =
+        CreateEventW(nullptr, TRUE, FALSE, reinterpret_cast<LPCWSTR>(event_name.utf16()));
     QVERIFY(event_handle != nullptr);
 
-    QByteArray ready_argument =
-        (QStringLiteral("--uil-ready-event=") + event_name).toLocal8Bit();
+    QByteArray ready_argument = (QStringLiteral("--uil-ready-event=") + event_name).toLocal8Bit();
     char executable_name[] = "uil-viewer.exe";
     char* arguments[] = {executable_name, ready_argument.data()};
     launcher_readiness::initialize(2, arguments);

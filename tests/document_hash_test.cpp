@@ -9,10 +9,10 @@ namespace {
 /** @brief Replaces a test file with the supplied bytes. */
 bool write_test_file(const QString& path, const QByteArray& contents) {
     QFile file(path);
-    return file.open(QIODevice::WriteOnly | QIODevice::Truncate)
-        && file.write(contents) == contents.size();
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
+           file.write(contents) == contents.size();
 }
-}
+}  // namespace
 
 class DocumentHashTest final : public QObject {
     Q_OBJECT

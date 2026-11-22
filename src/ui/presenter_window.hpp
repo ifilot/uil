@@ -1,7 +1,7 @@
 #pragma once
 
-#include <QImage>
 #include <QHash>
+#include <QImage>
 #include <QLabel>
 #include <QMainWindow>
 #include <QPointer>
@@ -74,10 +74,11 @@ protected:
 private slots:
     /** @brief Opens a presentation selected by the user. */
     void open_pdf();
-    /** @brief Saves the active presentation package. */
-    void save_package();
-    /** @brief Saves the active presentation package to a new path. */
-    void save_package_as();
+    /** @brief Saves the active presentation package; returns false if cancelled or failed. */
+    bool save_package();
+    /** @brief Saves the active presentation package to a new path; returns false if cancelled or
+     * failed. */
+    bool save_package_as();
     /** @brief Exports the annotated presentation as PDF. */
     void export_as_pdf();
     /** @brief Prompts for and navigates to a page number. */
@@ -156,8 +157,18 @@ private:
     void schedule_window_mask_update();
     /** @brief Selects the audience screen represented by a combo-box index. */
     void select_screen_from_combo(int index);
-    /** @brief Opens a PDF or UIL presentation at an explicit path. */
+    /**
+     * @brief Opens a PDF or UIL presentation at an explicit path.
+     *
+     * Asks to save unsaved annotations of the current presentation first.
+     * @return False when the user cancelled or the file could not be opened.
+     */
     bool open_pdf_path(const QString& path);
+    /**
+     * @brief Offers Save / Discard / Cancel when annotations have unsaved changes.
+     * @return True when it is safe to drop the current annotations.
+     */
+    bool confirm_unsaved_annotations();
     /** @brief Saves the current UIL package to an explicit path. */
     bool save_package_to_path(const QString& path);
     /** @brief Returns annotation overlays that should be persisted. */

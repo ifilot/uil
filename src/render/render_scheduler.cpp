@@ -15,7 +15,7 @@
 #include <iterator>
 #include <memory>
 
-Q_LOGGING_CATEGORY(logRenderScheduler, "render.scheduler")
+Q_LOGGING_CATEGORY(log_render_scheduler, "render.scheduler")
 
 namespace {
 struct WorkerPdfContext {
@@ -27,26 +27,27 @@ struct WorkerPdfContext {
 
 }  // namespace
 
-RenderScheduler::RenderScheduler(
-    QObject* parent,
-    RenderFunction render_function,
-    int maximum_worker_count)
-    : QObject(parent),
-      render_function_(std::move(render_function)) {
+RenderScheduler::RenderScheduler(QObject* parent, RenderFunction render_function,
+                                 int maximum_worker_count)
+    : QObject(parent), render_function_(std::move(render_function)) {
     const int ideal_thread_count = QThread::idealThreadCount();
-    maximum_worker_count_ = maximum_worker_count > 0
-        ? std::clamp(maximum_worker_count, 1, 4)
-        : std::clamp(ideal_thread_count > 0 ? ideal_thread_count / 2 : 2, 2, 4);
+    if (maximum_worker_count > 0) {
+        maximum_worker_count_ = std::clamp(maximum_worker_count, 1, 4);
+    } else if (!render_function_) {
+        // QtPdf guards every PDFium call with one process-wide mutex, so extra workers only
+        // add document parses and memory while the current slide waits behind stale work.
+        maximum_worker_count_ = 1;
+    } else {
+        maximum_worker_count_ =
+            std::clamp(ideal_thread_count > 0 ? ideal_thread_count / 2 : 2, 2, 4);
+    }
     render_pool_.setMaxThreadCount(maximum_worker_count_);
     render_pool_.setExpiryTimeout(30'000);
-    performance_log::record_event(
-        QStringLiteral("render.pool_configured"),
-        {{QStringLiteral("max_thread_count"), maximum_worker_count_}});
+    performance_log::record_event(QStringLiteral("render.pool_configured"),
+                                  {{QStringLiteral("max_thread_count"), maximum_worker_count_}});
 }
 
-RenderScheduler::~RenderScheduler() {
-    stop_and_wait();
-}
+RenderScheduler::~RenderScheduler() { stop_and_wait(); }
 
 void RenderScheduler::clear() {
     {
@@ -68,8 +69,8 @@ int RenderScheduler::generation() const {
 }
 
 void RenderScheduler::request_render(const RenderRequest& request, int priority) {
-    if (request.document_path.isEmpty() || request.document_hash.isEmpty()
-        || request.page_index < 0 || !request.pixel_size.isValid()) {
+    if (request.document_path.isEmpty() || request.document_hash.isEmpty() ||
+        request.page_index < 0 || !request.pixel_size.isValid()) {
         return;
     }
 
@@ -84,20 +85,15 @@ void RenderScheduler::request_render(const RenderRequest& request, int priority)
         if (pending != pending_jobs_.end()) {
             if (priority > pending->priority) {
                 pending->priority = priority;
-                performance_log::record_event(QStringLiteral("render.priority_promoted"), {
-                    {QStringLiteral("page"), request.page_index + 1},
-                    {QStringLiteral("priority"), priority}
-                });
+                performance_log::record_event(QStringLiteral("render.priority_promoted"),
+                                              {{QStringLiteral("page"), request.page_index + 1},
+                                               {QStringLiteral("priority"), priority}});
             }
             return;
         }
 
-        pending_jobs_.insert(job_id, PendingJob{
-            request,
-            priority,
-            next_sequence_++,
-            performance_log::session_elapsed_ms()
-        });
+        pending_jobs_.insert(job_id, PendingJob{request, priority, next_sequence_++,
+                                                performance_log::session_elapsed_ms()});
         if (worker_count_ < maximum_worker_count_) {
             ++worker_count_;
             start_worker = true;
@@ -105,10 +101,26 @@ void RenderScheduler::request_render(const RenderRequest& request, int priority)
     }
 
     if (start_worker) {
-        render_pool_.start(QRunnable::create([this] {
-            run_worker();
-        }));
+        render_pool_.start(QRunnable::create([this] { run_worker(); }));
     }
+}
+
+int RenderScheduler::retain_pending(const PendingFilter& keep) {
+    if (!keep) {
+        return 0;
+    }
+
+    int removed = 0;
+    QMutexLocker locker(&mutex_);
+    for (auto it = pending_jobs_.begin(); it != pending_jobs_.end();) {
+        if (keep(it->request)) {
+            ++it;
+        } else {
+            it = pending_jobs_.erase(it);
+            ++removed;
+        }
+    }
+    return removed;
 }
 
 void RenderScheduler::run_worker() {
@@ -121,12 +133,12 @@ void RenderScheduler::run_worker() {
         const PendingJob job = *next_job;
         const RenderRequest& request = job.request;
         const qint64 worker_started_at_ms = performance_log::session_elapsed_ms();
-        const qint64 queue_wait_ms = job.queued_at_ms >= 0 && worker_started_at_ms >= job.queued_at_ms
-            ? worker_started_at_ms - job.queued_at_ms
-            : -1;
-        QMetaObject::invokeMethod(this, [this, request] {
-            emit render_started(request);
-        }, Qt::QueuedConnection);
+        const qint64 queue_wait_ms =
+            job.queued_at_ms >= 0 && worker_started_at_ms >= job.queued_at_ms
+                ? worker_started_at_ms - job.queued_at_ms
+                : -1;
+        QMetaObject::invokeMethod(
+            this, [this, request] { emit render_started(request); }, Qt::QueuedConnection);
         QElapsedTimer timer;
         timer.start();
 
@@ -138,14 +150,17 @@ void RenderScheduler::run_worker() {
         if (render_function_) {
             image = render_function_(request, &error_message);
         } else {
-            backend_reused = context.backend
-                && context.document_hash == request.document_hash
-                && context.document_path == request.document_path
-                && context.generation == request.generation;
+            backend_reused = context.backend && context.document_hash == request.document_hash &&
+                             context.document_path == request.document_path &&
+                             context.generation == request.generation;
             if (!backend_reused) {
                 auto backend = std::make_unique<QtPdfBackend>();
-                if (!backend->open(request.document_path, &error_message)) {
-                    error_message = QStringLiteral("Could not open worker PDF: %1").arg(error_message);
+                const bool opened = request.document_data.isEmpty()
+                                        ? backend->open(request.document_path, &error_message)
+                                        : backend->open_data(request.document_data, &error_message);
+                if (!opened) {
+                    error_message =
+                        QStringLiteral("Could not open worker PDF: %1").arg(error_message);
                     context = WorkerPdfContext{};
                 } else {
                     context.backend = std::move(backend);
@@ -169,19 +184,19 @@ void RenderScheduler::run_worker() {
         }
 
         const qint64 elapsed_ms = timer.elapsed();
-        performance_log::record_duration(QStringLiteral("render.page_worker"), elapsed_ms, {
-            {QStringLiteral("backend_open_ms"), backend_open_ms},
-            {QStringLiteral("backend_reused"), backend_reused},
-            {QStringLiteral("document"), QFileInfo(request.document_path).fileName()},
-            {QStringLiteral("generation"), request.generation},
-            {QStringLiteral("height"), request.pixel_size.height()},
-            {QStringLiteral("outcome"),
-             error_message.isEmpty() ? QStringLiteral("rendered") : QStringLiteral("failed")},
-            {QStringLiteral("page"), request.page_index + 1},
-            {QStringLiteral("queue_wait_ms"), queue_wait_ms},
-            {QStringLiteral("raster_ms"), raster_ms},
-            {QStringLiteral("width"), request.pixel_size.width()}
-        });
+        performance_log::record_duration(
+            QStringLiteral("render.page_worker"), elapsed_ms,
+            {{QStringLiteral("backend_open_ms"), backend_open_ms},
+             {QStringLiteral("backend_reused"), backend_reused},
+             {QStringLiteral("document"), QFileInfo(request.document_path).fileName()},
+             {QStringLiteral("generation"), request.generation},
+             {QStringLiteral("height"), request.pixel_size.height()},
+             {QStringLiteral("outcome"),
+              error_message.isEmpty() ? QStringLiteral("rendered") : QStringLiteral("failed")},
+             {QStringLiteral("page"), request.page_index + 1},
+             {QStringLiteral("queue_wait_ms"), queue_wait_ms},
+             {QStringLiteral("raster_ms"), raster_ms},
+             {QStringLiteral("width"), request.pixel_size.width()}});
         complete_job(job, image, elapsed_ms, error_message);
     }
 }
@@ -205,8 +220,8 @@ std::optional<RenderScheduler::PendingJob> RenderScheduler::take_next_job() {
 
     auto selected = pending_jobs_.begin();
     for (auto it = std::next(selected); it != pending_jobs_.end(); ++it) {
-        if (it->priority > selected->priority
-            || (it->priority == selected->priority && it->sequence < selected->sequence)) {
+        if (it->priority > selected->priority ||
+            (it->priority == selected->priority && it->sequence < selected->sequence)) {
             selected = it;
         }
     }
@@ -217,11 +232,8 @@ std::optional<RenderScheduler::PendingJob> RenderScheduler::take_next_job() {
     return job;
 }
 
-void RenderScheduler::complete_job(
-    const PendingJob& job,
-    const QImage& image,
-    qint64 elapsed_ms,
-    const QString& error_message) {
+void RenderScheduler::complete_job(const PendingJob& job, const QImage& image, qint64 elapsed_ms,
+                                   const QString& error_message) {
     const QString job_id = job_id_for_request(job.request);
     bool deliver_result = false;
     {
@@ -233,7 +245,10 @@ void RenderScheduler::complete_job(
         return;
     }
 
-    QMetaObject::invokeMethod(this, [this, request = job.request, image, elapsed_ms, error_message] {
-        emit render_finished(request, image, elapsed_ms, error_message);
-    }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+        this,
+        [this, request = job.request, image, elapsed_ms, error_message] {
+            emit render_finished(request, image, elapsed_ms, error_message);
+        },
+        Qt::QueuedConnection);
 }

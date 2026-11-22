@@ -2,8 +2,16 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <limits>
+#include <utility>
+
+#include <zlib.h>
 
 namespace {
 /** @brief Writes test bytes to a file and creates its parent directory. */
@@ -12,8 +20,8 @@ bool write_test_file(const QString& path, const QByteArray& contents) {
         return false;
     }
     QFile file(path);
-    return file.open(QIODevice::WriteOnly | QIODevice::Truncate)
-        && file.write(contents) == contents.size();
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
+           file.write(contents) == contents.size();
 }
 
 /** @brief Writes a little-endian 32-bit value into mutable test bytes. */
@@ -28,19 +36,11 @@ QString create_test_package(QTemporaryDir* directory, QString* error_message) {
     const QString pdf_path = directory->filePath(QStringLiteral("deck.pdf"));
     const QString movie_path = directory->filePath(QStringLiteral("movies/clip.mov"));
     const QString package_path = directory->filePath(QStringLiteral("deck.uil"));
-    if (!write_test_file(pdf_path, QByteArrayLiteral("%PDF-1.4\ntest\n%%EOF\n"))
-        || !write_test_file(movie_path, QByteArrayLiteral("movie"))
-        || !write_uil_package(
-            package_path,
-            pdf_path,
-            QStringLiteral("slides/deck.pdf"),
-            directory->path(),
-            {QStringLiteral("movies/clip.mov")},
-            {},
-            {},
-            {},
-            true,
-            error_message)) {
+    if (!write_test_file(pdf_path, QByteArrayLiteral("%PDF-1.4\ntest\n%%EOF\n")) ||
+        !write_test_file(movie_path, QByteArrayLiteral("movie")) ||
+        !write_uil_package(package_path, pdf_path, QStringLiteral("slides/deck.pdf"),
+                           directory->path(), {QStringLiteral("movies/clip.mov")}, {}, {}, {}, true,
+                           error_message)) {
         return {};
     }
     return package_path;
@@ -51,7 +51,70 @@ QByteArray read_test_file(const QString& path) {
     QFile file(path);
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
+
+/** @brief Appends a little-endian integer of @p byte_count bytes to test bytes. */
+void append_le(QByteArray* bytes, quint32 value, int byte_count) {
+    for (int byte = 0; byte < byte_count; ++byte) {
+        bytes->append(char((value >> (byte * 8)) & 0xff));
+    }
 }
+
+/**
+ * @brief Builds a minimal stored ZIP archive so tests can supply hand-written manifests.
+ * @param files Package-relative names and contents, written in order.
+ */
+QByteArray stored_zip(const QList<std::pair<QByteArray, QByteArray>>& files) {
+    QByteArray archive;
+    QByteArray central_directory;
+    for (const auto& [name, data] : files) {
+        const quint32 checksum =
+            quint32(crc32(0L, reinterpret_cast<const Bytef*>(data.constData()), uInt(data.size())));
+        const quint32 local_offset = quint32(archive.size());
+        append_le(&archive, 0x04034b50, 4);
+        append_le(&archive, 20, 2);
+        append_le(&archive, 0, 2);
+        append_le(&archive, 0, 2);
+        append_le(&archive, 0, 4);
+        append_le(&archive, checksum, 4);
+        append_le(&archive, quint32(data.size()), 4);
+        append_le(&archive, quint32(data.size()), 4);
+        append_le(&archive, quint32(name.size()), 2);
+        append_le(&archive, 0, 2);
+        archive.append(name);
+        archive.append(data);
+
+        append_le(&central_directory, 0x02014b50, 4);
+        append_le(&central_directory, 20, 2);
+        append_le(&central_directory, 20, 2);
+        append_le(&central_directory, 0, 2);
+        append_le(&central_directory, 0, 2);
+        append_le(&central_directory, 0, 4);
+        append_le(&central_directory, checksum, 4);
+        append_le(&central_directory, quint32(data.size()), 4);
+        append_le(&central_directory, quint32(data.size()), 4);
+        append_le(&central_directory, quint32(name.size()), 2);
+        append_le(&central_directory, 0, 2);
+        append_le(&central_directory, 0, 2);
+        append_le(&central_directory, 0, 2);
+        append_le(&central_directory, 0, 2);
+        append_le(&central_directory, 0, 4);
+        append_le(&central_directory, local_offset, 4);
+        central_directory.append(name);
+    }
+
+    const quint32 central_directory_offset = quint32(archive.size());
+    archive.append(central_directory);
+    append_le(&archive, 0x06054b50, 4);
+    append_le(&archive, 0, 2);
+    append_le(&archive, 0, 2);
+    append_le(&archive, quint32(files.size()), 2);
+    append_le(&archive, quint32(files.size()), 2);
+    append_le(&archive, quint32(central_directory.size()), 4);
+    append_le(&archive, central_directory_offset, 4);
+    append_le(&archive, 0, 2);
+    return archive;
+}
+}  // namespace
 
 class UilPackageTest final : public QObject {
     Q_OBJECT
@@ -89,6 +152,12 @@ private slots:
 
     /** @brief Verifies that callers must provide an extraction result. */
     void missing_result_pointer_is_rejected();
+
+    /** @brief Verifies that manifest page indices above the supported cap are ignored. */
+    void out_of_range_manifest_page_indices_are_ignored();
+
+    /** @brief Verifies that writing skips overlay pages whose file number would overflow. */
+    void out_of_range_overlay_pages_are_not_written();
 };
 
 void UilPackageTest::round_trip_preserves_package_contents() {
@@ -116,17 +185,11 @@ void UilPackageTest::round_trip_preserves_package_contents() {
     const QSet<int> hidden_pages{2, -1};
     QString error_message;
 
-    QVERIFY2(write_uil_package(package_path,
-                              pdf_path,
-                              QStringLiteral("slides/deck.pdf"),
-                              source_directory.path(),
-                              {movie_relative_path},
-                              {molecule_relative_path},
-                              overlays,
-                              hidden_pages,
-                              false,
-                              &error_message),
-             qPrintable(error_message));
+    QVERIFY2(
+        write_uil_package(package_path, pdf_path, QStringLiteral("slides/deck.pdf"),
+                          source_directory.path(), {movie_relative_path}, {molecule_relative_path},
+                          overlays, hidden_pages, false, &error_message),
+        qPrintable(error_message));
 
     UilPackageOpenResult result;
     QVERIFY2(extract_uil_package(package_path, extraction_directory, &result, &error_message),
@@ -136,9 +199,8 @@ void UilPackageTest::round_trip_preserves_package_contents() {
     QCOMPARE(result.movie_asset_paths, QStringList{movie_relative_path});
     QCOMPARE(result.molecule_asset_paths, QStringList{molecule_relative_path});
     QCOMPARE(read_test_file(extraction_directory.filePath(movie_relative_path)), movie_contents);
-    QCOMPARE(
-        read_test_file(extraction_directory.filePath(molecule_relative_path)),
-        molecule_contents);
+    QCOMPARE(read_test_file(extraction_directory.filePath(molecule_relative_path)),
+             molecule_contents);
     QVERIFY(result.hidden_overlay_pages == QSet<int>{2});
     QVERIFY(!result.overlays_globally_visible);
     QCOMPARE(result.overlay_image_paths.size(), 1);
@@ -157,16 +219,9 @@ void UilPackageTest::unsafe_entry_path_is_rejected() {
     QVERIFY(write_test_file(source_path, QByteArrayLiteral("pdf")));
     QString error_message;
 
-    QVERIFY(!write_uil_package(directory.filePath(QStringLiteral("deck.uil")),
-                              source_path,
-                              QStringLiteral("../outside.pdf"),
-                              directory.path(),
-                              {},
-                              {},
-                              {},
-                              {},
-                              true,
-                              &error_message));
+    QVERIFY(!write_uil_package(directory.filePath(QStringLiteral("deck.uil")), source_path,
+                               QStringLiteral("../outside.pdf"), directory.path(), {}, {}, {}, {},
+                               true, &error_message));
     QVERIFY(error_message.contains(QStringLiteral("Unsafe entry PDF path")));
 }
 
@@ -179,17 +234,10 @@ void UilPackageTest::duplicate_asset_path_is_rejected() {
     QVERIFY(write_test_file(asset_path, QByteArrayLiteral("movie")));
     QString error_message;
 
-    QVERIFY(!write_uil_package(directory.filePath(QStringLiteral("deck.uil")),
-                              source_path,
-                              QStringLiteral("deck.pdf"),
-                              directory.path(),
-                              {QStringLiteral("movies/clip.mov"),
-                               QStringLiteral("movies/clip.mov")},
-                              {},
-                              {},
-                              {},
-                              true,
-                              &error_message));
+    QVERIFY(!write_uil_package(
+        directory.filePath(QStringLiteral("deck.uil")), source_path, QStringLiteral("deck.pdf"),
+        directory.path(), {QStringLiteral("movies/clip.mov"), QStringLiteral("movies/clip.mov")},
+        {}, {}, {}, true, &error_message));
     QVERIFY(error_message.contains(QStringLiteral("Duplicate package entry")));
 }
 
@@ -202,16 +250,10 @@ void UilPackageTest::case_insensitive_output_collision_is_rejected() {
     QVERIFY(write_test_file(colliding_asset_path, QByteArrayLiteral("asset")));
     QString error_message;
 
-    QVERIFY(!write_uil_package(directory.filePath(QStringLiteral("deck.uil")),
-                              source_path,
-                              QStringLiteral("slides/deck.pdf"),
-                              directory.path(),
-                              {QStringLiteral("slides/DECK.PDF")},
-                              {},
-                              {},
-                              {},
-                              true,
-                              &error_message));
+    QVERIFY(!write_uil_package(directory.filePath(QStringLiteral("deck.uil")), source_path,
+                               QStringLiteral("slides/deck.pdf"), directory.path(),
+                               {QStringLiteral("slides/DECK.PDF")}, {}, {}, {}, true,
+                               &error_message));
     QVERIFY(error_message.contains(QStringLiteral("Duplicate package entry")));
 }
 
@@ -221,15 +263,9 @@ void UilPackageTest::missing_source_file_is_rejected() {
     QString error_message;
 
     QVERIFY(!write_uil_package(directory.filePath(QStringLiteral("deck.uil")),
-                              directory.filePath(QStringLiteral("missing.pdf")),
-                              QStringLiteral("deck.pdf"),
-                              directory.path(),
-                              {},
-                              {},
-                              {},
-                              {},
-                              true,
-                              &error_message));
+                               directory.filePath(QStringLiteral("missing.pdf")),
+                               QStringLiteral("deck.pdf"), directory.path(), {}, {}, {}, {}, true,
+                               &error_message));
     QVERIFY(error_message.contains(QStringLiteral("Could not read")));
 }
 
@@ -331,6 +367,82 @@ void UilPackageTest::missing_result_pointer_is_rejected() {
 
     QVERIFY(!extract_uil_package(QString(), directory, nullptr, &error_message));
     QVERIFY(error_message.contains(QStringLiteral("missing package result")));
+}
+
+void UilPackageTest::out_of_range_manifest_page_indices_are_ignored() {
+    QTemporaryDir directory;
+    QTemporaryDir extraction_directory;
+    QVERIFY(directory.isValid());
+    QVERIFY(extraction_directory.isValid());
+
+    const int maximum_int = std::numeric_limits<int>::max();
+    const QJsonArray overlays{
+        QJsonObject{{QStringLiteral("page"), maximum_int},
+                    {QStringLiteral("path"), QStringLiteral("overlays/huge.png")}},
+        QJsonObject{{QStringLiteral("page"), kMaximumUilPackagePageIndex + 1},
+                    {QStringLiteral("path"), QStringLiteral("overlays/over.png")}},
+        QJsonObject{{QStringLiteral("page"), kMaximumUilPackagePageIndex},
+                    {QStringLiteral("path"), QStringLiteral("overlays/last.png")}},
+    };
+    const QJsonObject manifest{
+        {QStringLiteral("format"), QStringLiteral("uil.presentation-package")},
+        {QStringLiteral("format_version"), 2},
+        {QStringLiteral("entry_pdf"), QStringLiteral("deck.pdf")},
+        {QStringLiteral("overlays"), overlays},
+        {QStringLiteral("hidden_overlay_pages"),
+         QJsonArray{maximum_int, kMaximumUilPackagePageIndex + 1, 3}},
+    };
+    const QString package_path = directory.filePath(QStringLiteral("hostile.uil"));
+    QVERIFY(write_test_file(
+        package_path, stored_zip({
+                          {QByteArrayLiteral("manifest.json"), QJsonDocument(manifest).toJson()},
+                          {QByteArrayLiteral("deck.pdf"), QByteArrayLiteral("%PDF-1.4\n%%EOF\n")},
+                          {QByteArrayLiteral("overlays/huge.png"), QByteArrayLiteral("png")},
+                          {QByteArrayLiteral("overlays/over.png"), QByteArrayLiteral("png")},
+                          {QByteArrayLiteral("overlays/last.png"), QByteArrayLiteral("png")},
+                      })));
+
+    UilPackageOpenResult result;
+    QString error_message;
+    QVERIFY2(extract_uil_package(package_path, extraction_directory, &result, &error_message),
+             qPrintable(error_message));
+    QCOMPARE(result.overlay_image_paths.size(), 1);
+    QCOMPARE(result.overlay_image_paths.value(kMaximumUilPackagePageIndex),
+             QStringLiteral("overlays/last.png"));
+    QVERIFY(result.hidden_overlay_pages == QSet<int>{3});
+    QVERIFY(!QFile::exists(extraction_directory.filePath(QStringLiteral("overlays/huge.png"))));
+}
+
+void UilPackageTest::out_of_range_overlay_pages_are_not_written() {
+    QTemporaryDir source_directory;
+    QTemporaryDir extraction_directory;
+    QVERIFY(source_directory.isValid());
+    QVERIFY(extraction_directory.isValid());
+    const QString pdf_path = source_directory.filePath(QStringLiteral("deck.pdf"));
+    const QString package_path = source_directory.filePath(QStringLiteral("deck.uil"));
+    QVERIFY(write_test_file(pdf_path, QByteArrayLiteral("%PDF-1.4\n%%EOF\n")));
+
+    QImage overlay(2, 2, QImage::Format_ARGB32);
+    overlay.fill(qRgba(10, 20, 30, 255));
+    const int maximum_int = std::numeric_limits<int>::max();
+    const QHash<int, QImage> overlays{
+        {maximum_int, overlay},
+        {kMaximumUilPackagePageIndex + 1, overlay},
+        {kMaximumUilPackagePageIndex, overlay},
+    };
+    QString error_message;
+    QVERIFY2(write_uil_package(package_path, pdf_path, QString(), source_directory.path(), {}, {},
+                               overlays, {maximum_int, 1}, true, &error_message),
+             qPrintable(error_message));
+
+    UilPackageOpenResult result;
+    QVERIFY2(extract_uil_package(package_path, extraction_directory, &result, &error_message),
+             qPrintable(error_message));
+    QCOMPARE(result.entry_pdf_relative_path, QStringLiteral("build/presentation.pdf"));
+    QCOMPARE(result.overlay_image_paths.size(), 1);
+    QCOMPARE(result.overlay_image_paths.value(kMaximumUilPackagePageIndex),
+             QStringLiteral("overlays/page-100000.png"));
+    QVERIFY(result.hidden_overlay_pages == QSet<int>{1});
 }
 
 QTEST_GUILESS_MAIN(UilPackageTest)

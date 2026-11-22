@@ -1,5 +1,5 @@
-#include "figure/interactive_figure.hpp"
 #include "figure/particle_in_box_basis.hpp"
+#include "figure/interactive_figure.hpp"
 
 #include <QTest>
 
@@ -10,10 +10,15 @@ class ParticleInBoxBasisTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief Verifies step-function sine coefficients against the slide derivation. */
     void coefficients_match_slide_derivation();
+    /** @brief Verifies captured-norm percentages quoted on the slides. */
     void captured_percentages_match_slide_values();
+    /** @brief Verifies monotonic convergence through 25 basis terms. */
     void captured_fraction_increases_through_twenty_five_terms();
+    /** @brief Verifies that a 25-term partial sum vanishes at both box walls. */
     void partial_sum_obeys_box_boundaries();
+    /** @brief Verifies parsing of a particle-in-a-box expansion figure payload. */
     void interactive_figure_payload_parses();
 };
 
@@ -74,9 +79,7 @@ void ParticleInBoxBasisTest::interactive_figure_payload_parses() {
     QString error_message;
     QVERIFY2(parse_interactive_figure(payload, &definition, &error_message),
              qPrintable(error_message));
-    QCOMPARE(
-        definition.kind,
-        InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion);
+    QCOMPARE(definition.kind, InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion);
     QCOMPARE(definition.basis_count_min, 1);
     QCOMPARE(definition.basis_count_max, 25);
     QCOMPARE(definition.basis_count_initial, 1);

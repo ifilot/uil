@@ -50,10 +50,8 @@ void open_readiness_event(LauncherReadinessState& state) {
     if (state.event_handle || state.event_name.isEmpty()) {
         return;
     }
-    state.event_handle = OpenEventW(
-        EVENT_MODIFY_STATE,
-        FALSE,
-        reinterpret_cast<LPCWSTR>(state.event_name.utf16()));
+    state.event_handle =
+        OpenEventW(EVENT_MODIFY_STATE, FALSE, reinterpret_cast<LPCWSTR>(state.event_name.utf16()));
 }
 #endif
 
@@ -64,12 +62,9 @@ namespace launcher_readiness {
 void initialize(int argc, char* argv[]) {
     LauncherReadinessState& state = readiness_state();
     const QString event_prefix = QStringLiteral("--uil-ready-event=");
-    const QString process_start_prefix =
-        QStringLiteral("--uil-launcher-process-start-filetime=");
-    const QString splash_visible_prefix =
-        QStringLiteral("--uil-launcher-splash-visible-filetime=");
-    const QString launcher_window_prefix =
-        QStringLiteral("--uil-launcher-window=");
+    const QString process_start_prefix = QStringLiteral("--uil-launcher-process-start-filetime=");
+    const QString splash_visible_prefix = QStringLiteral("--uil-launcher-splash-visible-filetime=");
+    const QString launcher_window_prefix = QStringLiteral("--uil-launcher-window=");
 
     for (int index = 1; index < argc; ++index) {
         const QString argument = QString::fromLocal8Bit(argv[index]);
@@ -83,8 +78,8 @@ void initialize(int argc, char* argv[]) {
             state.splash_visible_file_time =
                 argument_value(argument, splash_visible_prefix).toULongLong();
         } else if (argument.startsWith(launcher_window_prefix)) {
-            state.launcher_window = quintptr(
-                argument_value(argument, launcher_window_prefix).toULongLong());
+            state.launcher_window =
+                quintptr(argument_value(argument, launcher_window_prefix).toULongLong());
         }
     }
 
@@ -93,9 +88,7 @@ void initialize(int argc, char* argv[]) {
 #endif
 }
 
-bool is_active() {
-    return readiness_state().requested;
-}
+bool is_active() { return readiness_state().requested; }
 
 void record_startup_metrics() {
     const LauncherReadinessState& state = readiness_state();
@@ -125,14 +118,10 @@ void report_progress(int stage) {
     }
 
 #ifdef Q_OS_WIN
-    PostMessageW(
-        reinterpret_cast<HWND>(state.launcher_window),
-        UIL_LAUNCHER_PROGRESS_MESSAGE,
-        WPARAM(stage),
-        0);
-    performance_log::record_event(
-        QStringLiteral("startup.launcher_progress"),
-        {{QStringLiteral("stage"), stage}});
+    PostMessageW(reinterpret_cast<HWND>(state.launcher_window), UIL_LAUNCHER_PROGRESS_MESSAGE,
+                 WPARAM(stage), 0);
+    performance_log::record_event(QStringLiteral("startup.launcher_progress"),
+                                  {{QStringLiteral("stage"), stage}});
 #else
     Q_UNUSED(stage)
 #endif

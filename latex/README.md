@@ -66,10 +66,11 @@ bound, not a request to stretch an image. Reserve the desired alignment space
 with a surrounding `minipage` or Beamer column.
 
 See `uilorbital-atlas/catalog.tex` for every accepted identifier and
-`uilorbital-atlas/manifest.json` for the generated inventory. The bundled
-`examples/orbital-atlas.pdf` provides a browsable Garnet–Slate catalog;
-`examples/atomic-orbitals.pdf` demonstrates two plots on a slide. The latter is
-available through **File > Examples** in UIL.
+`uilorbital-atlas/manifest.json` for the generated inventory.
+`orbital-atlas.pdf` provides a browsable Garnet–Slate catalog and
+`atomic-orbitals.pdf` demonstrates two plots on a slide. Both are in
+`examples/bundled/` in the repository and in the `examples` folder of a UIL
+installation; the latter is also available through **File > Examples**.
 
 ## Custom orbital definitions and posters
 
@@ -165,23 +166,27 @@ box to the requested outer dimensions before creating the annotation. This
 keeps frames and other poster ink aligned with the interactive surface.
 
 The geometry uses the standard XYZ layout: atom count, one description line,
-then one element symbol and three Cartesian coordinates per atom. Coordinates
-are interpreted as angstrom because UIL uses angstrom covalent radii to infer
-bonds. Keep the XYZ file beside the generated PDF, or preserve both by saving
-the presentation as a `.uil` package. pdfLaTeX and LuaLaTeX are supported by
-this first version.
+then one element symbol and three Cartesian coordinates per atom. Each atom
+line may append three more columns, `element x y z dx dy dz`, giving a
+normal-mode displacement vector that the molecule toolbar's play button
+animates. Coordinates are interpreted as angstrom because UIL uses angstrom
+covalent radii to infer bonds. Keep the XYZ file beside the generated PDF, or
+preserve both by saving the presentation as a `.uil` package. pdfLaTeX and
+LuaLaTeX are supported.
 
 Geometry can live in the `.tex` source by creating XYZ assets with
-`filecontents*`; see the three-slide `examples/molecule/molecule-example.tex`.
-That test deck uses the `chctheme` package from the adjacent
-`lecture-slides-chemical-bonding` project; add its `chctheme` directory to
-`TEXINPUTS` when compiling the example.
+`filecontents*`; see the five-slide `examples/molecule/molecule-example.tex`,
+which is prebuilt as the bundled `molecule-visualizer.pdf`. That deck uses the
+external `chctheme` Beamer theme from the separate
+`lecture-slides-chemical-bonding` project, which is not part of this
+repository; point the example's `Makefile` at it with
+`make CHC_THEME_DIR=/path/to/chctheme`, or add that directory to `TEXINPUTS`.
 
 The poster remains ordinary PDF page content, so PDF viewers that do not know
 about UIL display the fallback while UIL replaces its rectangle with the live
 molecular view.
 
-This experimental version shows the first molecule annotation on a slide in the
+UIL shows the first molecule annotation on a slide as a live view in the
 audience window. Select the classic cursor tool to interact with it; the widget
 is temporarily hidden for the laser pointer, pencil, and eraser so those slide
 tools continue to receive mouse input. Presenter previews, exported PDFs, and

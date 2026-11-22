@@ -11,7 +11,7 @@ QHash<QString, QIcon>& icon_cache() {
     static QHash<QString, QIcon> cache;
     return cache;
 }
-}
+}  // namespace
 
 QString bluecurve::resource_path(const QString& name, int nominal_size) {
     return QStringLiteral(":/bluecurve/%1x%1/actions/%2.svg").arg(nominal_size).arg(name);
@@ -20,10 +20,8 @@ QString bluecurve::resource_path(const QString& name, int nominal_size) {
 QIcon bluecurve::icon(const QString& name, QSize size) {
     const QSize icon_size = size.isValid() ? size : QSize(16, 16);
     const int nominal_size = qMax(icon_size.width(), icon_size.height()) <= 16 ? 16 : 20;
-    const QString cache_key = QStringLiteral("%1|%2x%3")
-                                  .arg(name)
-                                  .arg(icon_size.width())
-                                  .arg(icon_size.height());
+    const QString cache_key =
+        QStringLiteral("%1|%2x%3").arg(name).arg(icon_size.width()).arg(icon_size.height());
     if (const auto cached = icon_cache().constFind(cache_key); cached != icon_cache().cend()) {
         return *cached;
     }

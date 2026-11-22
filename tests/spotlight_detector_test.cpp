@@ -9,8 +9,11 @@ class SpotlightDetectorTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    /** @brief Verifies that an empty probe disables detection and reports no receiver. */
     void unavailable_without_probe();
+    /** @brief Verifies that presence is sampled once during construction. */
     void reports_initial_presence();
+    /** @brief Verifies that presence_changed() fires only when the probe result changes. */
     void emits_only_for_presence_transitions();
 };
 

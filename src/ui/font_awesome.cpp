@@ -27,7 +27,7 @@ QString style_directory(font_awesome::Style style) {
 
     return QStringLiteral("solid");
 }
-}
+}  // namespace
 
 QString font_awesome::resource_path(Style style, const QString& name) {
     return QStringLiteral(":/fontawesome/svgs/%1/%2.svg").arg(style_directory(style), name);
@@ -44,15 +44,15 @@ QIcon font_awesome::icon(Style style, const QString& name, QColor color, QSize s
         return *cached;
     }
 
-    QFile svgFile(resource_path(style, name));
-    if (!svgFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    QFile svg_file(resource_path(style, name));
+    if (!svg_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         return {};
     }
 
-    QByteArray svgData = svgFile.readAll();
-    svgData.replace("currentColor", color.name(QColor::HexRgb).toUtf8());
+    QByteArray svg_data = svg_file.readAll();
+    svg_data.replace("currentColor", color.name(QColor::HexRgb).toUtf8());
 
-    QSvgRenderer renderer(svgData);
+    QSvgRenderer renderer(svg_data);
     if (!renderer.isValid()) {
         return {};
     }
@@ -62,15 +62,13 @@ QIcon font_awesome::icon(Style style, const QString& name, QColor color, QSize s
 
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    QSize renderedSize = renderer.defaultSize().scaled(icon_size, Qt::KeepAspectRatio);
-    if (!renderedSize.isValid()) {
-        renderedSize = icon_size;
+    QSize rendered_size = renderer.defaultSize().scaled(icon_size, Qt::KeepAspectRatio);
+    if (!rendered_size.isValid()) {
+        rendered_size = icon_size;
     }
-    const QRectF target(
-        (icon_size.width() - renderedSize.width()) / 2.0,
-        (icon_size.height() - renderedSize.height()) / 2.0,
-        renderedSize.width(),
-        renderedSize.height());
+    const QRectF target((icon_size.width() - rendered_size.width()) / 2.0,
+                        (icon_size.height() - rendered_size.height()) / 2.0, rendered_size.width(),
+                        rendered_size.height());
     renderer.render(&painter, target);
     const QIcon rendered_icon(pixmap);
     icon_cache().insert(cache_key, rendered_icon);

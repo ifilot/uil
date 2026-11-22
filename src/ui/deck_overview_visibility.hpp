@@ -7,6 +7,7 @@
 
 #include <algorithm>
 
+/** @brief Helpers for the audience deck-overview grid. */
 namespace deck_overview {
 
 /**
@@ -19,14 +20,15 @@ namespace deck_overview {
  * @tparam WidgetRange An ordered range containing QWidget-derived pointers.
  * @param widgets Widgets ordered by their zero-based page index.
  * @param viewport Viewport against which visibility is measured.
- * @param fallback_index Page returned when no widget currently intersects.
- * @return The inclusive first and last visible page indices.
+ * @param fallback_index Page returned when no widget currently intersects; clamped to the
+ *        valid page range.
+ * @return The inclusive first and last visible page indices; `{fallback, fallback}` when no
+ *         widget intersects the viewport; `{-1, -1}` when @p widgets is empty or @p viewport is
+ *         null. Null entries in @p widgets count as pages but are never visible.
  */
 template <typename WidgetRange>
-QPair<int, int> visible_page_range(
-    const WidgetRange& widgets,
-    const QWidget* viewport,
-    int fallback_index) {
+QPair<int, int> visible_page_range(const WidgetRange& widgets, const QWidget* viewport,
+                                   int fallback_index) {
     const int widget_count = int(widgets.size());
     if (widget_count <= 0 || !viewport) {
         return {-1, -1};
@@ -38,9 +40,7 @@ QPair<int, int> visible_page_range(
     int page_index = 0;
     for (QWidget* widget : widgets) {
         if (widget) {
-            const QRect widget_rect(
-                widget->mapTo(viewport, QPoint(0, 0)),
-                widget->size());
+            const QRect widget_rect(widget->mapTo(viewport, QPoint(0, 0)), widget->size());
             if (widget_rect.intersects(viewport_rect)) {
                 if (first_visible < 0) {
                     first_visible = page_index;

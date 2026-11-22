@@ -2,6 +2,12 @@ BasedOnStyle: Google
 Language: Cpp
 Standard: c++20
 ColumnLimit: 100
+IndentWidth: 4
+AccessModifierOffset: -4
+IndentCaseLabels: false
 DerivePointerAlignment: false
 PointerAlignment: Left
 SortIncludes: CaseSensitive
+# Sort only within the existing blank-line-separated include blocks (project headers first,
+# then Qt, then the standard library). Regrouping would also reorder order-sensitive Win32 headers.
+IncludeBlocks: Preserve

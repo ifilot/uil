@@ -6,6 +6,7 @@
 #include <array>
 
 namespace {
+/** @brief Compile-time menu title and file name of one bundled example. */
 struct ExampleDefinition {
     const char* title;
     const char* file_name;
@@ -21,10 +22,8 @@ constexpr std::array<ExampleDefinition, 6> kExamples{{
 }};
 }  // namespace
 
-QVector<ExamplePresentation> installed_example_presentations(
-    const QString& application_directory) {
-    const QDir examples_directory(
-        QDir(application_directory).filePath(QStringLiteral("examples")));
+QVector<ExamplePresentation> installed_example_presentations(const QString& application_directory) {
+    const QDir examples_directory(QDir(application_directory).filePath(QStringLiteral("examples")));
     QVector<ExamplePresentation> examples;
     examples.reserve(kExamples.size());
 

@@ -1,4 +1,6 @@
+// <windows.h> must precede the other Win32 headers; keep it in its own include block.
 #include <windows.h>
+
 #include <shellapi.h>
 #include <stddef.h>
 #include <wchar.h>
@@ -12,6 +14,16 @@
 #define UIL_SPLASH_HEIGHT 176
 #define UIL_ANIMATION_TIMER_ID 1
 #define UIL_ANIMATION_INTERVAL_MS 40
+/* Longest path GetModuleFileNameW can report (the UNICODE_STRING limit, in characters). */
+#define UIL_MAX_PATH_CAPACITY 32768
+/*
+ * How long the launcher keeps its always-on-top splash while waiting for the viewer's first
+ * paint. A viewer that is still starting after this keeps running; only the splash goes away.
+ */
+#define UIL_VIEWER_READY_TIMEOUT_MS 60000
+
+_Static_assert(UIL_LAUNCHER_PROGRESS_MESSAGE == WM_APP + 0x155,
+               "launcher_protocol.h must spell the progress message as WM_APP + 0x155");
 
 static int loading_stage = UIL_LAUNCHER_STAGE_STARTING_VIEWER;
 static int displayed_progress = 0;
@@ -120,12 +132,9 @@ static void paint_loading_spinner(HDC device_context) {
 
         brush = CreateSolidBrush(color);
         previous_brush = SelectObject(device_context, brush);
-        Ellipse(
-            device_context,
-            center_x + x_offsets[segment] - radius,
-            center_y + y_offsets[segment] - radius,
-            center_x + x_offsets[segment] + radius,
-            center_y + y_offsets[segment] + radius);
+        Ellipse(device_context, center_x + x_offsets[segment] - radius,
+                center_y + y_offsets[segment] - radius, center_x + x_offsets[segment] + radius,
+                center_y + y_offsets[segment] + radius);
         SelectObject(device_context, previous_brush);
         DeleteObject(brush);
     }
@@ -146,10 +155,7 @@ static BOOL append_command_character(wchar_t** cursor, size_t* remaining, wchar_
 }
 
 /** @brief Appends one argument using the Windows command-line quoting rules. */
-static BOOL append_quoted_argument(
-    wchar_t** cursor,
-    size_t* remaining,
-    const wchar_t* argument) {
+static BOOL append_quoted_argument(wchar_t** cursor, size_t* remaining, const wchar_t* argument) {
     size_t backslash_count = 0;
     const wchar_t* character = argument;
 
@@ -219,12 +225,8 @@ static ULONGLONG launcher_creation_file_time(void) {
     FILETIME exit_time;
     FILETIME kernel_time;
     FILETIME user_time;
-    if (!GetProcessTimes(
-            GetCurrentProcess(),
-            &creation_time,
-            &exit_time,
-            &kernel_time,
-            &user_time)) {
+    if (!GetProcessTimes(GetCurrentProcess(), &creation_time, &exit_time, &kernel_time,
+                         &user_time)) {
         return 0;
     }
     return file_time_value(creation_time);
@@ -238,15 +240,12 @@ static void paint_loading_logo(HDC device_context) {
     HGDIOBJ previous_bitmap;
 
     if (logo_bitmap == NULL) {
-        logo_bitmap = (HBITMAP)LoadImageW(
-            GetModuleHandleW(NULL),
-            MAKEINTRESOURCEW(UIL_SPLASH_BITMAP_RESOURCE_ID),
-            IMAGE_BITMAP,
-            0,
-            0,
-            LR_CREATEDIBSECTION);
+        logo_bitmap = (HBITMAP)LoadImageW(GetModuleHandleW(NULL),
+                                          MAKEINTRESOURCEW(UIL_SPLASH_BITMAP_RESOURCE_ID),
+                                          IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
     }
-    if (logo_bitmap == NULL || GetObjectW(logo_bitmap, sizeof(bitmap_details), &bitmap_details) == 0) {
+    if (logo_bitmap == NULL ||
+        GetObjectW(logo_bitmap, sizeof(bitmap_details), &bitmap_details) == 0) {
         return;
     }
 
@@ -255,16 +254,8 @@ static void paint_loading_logo(HDC device_context) {
         return;
     }
     previous_bitmap = SelectObject(bitmap_context, logo_bitmap);
-    BitBlt(
-        device_context,
-        24,
-        20,
-        bitmap_details.bmWidth,
-        bitmap_details.bmHeight,
-        bitmap_context,
-        0,
-        0,
-        SRCCOPY);
+    BitBlt(device_context, 24, 20, bitmap_details.bmWidth, bitmap_details.bmHeight, bitmap_context,
+           0, 0, SRCCOPY);
     SelectObject(bitmap_context, previous_bitmap);
     DeleteDC(bitmap_context);
 }
@@ -304,27 +295,21 @@ static void paint_loading_window(HWND window) {
 
     SetBkMode(device_context, TRANSPARENT);
     SetTextColor(device_context, RGB(0xee, 0xee, 0xee));
-    title_font = CreateFontW(
-        -34, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    title_font = CreateFontW(-34, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                             DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     previous_font = SelectObject(device_context, title_font);
     SetRect(&title_rect, 150, 24, UIL_SPLASH_WIDTH - 32, 72);
     DrawTextW(device_context, L"uil", -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     SetTextColor(device_context, RGB(0xb8, 0xb8, 0xb8));
-    message_font = CreateFontW(
-        -17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    message_font = CreateFontW(-17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                               OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                               DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     SelectObject(device_context, message_font);
     SetRect(&message_rect, 152, 80, UIL_SPLASH_WIDTH - 84, 116);
-    DrawTextW(
-        device_context,
-        stage_description(loading_stage),
-        -1,
-        &message_rect,
-        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    DrawTextW(device_context, stage_description(loading_stage), -1, &message_rect,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     paint_loading_spinner(device_context);
 
@@ -334,7 +319,8 @@ static void paint_loading_window(HWND window) {
     DeleteObject(progress_track_brush);
 
     progress_fill_rect = progress_track_rect;
-    progress_fill_rect.right = progress_fill_rect.left +
+    progress_fill_rect.right =
+        progress_fill_rect.left +
         (progress_track_rect.right - progress_track_rect.left) * displayed_progress / 100;
     progress_fill_brush = CreateSolidBrush(RGB(0x00, 0x8c, 0x8c));
     FillRect(device_context, &progress_fill_rect, progress_fill_brush);
@@ -353,12 +339,14 @@ static void paint_loading_window(HWND window) {
     EndPaint(window, &paint);
 }
 
-/** @brief Handles messages for the native launcher loading window. */
-static LRESULT CALLBACK loading_window_procedure(
-    HWND window,
-    UINT message,
-    WPARAM word_parameter,
-    LPARAM long_parameter) {
+/**
+ * @brief Handles messages for the native launcher loading window.
+ *
+ * WM_CLOSE is ignored so the splash cannot be dismissed while the viewer starts; the launcher
+ * destroys it itself once the viewer is ready, exits, or exceeds UIL_VIEWER_READY_TIMEOUT_MS.
+ */
+static LRESULT CALLBACK loading_window_procedure(HWND window, UINT message, WPARAM word_parameter,
+                                                 LPARAM long_parameter) {
     (void)word_parameter;
     (void)long_parameter;
 
@@ -409,77 +397,117 @@ static HWND create_loading_window(HINSTANCE instance) {
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work_area, 0);
     x = work_area.left + (work_area.right - work_area.left - UIL_SPLASH_WIDTH) / 2;
     y = work_area.top + (work_area.bottom - work_area.top - UIL_SPLASH_HEIGHT) / 2;
-    window = CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-        class_name,
-        L"uil",
-        WS_POPUP,
-        x,
-        y,
-        UIL_SPLASH_WIDTH,
-        UIL_SPLASH_HEIGHT,
-        NULL,
-        NULL,
-        instance,
-        NULL);
+    window = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, class_name, L"uil", WS_POPUP, x, y,
+                             UIL_SPLASH_WIDTH, UIL_SPLASH_HEIGHT, NULL, NULL, instance, NULL);
     if (!window) {
         return NULL;
     }
 
     ShowWindow(window, SW_SHOWNORMAL);
-    SetTimer(
-        window,
-        UIL_ANIMATION_TIMER_ID,
-        UIL_ANIMATION_INTERVAL_MS,
-        NULL);
+    SetTimer(window, UIL_ANIMATION_TIMER_ID, UIL_ANIMATION_INTERVAL_MS, NULL);
     UpdateWindow(window);
     return window;
 }
 
-/** @brief Resolves the viewer executable and its working directory beside the launcher. */
-static BOOL resolve_viewer_paths(
-    wchar_t* viewer_path,
-    DWORD viewer_capacity,
-    wchar_t* working_directory,
-    DWORD directory_capacity) {
-    DWORD path_length = GetModuleFileNameW(NULL, viewer_path, viewer_capacity);
-    wchar_t* separator;
+/** @brief Releases a process-heap allocation; NULL is ignored. */
+static void free_heap_buffer(void* buffer) {
+    if (buffer) {
+        HeapFree(GetProcessHeap(), 0, buffer);
+    }
+}
+
+/**
+ * @brief Returns the launcher's full module path in a process-heap buffer.
+ *
+ * The buffer grows until GetModuleFileNameW no longer truncates, so install locations longer
+ * than MAX_PATH are supported. The caller releases the result with free_heap_buffer().
+ *
+ * @return The NUL-terminated path, or NULL on allocation or API failure.
+ */
+static wchar_t* launcher_module_path(void) {
+    DWORD capacity = MAX_PATH;
+
+    for (;;) {
+        wchar_t* buffer = HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(wchar_t));
+        DWORD path_length;
+
+        if (!buffer) {
+            return NULL;
+        }
+        path_length = GetModuleFileNameW(NULL, buffer, capacity);
+        if (path_length > 0 && path_length < capacity) {
+            return buffer;
+        }
+        free_heap_buffer(buffer);
+        /* A result equal to the capacity means the path was truncated. */
+        if (path_length == 0 || capacity >= UIL_MAX_PATH_CAPACITY) {
+            return NULL;
+        }
+        capacity *= 2;
+    }
+}
+
+/**
+ * @brief Resolves the viewer executable and its working directory beside the launcher.
+ *
+ * Both outputs are allocated from the process heap and must be released with
+ * free_heap_buffer(); they are set to NULL when the function fails.
+ *
+ * @param viewer_path Receives the full path of `uil-viewer.exe`.
+ * @param working_directory Receives the launcher directory, including its trailing separator.
+ * @return TRUE when both paths were built and the viewer executable exists.
+ */
+static BOOL resolve_viewer_paths(wchar_t** viewer_path, wchar_t** working_directory) {
     static const wchar_t viewer_name[] = L"uil-viewer.exe";
+    wchar_t* module_path = launcher_module_path();
+    wchar_t* separator;
+    size_t directory_length;
 
-    if (path_length == 0 || path_length >= viewer_capacity) {
+    *viewer_path = NULL;
+    *working_directory = NULL;
+    if (!module_path) {
         return FALSE;
     }
-    separator = wcsrchr(viewer_path, L'\\');
+    separator = wcsrchr(module_path, L'\\');
     if (!separator) {
+        free_heap_buffer(module_path);
         return FALSE;
     }
 
-    if ((DWORD)(separator - viewer_path) + 1 >= directory_capacity) {
+    directory_length = (size_t)(separator - module_path) + 1;
+    *working_directory = HeapAlloc(GetProcessHeap(), 0, (directory_length + 1) * sizeof(wchar_t));
+    *viewer_path = HeapAlloc(GetProcessHeap(), 0,
+                             (directory_length + ARRAYSIZE(viewer_name)) * sizeof(wchar_t));
+    if (!*working_directory || !*viewer_path) {
+        free_heap_buffer(module_path);
+        free_heap_buffer(*working_directory);
+        free_heap_buffer(*viewer_path);
+        *working_directory = NULL;
+        *viewer_path = NULL;
         return FALSE;
     }
-    CopyMemory(
-        working_directory,
-        viewer_path,
-        ((size_t)(separator - viewer_path) + 1) * sizeof(wchar_t));
-    working_directory[separator - viewer_path + 1] = L'\0';
 
-    ++separator;
-    if ((size_t)(separator - viewer_path) + ARRAYSIZE(viewer_name) > viewer_capacity) {
+    CopyMemory(*working_directory, module_path, directory_length * sizeof(wchar_t));
+    (*working_directory)[directory_length] = L'\0';
+    CopyMemory(*viewer_path, module_path, directory_length * sizeof(wchar_t));
+    CopyMemory(*viewer_path + directory_length, viewer_name, sizeof(viewer_name));
+    free_heap_buffer(module_path);
+
+    if (GetFileAttributesW(*viewer_path) == INVALID_FILE_ATTRIBUTES) {
+        free_heap_buffer(*working_directory);
+        free_heap_buffer(*viewer_path);
+        *working_directory = NULL;
+        *viewer_path = NULL;
         return FALSE;
     }
-    CopyMemory(separator, viewer_name, sizeof(viewer_name));
-    return GetFileAttributesW(viewer_path) != INVALID_FILE_ATTRIBUTES;
+    return TRUE;
 }
 
 /** @brief Builds the viewer command line with readiness metadata and forwarded arguments. */
-static BOOL build_viewer_command_line(
-    wchar_t* command_line,
-    size_t capacity,
-    const wchar_t* viewer_path,
-    const wchar_t* event_name,
-    HWND launcher_window,
-    ULONGLONG process_start_file_time,
-    ULONGLONG splash_visible_file_time) {
+static BOOL build_viewer_command_line(wchar_t* command_line, size_t capacity,
+                                      const wchar_t* viewer_path, const wchar_t* event_name,
+                                      HWND launcher_window, ULONGLONG process_start_file_time,
+                                      ULONGLONG splash_visible_file_time) {
     wchar_t** arguments;
     int argument_count;
     int index;
@@ -497,18 +525,12 @@ static BOOL build_viewer_command_line(
     }
 
     wsprintfW(ready_argument, L"--uil-ready-event=%s", event_name);
-    wsprintfW(
-        start_argument,
-        L"--uil-launcher-process-start-filetime=%I64u",
-        process_start_file_time);
-    wsprintfW(
-        splash_argument,
-        L"--uil-launcher-splash-visible-filetime=%I64u",
-        splash_visible_file_time);
-    wsprintfW(
-        window_argument,
-        L"--uil-launcher-window=%I64u",
-        (ULONGLONG)(ULONG_PTR)launcher_window);
+    wsprintfW(start_argument, L"--uil-launcher-process-start-filetime=%I64u",
+              process_start_file_time);
+    wsprintfW(splash_argument, L"--uil-launcher-splash-visible-filetime=%I64u",
+              splash_visible_file_time);
+    wsprintfW(window_argument, L"--uil-launcher-window=%I64u",
+              (ULONGLONG)(ULONG_PTR)launcher_window);
 
     if (!append_quoted_argument(&cursor, &remaining, viewer_path) ||
         !append_quoted_argument(&cursor, &remaining, ready_argument) ||
@@ -533,6 +555,7 @@ static BOOL build_viewer_command_line(
     return TRUE;
 }
 
+/** @brief Inputs and results shared with the worker thread that calls CreateProcessW. */
 typedef struct ViewerLaunchRequest {
     const wchar_t* viewer_path;
     wchar_t* command_line;
@@ -550,17 +573,9 @@ static DWORD WINAPI start_viewer_process(LPVOID parameter) {
     ZeroMemory(&startup_info, sizeof(startup_info));
     ZeroMemory(&request->process_information, sizeof(request->process_information));
     startup_info.cb = sizeof(startup_info);
-    request->process_started = CreateProcessW(
-        request->viewer_path,
-        request->command_line,
-        NULL,
-        NULL,
-        FALSE,
-        0,
-        NULL,
-        request->working_directory,
-        &startup_info,
-        &request->process_information);
+    request->process_started =
+        CreateProcessW(request->viewer_path, request->command_line, NULL, NULL, FALSE, 0, NULL,
+                       request->working_directory, &startup_info, &request->process_information);
     SetEvent(request->completion_event);
     return 0;
 }
@@ -570,12 +585,8 @@ static BOOL wait_for_process_launch(HWND window, HANDLE completion_event) {
     MSG message;
 
     for (;;) {
-        DWORD result = MsgWaitForMultipleObjects(
-            1,
-            &completion_event,
-            FALSE,
-            INFINITE,
-            QS_ALLINPUT);
+        DWORD result =
+            MsgWaitForMultipleObjects(1, &completion_event, FALSE, INFINITE, QS_ALLINPUT);
         if (result == WAIT_OBJECT_0) {
             return TRUE;
         }
@@ -591,13 +602,34 @@ static BOOL wait_for_process_launch(HWND window, HANDLE completion_event) {
     }
 }
 
-/** @brief Pumps launcher messages until the viewer is ready or terminates. */
+/**
+ * @brief Pumps launcher messages until the viewer is ready, terminates, or times out.
+ *
+ * The splash window is destroyed in every case. When the viewer has not signalled readiness
+ * within UIL_VIEWER_READY_TIMEOUT_MS, the launcher stops waiting and leaves the viewer
+ * running, so a hung or very slow startup cannot trap the user behind a topmost splash.
+ *
+ * @return 0 when the viewer became ready or the wait timed out; otherwise a non-zero exit code
+ *         after reporting the failure to the user.
+ */
 static int wait_for_viewer(HWND window, HANDLE ready_event, HANDLE viewer_process) {
     HANDLE wait_handles[2] = {ready_event, viewer_process};
+    const ULONGLONG deadline = GetTickCount64() + UIL_VIEWER_READY_TIMEOUT_MS;
     MSG message;
 
     for (;;) {
-        DWORD result = MsgWaitForMultipleObjects(2, wait_handles, FALSE, INFINITE, QS_ALLINPUT);
+        const ULONGLONG now = GetTickCount64();
+        DWORD result;
+
+        if (now >= deadline) {
+            DestroyWindow(window);
+            return 0;
+        }
+        result =
+            MsgWaitForMultipleObjects(2, wait_handles, FALSE, (DWORD)(deadline - now), QS_ALLINPUT);
+        if (result == WAIT_TIMEOUT) {
+            continue;
+        }
         if (result == WAIT_OBJECT_0) {
             DestroyWindow(window);
             return 0;
@@ -606,13 +638,11 @@ static int wait_for_viewer(HWND window, HANDLE ready_event, HANDLE viewer_proces
             DWORD exit_code = 0;
             GetExitCodeProcess(viewer_process, &exit_code);
             DestroyWindow(window);
-            MessageBoxW(
-                NULL,
-                exit_code == 0
-                    ? L"The viewer closed before its first window was ready."
-                    : L"The viewer could not start. Check the application log for details.",
-                L"uil startup error",
-                MB_OK | MB_ICONERROR);
+            MessageBoxW(NULL,
+                        exit_code == 0
+                            ? L"The viewer closed before its first window was ready."
+                            : L"The viewer could not start. Check the application log for details.",
+                        L"uil startup error", MB_OK | MB_ICONERROR);
             return exit_code == 0 ? 1 : (int)exit_code;
         }
         if (result == WAIT_OBJECT_0 + 2) {
@@ -627,14 +657,19 @@ static int wait_for_viewer(HWND window, HANDLE ready_event, HANDLE viewer_proces
     }
 }
 
-/** @brief Shows the native splash, starts the Qt viewer, and waits for readiness. */
-int WINAPI WinMain(
-    HINSTANCE instance,
-    HINSTANCE previous_instance,
-    LPSTR command_line_argument,
-    int show_command) {
-    wchar_t viewer_path[MAX_PATH];
-    wchar_t working_directory[MAX_PATH];
+/**
+ * @brief Shows the native splash, starts the Qt viewer, and waits for readiness.
+ *
+ * The launcher forwards its own arguments to `uil-viewer.exe` next to it, preceded by the
+ * readiness metadata described in launcher_protocol.h, and exits once the viewer signals its
+ * first paint, exits, or exceeds UIL_VIEWER_READY_TIMEOUT_MS.
+ *
+ * @return 0 on success or timeout, otherwise a non-zero startup failure code.
+ */
+int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR command_line_argument,
+                   int show_command) {
+    wchar_t* viewer_path;
+    wchar_t* working_directory;
     wchar_t event_name[128];
     wchar_t* viewer_command_line;
     HANDLE ready_event;
@@ -651,52 +686,43 @@ int WINAPI WinMain(
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     loading_window = create_loading_window(instance);
     if (!loading_window) {
-        MessageBoxW(NULL, L"Could not create the loading window.", L"uil startup error", MB_OK | MB_ICONERROR);
+        MessageBoxW(NULL, L"Could not create the loading window.", L"uil startup error",
+                    MB_OK | MB_ICONERROR);
         return 1;
     }
 
-    if (!resolve_viewer_paths(
-            viewer_path,
-            ARRAYSIZE(viewer_path),
-            working_directory,
-            ARRAYSIZE(working_directory))) {
+    if (!resolve_viewer_paths(&viewer_path, &working_directory)) {
         DestroyWindow(loading_window);
-        MessageBoxW(NULL, L"Could not find uil-viewer.exe beside the launcher.", L"uil startup error", MB_OK | MB_ICONERROR);
+        MessageBoxW(NULL, L"Could not find uil-viewer.exe beside the launcher.",
+                    L"uil startup error", MB_OK | MB_ICONERROR);
         return 1;
     }
 
-    wsprintfW(
-        event_name,
-        L"Local\\uil-ready-%lu-%I64u",
-        GetCurrentProcessId(),
-        GetTickCount64());
+    wsprintfW(event_name, L"Local\\uil-ready-%lu-%I64u", GetCurrentProcessId(), GetTickCount64());
     ready_event = CreateEventW(NULL, TRUE, FALSE, event_name);
     if (!ready_event) {
+        free_heap_buffer(viewer_path);
+        free_heap_buffer(working_directory);
         DestroyWindow(loading_window);
-        MessageBoxW(NULL, L"Could not create the viewer readiness event.", L"uil startup error", MB_OK | MB_ICONERROR);
+        MessageBoxW(NULL, L"Could not create the viewer readiness event.", L"uil startup error",
+                    MB_OK | MB_ICONERROR);
         return 1;
     }
 
     GetSystemTimeAsFileTime(&splash_visible_time);
-    viewer_command_line = HeapAlloc(
-        GetProcessHeap(),
-        HEAP_ZERO_MEMORY,
-        UIL_COMMAND_LINE_CAPACITY * sizeof(wchar_t));
+    viewer_command_line =
+        HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, UIL_COMMAND_LINE_CAPACITY * sizeof(wchar_t));
     if (!viewer_command_line ||
-        !build_viewer_command_line(
-            viewer_command_line,
-            UIL_COMMAND_LINE_CAPACITY,
-            viewer_path,
-            event_name,
-            loading_window,
-            launcher_creation_file_time(),
-            file_time_value(splash_visible_time))) {
-        if (viewer_command_line) {
-            HeapFree(GetProcessHeap(), 0, viewer_command_line);
-        }
+        !build_viewer_command_line(viewer_command_line, UIL_COMMAND_LINE_CAPACITY, viewer_path,
+                                   event_name, loading_window, launcher_creation_file_time(),
+                                   file_time_value(splash_visible_time))) {
+        free_heap_buffer(viewer_command_line);
+        free_heap_buffer(viewer_path);
+        free_heap_buffer(working_directory);
         CloseHandle(ready_event);
         DestroyWindow(loading_window);
-        MessageBoxW(NULL, L"Could not prepare the viewer command line.", L"uil startup error", MB_OK | MB_ICONERROR);
+        MessageBoxW(NULL, L"Could not prepare the viewer command line.", L"uil startup error",
+                    MB_OK | MB_ICONERROR);
         return 1;
     }
 
@@ -706,26 +732,26 @@ int WINAPI WinMain(
     launch_request.working_directory = working_directory;
     launch_request.completion_event = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!launch_request.completion_event) {
-        HeapFree(GetProcessHeap(), 0, viewer_command_line);
+        free_heap_buffer(viewer_command_line);
+        free_heap_buffer(viewer_path);
+        free_heap_buffer(working_directory);
         CloseHandle(ready_event);
         DestroyWindow(loading_window);
-        MessageBoxW(NULL, L"Could not prepare viewer startup.", L"uil startup error", MB_OK | MB_ICONERROR);
+        MessageBoxW(NULL, L"Could not prepare viewer startup.", L"uil startup error",
+                    MB_OK | MB_ICONERROR);
         return 1;
     }
 
-    launch_thread = CreateThread(
-        NULL,
-        0,
-        start_viewer_process,
-        &launch_request,
-        0,
-        NULL);
+    launch_thread = CreateThread(NULL, 0, start_viewer_process, &launch_request, 0, NULL);
     if (!launch_thread) {
         CloseHandle(launch_request.completion_event);
-        HeapFree(GetProcessHeap(), 0, viewer_command_line);
+        free_heap_buffer(viewer_command_line);
+        free_heap_buffer(viewer_path);
+        free_heap_buffer(working_directory);
         CloseHandle(ready_event);
         DestroyWindow(loading_window);
-        MessageBoxW(NULL, L"Could not create the viewer startup worker.", L"uil startup error", MB_OK | MB_ICONERROR);
+        MessageBoxW(NULL, L"Could not create the viewer startup worker.", L"uil startup error",
+                    MB_OK | MB_ICONERROR);
         return 1;
     }
 
@@ -733,7 +759,9 @@ int WINAPI WinMain(
         WaitForSingleObject(launch_thread, INFINITE);
         CloseHandle(launch_thread);
         CloseHandle(launch_request.completion_event);
-        HeapFree(GetProcessHeap(), 0, viewer_command_line);
+        free_heap_buffer(viewer_command_line);
+        free_heap_buffer(viewer_path);
+        free_heap_buffer(working_directory);
         CloseHandle(ready_event);
         return 1;
     }
@@ -741,19 +769,20 @@ int WINAPI WinMain(
     WaitForSingleObject(launch_thread, INFINITE);
     CloseHandle(launch_thread);
     CloseHandle(launch_request.completion_event);
-    HeapFree(GetProcessHeap(), 0, viewer_command_line);
+    free_heap_buffer(viewer_command_line);
+    free_heap_buffer(viewer_path);
+    free_heap_buffer(working_directory);
     if (!launch_request.process_started) {
         CloseHandle(ready_event);
         DestroyWindow(loading_window);
-        MessageBoxW(NULL, L"Could not start uil-viewer.exe.", L"uil startup error", MB_OK | MB_ICONERROR);
+        MessageBoxW(NULL, L"Could not start uil-viewer.exe.", L"uil startup error",
+                    MB_OK | MB_ICONERROR);
         return 1;
     }
 
     CloseHandle(launch_request.process_information.hThread);
-    result = wait_for_viewer(
-        loading_window,
-        ready_event,
-        launch_request.process_information.hProcess);
+    result =
+        wait_for_viewer(loading_window, ready_event, launch_request.process_information.hProcess);
     CloseHandle(launch_request.process_information.hProcess);
     CloseHandle(ready_event);
     return result;

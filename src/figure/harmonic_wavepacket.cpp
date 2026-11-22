@@ -5,6 +5,7 @@
 #include <numbers>
 
 namespace {
+/** @brief Describes the bond motion at @p phase (in periods, clamped to [0, 1]) for captions. */
 QString stage_description(double phase) {
     constexpr double near_turning_point = 0.035;
     const double wrapped = phase >= 1.0 ? 1.0 : std::clamp(phase, 0.0, 1.0);
@@ -33,9 +34,7 @@ QString stage_description(double phase) {
 }
 }  // namespace
 
-HarmonicWavepacketObservation evaluate_harmonic_wavepacket(
-    double phase,
-    double initial_stretch) {
+HarmonicWavepacketObservation evaluate_harmonic_wavepacket(double phase, double initial_stretch) {
     const double clamped_phase = std::clamp(phase, 0.0, 1.0);
     const double angle = 2.0 * std::numbers::pi * clamped_phase;
     HarmonicWavepacketObservation observation;
@@ -52,11 +51,8 @@ double harmonic_probability_density(double x, double mean_position) {
     return std::exp(-offset * offset) / std::sqrt(std::numbers::pi);
 }
 
-QVector<QPointF> sample_harmonic_probability_density(
-    double x_min,
-    double x_max,
-    int sample_count,
-    double mean_position) {
+QVector<QPointF> sample_harmonic_probability_density(double x_min, double x_max, int sample_count,
+                                                     double mean_position) {
     QVector<QPointF> samples;
     if (!(x_max > x_min) || sample_count < 2) {
         return samples;
@@ -69,11 +65,8 @@ QVector<QPointF> sample_harmonic_probability_density(
     return samples;
 }
 
-HarmonicPlaybackSample harmonic_playback_sample(
-    double starting_phase,
-    double elapsed_seconds,
-    double period_seconds,
-    bool loop) {
+HarmonicPlaybackSample harmonic_playback_sample(double starting_phase, double elapsed_seconds,
+                                                double period_seconds, bool loop) {
     const double clamped_start = std::clamp(starting_phase, 0.0, 1.0);
     if (!(period_seconds > 0.0) || elapsed_seconds < 0.0) {
         return {clamped_start, false};
@@ -108,8 +101,8 @@ double harmonic_basis_wavefunction(int n, double x) {
     for (int order = 1; order <= n; ++order) {
         normalization_denominator *= 2.0 * order;
     }
-    return hermite * std::exp(-0.5 * x * x)
-        / (std::pow(std::numbers::pi, 0.25) * std::sqrt(normalization_denominator));
+    return hermite * std::exp(-0.5 * x * x) /
+           (std::pow(std::numbers::pi, 0.25) * std::sqrt(normalization_denominator));
 }
 
 double coherent_state_basis_weight(int n, double initial_stretch) {
@@ -124,11 +117,7 @@ double coherent_state_basis_weight(int n, double initial_stretch) {
     return std::exp(-mean_occupation) * std::pow(mean_occupation, n) / factorial;
 }
 
-double coherent_state_basis_real_component(
-    int n,
-    double x,
-    double phase,
-    double initial_stretch) {
+double coherent_state_basis_real_component(int n, double x, double phase, double initial_stretch) {
     const double amplitude = std::sqrt(coherent_state_basis_weight(n, initial_stretch));
     const double relative_phase = 2.0 * std::numbers::pi * n * phase;
     return amplitude * harmonic_basis_wavefunction(n, x) * std::cos(relative_phase);
@@ -163,15 +152,12 @@ double harmonic_displaced_captured_fraction(int basis_count, double displacement
     return std::clamp(captured, 0.0, 1.0);
 }
 
-QVector<QPointF> sample_harmonic_displaced_approximation(
-    int basis_count,
-    double x_min,
-    double x_max,
-    int sample_count,
-    double displacement) {
+QVector<QPointF> sample_harmonic_displaced_approximation(int basis_count, double x_min,
+                                                         double x_max, int sample_count,
+                                                         double displacement) {
     QVector<QPointF> samples;
-    if (basis_count <= 0 || basis_count > 200 || !(x_max > x_min)
-        || sample_count < 2 || !std::isfinite(displacement)) {
+    if (basis_count <= 0 || basis_count > 200 || !(x_max > x_min) || sample_count < 2 ||
+        !std::isfinite(displacement)) {
         return samples;
     }
 

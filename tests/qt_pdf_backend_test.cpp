@@ -23,16 +23,17 @@ private slots:
     void reports_missing_and_malformed_documents();
     void reports_password_protected_document();
     void supports_mixed_page_sizes();
+    /** @brief Verifies in-memory loading is independent of the file and yields premultiplied pages.
+     */
+    void opens_in_memory_copy_independent_of_file();
 };
 
 void QtPdfBackendTest::opens_bundled_presentations_data() {
     QTest::addColumn<QString>("file_name");
     QTest::addColumn<int>("expected_pages");
 
-    QTest::newRow("getting started")
-        << QStringLiteral("getting-started.pdf") << 4;
-    QTest::newRow("pointer and annotations")
-        << QStringLiteral("pointer-and-annotations.pdf") << 3;
+    QTest::newRow("getting started") << QStringLiteral("getting-started.pdf") << 4;
+    QTest::newRow("pointer and annotations") << QStringLiteral("pointer-and-annotations.pdf") << 3;
 }
 
 void QtPdfBackendTest::opens_bundled_presentations() {
@@ -41,8 +42,7 @@ void QtPdfBackendTest::opens_bundled_presentations() {
 
     QtPdfBackend backend;
     QString error_message;
-    QVERIFY2(backend.open(example_path(file_name), &error_message),
-        qPrintable(error_message));
+    QVERIFY2(backend.open(example_path(file_name), &error_message), qPrintable(error_message));
     QCOMPARE(backend.page_count(), expected_pages);
 
     const QSizeF page_size = backend.page_size_points(0);
@@ -74,8 +74,8 @@ void QtPdfBackendTest::rejects_invalid_page_and_render_requests() {
 void QtPdfBackendTest::reports_missing_and_malformed_documents() {
     QtPdfBackend missing_backend;
     QString missing_error;
-    QVERIFY(!missing_backend.open(
-        example_path(QStringLiteral("does-not-exist.pdf")), &missing_error));
+    QVERIFY(
+        !missing_backend.open(example_path(QStringLiteral("does-not-exist.pdf")), &missing_error));
     QVERIFY(!missing_error.isEmpty());
 
     QTemporaryDir directory;
@@ -94,18 +94,19 @@ void QtPdfBackendTest::reports_missing_and_malformed_documents() {
 void QtPdfBackendTest::reports_password_protected_document() {
     QtPdfBackend backend;
     QString error_message;
-    QVERIFY(!backend.open(
-        QStringLiteral(UIL_TEST_SOURCE_DIR "/tests/fixtures/password-protected.pdf"),
-        &error_message));
+    QVERIFY(
+        !backend.open(QStringLiteral(UIL_TEST_SOURCE_DIR "/tests/fixtures/password-protected.pdf"),
+                      &error_message));
     QCOMPARE(error_message, QStringLiteral("PDF requires a password"));
 }
 
 void QtPdfBackendTest::supports_mixed_page_sizes() {
     QtPdfBackend backend;
     QString error_message;
-    QVERIFY2(backend.open(
-        QStringLiteral(UIL_TEST_SOURCE_DIR "/tests/fixtures/mixed-page-sizes.pdf"),
-        &error_message), qPrintable(error_message));
+    QVERIFY2(
+        backend.open(QStringLiteral(UIL_TEST_SOURCE_DIR "/tests/fixtures/mixed-page-sizes.pdf"),
+                     &error_message),
+        qPrintable(error_message));
     QCOMPARE(backend.page_count(), 2);
     const QSizeF landscape = backend.page_size_points(0);
     const QSizeF portrait = backend.page_size_points(1);
@@ -113,6 +114,36 @@ void QtPdfBackendTest::supports_mixed_page_sizes() {
     QVERIFY(portrait.height() > portrait.width());
     QCOMPARE(backend.render_page(0, QSize(400, 225)).size(), QSize(400, 225));
     QCOMPARE(backend.render_page(1, QSize(300, 500)).size(), QSize(300, 500));
+}
+
+void QtPdfBackendTest::opens_in_memory_copy_independent_of_file() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("deck.pdf"));
+    QVERIFY(QFile::copy(example_path(QStringLiteral("getting-started.pdf")), path));
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QByteArray data = file.readAll();
+    file.close();
+
+    QtPdfBackend backend;
+    QString error_message;
+    QVERIFY2(backend.open_data(data, &error_message), qPrintable(error_message));
+    QCOMPARE(backend.page_count(), 4);
+
+    // Rewriting the source must not affect the open document.
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write("not a pdf");
+    file.close();
+    const QImage image = backend.render_page(3, QSize(320, 180));
+    QVERIFY(!image.isNull());
+    QCOMPARE(image.format(), QImage::Format_ARGB32_Premultiplied);
+
+    QtPdfBackend malformed;
+    QVERIFY(!malformed.open_data(QByteArrayLiteral("not a pdf"), &error_message));
+    QVERIFY(!error_message.isEmpty());
+    QCOMPARE(malformed.page_count(), 0);
 }
 
 QTEST_GUILESS_MAIN(QtPdfBackendTest)

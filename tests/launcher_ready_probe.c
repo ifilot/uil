@@ -1,4 +1,6 @@
+// <windows.h> must precede the other Win32 headers; keep it in its own include block.
 #include <windows.h>
+
 #include <shellapi.h>
 #include <wchar.h>
 
@@ -10,11 +12,8 @@ static BOOL starts_with(const wchar_t* argument, const wchar_t* prefix) {
 }
 
 /** @brief Validates argument forwarding and signals the launcher's readiness event. */
-int WINAPI WinMain(
-    HINSTANCE instance,
-    HINSTANCE previous_instance,
-    LPSTR command_line_argument,
-    int show_command) {
+int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR command_line_argument,
+                   int show_command) {
     static const wchar_t event_prefix[] = L"--uil-ready-event=";
     static const wchar_t window_prefix[] = L"--uil-launcher-window=";
     static const wchar_t forwarded_argument[] = L"--probe-forwarded=hello world";
@@ -41,9 +40,7 @@ int WINAPI WinMain(
             event_name = arguments[index] + ARRAYSIZE(event_prefix) - 1;
         } else if (starts_with(arguments[index], window_prefix)) {
             launcher_window = (HWND)(ULONG_PTR)wcstoull(
-                arguments[index] + ARRAYSIZE(window_prefix) - 1,
-                NULL,
-                10);
+                arguments[index] + ARRAYSIZE(window_prefix) - 1, NULL, 10);
         } else if (wcscmp(arguments[index], forwarded_argument) == 0) {
             forwarded_argument_found = TRUE;
         }
@@ -54,26 +51,17 @@ int WINAPI WinMain(
         return 3;
     }
 
-    event_handle = OpenEventW(
-        EVENT_MODIFY_STATE,
-        FALSE,
-        event_name);
+    event_handle = OpenEventW(EVENT_MODIFY_STATE, FALSE, event_name);
     if (!event_handle) {
         LocalFree(arguments);
         return 4;
     }
 
     Sleep(200);
-    PostMessageW(
-        launcher_window,
-        UIL_LAUNCHER_PROGRESS_MESSAGE,
-        UIL_LAUNCHER_STAGE_CONTROLLER_READY,
-        0);
-    PostMessageW(
-        launcher_window,
-        UIL_LAUNCHER_PROGRESS_MESSAGE,
-        UIL_LAUNCHER_STAGE_FIRST_PAINT_READY,
-        0);
+    PostMessageW(launcher_window, UIL_LAUNCHER_PROGRESS_MESSAGE,
+                 UIL_LAUNCHER_STAGE_CONTROLLER_READY, 0);
+    PostMessageW(launcher_window, UIL_LAUNCHER_PROGRESS_MESSAGE,
+                 UIL_LAUNCHER_STAGE_FIRST_PAINT_READY, 0);
     Sleep(80);
     if (!SetEvent(event_handle)) {
         CloseHandle(event_handle);

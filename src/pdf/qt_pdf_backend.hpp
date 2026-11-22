@@ -2,6 +2,7 @@
 
 #include "pdf_backend.hpp"
 
+#include <QBuffer>
 #include <QPdfDocument>
 
 class QtPdfBackend final : public PdfBackend {
@@ -13,6 +14,8 @@ public:
 
     /** @copydoc PdfBackend::open */
     bool open(const QString& path, QString* error_message = nullptr) override;
+    /** @copydoc PdfBackend::open_data */
+    bool open_data(const QByteArray& data, QString* error_message = nullptr) override;
     /** @copydoc PdfBackend::page_count */
     int page_count() const override;
     /** @copydoc PdfBackend::page_size_points */
@@ -23,6 +26,10 @@ public:
 private:
     /** @brief Converts a Qt PDF error value to a readable message. */
     static QString error_to_string(QPdfDocument::Error error);
+    /** @brief Reports the outcome of a load attempt for @p source. */
+    bool finish_open(QPdfDocument::Error error, const QString& source, QString* error_message);
 
+    // Declared before document_ so the document is destroyed while its device still exists.
+    QBuffer buffer_;
     QPdfDocument document_;
 };
