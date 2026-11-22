@@ -3,6 +3,7 @@
 Pronounced `/œyl/`.
 
 [![Version](https://img.shields.io/badge/version-v1.0.1-blue.svg)](https://github.com/ifilot/uil/releases)
+![C++](https://img.shields.io/badge/C%2B%2B-blue.svg?logo=c%2B%2B&logoColor=white)
 [![License: LGPL v3](https://img.shields.io/badge/license-LGPL--3.0--only-blue.svg)](LICENSE)
 [![Sanitizers](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml/badge.svg)](https://github.com/ifilot/uil/actions/workflows/sanitizers.yml)
 
@@ -10,6 +11,8 @@ Pronounced `/œyl/`.
 embedded video in Beamer presentations, and lets you annotate slides while
 presenting. Presentations and annotations can be saved together as a `.uil`
 file or exported to PDF.
+
+![The uil presenter window showing a 3D model of benzene from the molecule visualizer example, with slide thumbnails on the right](docs/images/presenter-window.png)
 
 ## Install
 
@@ -27,6 +30,8 @@ Right-click the audience view to choose the pointer, pencil, or eraser; change
 tool settings; browse all slides; or close the presentation. The laser pointer
 automatically disappears after three seconds without movement and reappears as
 soon as it moves again.
+
+![An audience slide annotated with the pencil (a circled word, a check mark, an underline and an arrow), with the laser pointer visible on the right](docs/images/annotations.png)
 
 Six sample decks are included with the Windows distribution. They are all
 ordinary `.pdf` files, so the same files can also be opened in a regular PDF
@@ -55,8 +60,12 @@ page. Use **File > Save** to preserve the presentation and annotations as a
 
 UIL supports interactive figures, molecule visualizations, atomic-orbital
 visualizations, and molecular-symmetry operation players in presentations.
+They are embedded in an ordinary PDF and come alive in uil: rotate a molecule
+with the mouse, or click a symmetry operation to watch it being applied.
 See [`docs/interactive-objects.md`](docs/interactive-objects.md) for the complete
 object inventory, authoring examples, and build instructions.
+
+![A live molecular-symmetry player on a slide: boron trifluoride with its D3h point group and buttons for each symmetry operation](docs/images/molecular-symmetry.png)
 
 ## Troubleshooting
 
