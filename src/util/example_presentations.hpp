@@ -19,5 +19,4 @@ struct ExamplePresentation {
  * Looks for the six bundled example decks in `<application_directory>/examples` and returns,
  * in menu order, those that exist as readable files; missing decks are skipped silently.
  */
-QVector<ExamplePresentation> installed_example_presentations(
-    const QString& application_directory);
+QVector<ExamplePresentation> installed_example_presentations(const QString& application_directory);

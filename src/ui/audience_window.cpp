@@ -37,8 +37,8 @@
 #include <QtGlobal>
 #include <QtMath>
 #include <algorithm>
-#include <cmath>
 #include <array>
+#include <cmath>
 #include <utility>
 
 #include "orbital/atomic_orbital_cache.hpp"
@@ -46,8 +46,8 @@
 #include "ui/bluecurve.hpp"
 #include "ui/font_awesome.hpp"
 #include "ui/interactive_figure_widget.hpp"
-#include "ui/molecule_widget.hpp"
 #include "ui/molecular_symmetry_widget.hpp"
+#include "ui/molecule_widget.hpp"
 
 Q_LOGGING_CATEGORY(log_ui, "ui")
 
@@ -77,11 +77,9 @@ QRect centered_rect_for_image(const QSize& image_size, const QRect& bounds) {
     }
 
     const QSize scaled_size = image_size.scaled(bounds.size(), Qt::KeepAspectRatio);
-    return QRect(
-        bounds.x() + (bounds.width() - scaled_size.width()) / 2,
-        bounds.y() + (bounds.height() - scaled_size.height()) / 2,
-        scaled_size.width(),
-        scaled_size.height());
+    return QRect(bounds.x() + (bounds.width() - scaled_size.width()) / 2,
+                 bounds.y() + (bounds.height() - scaled_size.height()) / 2, scaled_size.width(),
+                 scaled_size.height());
 }
 
 /** @brief Creates an icon for the audience feature menu. */
@@ -96,7 +94,8 @@ QIcon color_swatch_icon(const QColor& color) {
 
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    const QColor border_color = color.lightness() < 45 ? QColor(0xe6, 0xe6, 0xe6) : QColor(0x44, 0x44, 0x44);
+    const QColor border_color =
+        color.lightness() < 45 ? QColor(0xe6, 0xe6, 0xe6) : QColor(0x44, 0x44, 0x44);
     painter.setPen(QPen(border_color, 1.0));
     painter.setBrush(color);
     painter.drawEllipse(QRectF(3.0, 3.0, 20.0, 20.0));
@@ -121,8 +120,7 @@ void clear_layout(QLayout* layout) {
 class EraserSizePreview final : public QWidget {
 public:
     /** @brief Constructs an eraser-size preview widget. */
-    explicit EraserSizePreview(QWidget* parent = nullptr)
-        : QWidget(parent) {
+    explicit EraserSizePreview(QWidget* parent = nullptr) : QWidget(parent) {
         setObjectName(QStringLiteral("featureEraserPreview"));
         setFixedSize(78, 78);
     }
@@ -142,11 +140,8 @@ protected:
 
         const qreal diameter = qreal(std::clamp(diameter_, 4, 64));
         const QPointF center(width() / 2.0, height() / 2.0);
-        const QRectF circle(
-            center.x() - diameter / 2.0,
-            center.y() - diameter / 2.0,
-            diameter,
-            diameter);
+        const QRectF circle(center.x() - diameter / 2.0, center.y() - diameter / 2.0, diameter,
+                            diameter);
 
         painter.setPen(QPen(QColor(0xff, 0xff, 0xff), 1.5));
         painter.setBrush(QColor(0x00, 0x8c, 0x8c, 80));
@@ -157,14 +152,12 @@ private:
     int diameter_ = 24;
 };
 
-}
+}  // namespace
 
 class AudienceWindow::FeatureMenuPanel final : public QWidget {
 public:
     /** @brief Constructs the audience interaction feature menu. */
-    explicit FeatureMenuPanel(AudienceWindow* audience)
-        : QWidget(audience),
-          audience_(audience) {
+    explicit FeatureMenuPanel(AudienceWindow* audience) : QWidget(audience), audience_(audience) {
         setAttribute(Qt::WA_DeleteOnClose, true);
         setAttribute(Qt::WA_StyledBackground, true);
         setFocusPolicy(Qt::StrongFocus);
@@ -173,9 +166,7 @@ public:
     }
 
     /** @brief Removes the application event filter before destruction. */
-    ~FeatureMenuPanel() override {
-        qApp->removeEventFilter(this);
-    }
+    ~FeatureMenuPanel() override { qApp->removeEventFilter(this); }
 
     /** @brief Opens the feature menu at a global screen position. */
     void popup_at(const QPoint& global_position) {
@@ -202,11 +193,17 @@ private:
         auto* tool_row = new QHBoxLayout;
         tool_row->setContentsMargins(0, 0, 0, 0);
         tool_row->setSpacing(14);
-        cursor_button_ = create_tool_button(QStringLiteral("Classic\npointer"), QStringLiteral("arrow-pointer"), InteractionTool::Cursor);
-        pointer_button_ = create_tool_button(QStringLiteral("Laser\npointer"), QStringLiteral("location-crosshairs"), InteractionTool::Pointer);
+        cursor_button_ =
+            create_tool_button(QStringLiteral("Classic\npointer"), QStringLiteral("arrow-pointer"),
+                               InteractionTool::Cursor);
+        pointer_button_ =
+            create_tool_button(QStringLiteral("Laser\npointer"),
+                               QStringLiteral("location-crosshairs"), InteractionTool::Pointer);
         pointer_button_->setToolTip(QStringLiteral("Laser pointer (L)"));
-        pen_button_ = create_tool_button(QStringLiteral("Pencil"), QStringLiteral("pencil"), InteractionTool::Pen);
-        eraser_button_ = create_tool_button(QStringLiteral("Eraser"), QStringLiteral("eraser"), InteractionTool::Eraser);
+        pen_button_ = create_tool_button(QStringLiteral("Pencil"), QStringLiteral("pencil"),
+                                         InteractionTool::Pen);
+        eraser_button_ = create_tool_button(QStringLiteral("Eraser"), QStringLiteral("eraser"),
+                                            InteractionTool::Eraser);
         tool_row->addStretch(1);
         tool_row->addWidget(cursor_button_, 0, Qt::AlignCenter);
         tool_row->addWidget(pointer_button_, 0, Qt::AlignCenter);
@@ -227,35 +224,43 @@ private:
         bottom_row->setContentsMargins(0, 0, 0, 0);
         bottom_row->setSpacing(10);
 
-        QToolButton* clear_button = create_bottom_button(QStringLiteral("Clear"), QStringLiteral("stock-clear"), QStringLiteral("featureDangerButton"), 92);
-        QToolButton* close_button = create_bottom_button(QStringLiteral("Close slideshow"), QStringLiteral("stock-quit"), QStringLiteral("featureCloseButton"), 148);
-        QToolButton* first_button = create_icon_bottom_button(QStringLiteral("First slide"), QStringLiteral("stock-goto-first"), QStringLiteral("featureNavButton"));
-        QToolButton* previous_button = create_icon_bottom_button(QStringLiteral("Previous slide"), QStringLiteral("stock-go-back"), QStringLiteral("featureNavButton"));
-        grid_button_ = create_icon_bottom_button(QStringLiteral("Show slide grid (G)"), QStringLiteral("stock_display-grid"), QStringLiteral("featureNavButton"));
+        QToolButton* clear_button =
+            create_bottom_button(QStringLiteral("Clear"), QStringLiteral("stock-clear"),
+                                 QStringLiteral("featureDangerButton"), 92);
+        QToolButton* close_button =
+            create_bottom_button(QStringLiteral("Close slideshow"), QStringLiteral("stock-quit"),
+                                 QStringLiteral("featureCloseButton"), 148);
+        QToolButton* first_button = create_icon_bottom_button(QStringLiteral("First slide"),
+                                                              QStringLiteral("stock-goto-first"),
+                                                              QStringLiteral("featureNavButton"));
+        QToolButton* previous_button = create_icon_bottom_button(
+            QStringLiteral("Previous slide"), QStringLiteral("stock-go-back"),
+            QStringLiteral("featureNavButton"));
+        grid_button_ = create_icon_bottom_button(QStringLiteral("Show slide grid (G)"),
+                                                 QStringLiteral("stock_display-grid"),
+                                                 QStringLiteral("featureNavButton"));
         grid_button_->installEventFilter(this);
-        QToolButton* next_button = create_icon_bottom_button(QStringLiteral("Next slide"), QStringLiteral("stock-go-forward"), QStringLiteral("featureNavButton"));
-        QToolButton* last_button = create_icon_bottom_button(QStringLiteral("Last slide"), QStringLiteral("stock-goto-last"), QStringLiteral("featureNavButton"));
+        QToolButton* next_button = create_icon_bottom_button(QStringLiteral("Next slide"),
+                                                             QStringLiteral("stock-go-forward"),
+                                                             QStringLiteral("featureNavButton"));
+        QToolButton* last_button = create_icon_bottom_button(QStringLiteral("Last slide"),
+                                                             QStringLiteral("stock-goto-last"),
+                                                             QStringLiteral("featureNavButton"));
 
-        connect(clear_button, &QToolButton::clicked, this, [this] {
-            confirm_clear_annotations();
-        });
+        connect(clear_button, &QToolButton::clicked, this, [this] { confirm_clear_annotations(); });
         connect(close_button, &QToolButton::clicked, this, [this] {
             AudienceWindow* audience = audience_;
             close_menu();
             audience->exit_fullscreen();
         });
-        connect(first_button, &QToolButton::clicked, this, [this] {
-            emit audience_->first_requested();
-        });
-        connect(previous_button, &QToolButton::clicked, this, [this] {
-            emit audience_->previous_requested();
-        });
-        connect(next_button, &QToolButton::clicked, this, [this] {
-            emit audience_->next_requested();
-        });
-        connect(last_button, &QToolButton::clicked, this, [this] {
-            emit audience_->last_requested();
-        });
+        connect(first_button, &QToolButton::clicked, this,
+                [this] { emit audience_->first_requested(); });
+        connect(previous_button, &QToolButton::clicked, this,
+                [this] { emit audience_->previous_requested(); });
+        connect(next_button, &QToolButton::clicked, this,
+                [this] { emit audience_->next_requested(); });
+        connect(last_button, &QToolButton::clicked, this,
+                [this] { emit audience_->last_requested(); });
 
         bottom_row->addWidget(clear_button);
         bottom_row->addWidget(close_button);
@@ -300,8 +305,8 @@ private:
                 event->accept();
                 return true;
             }
-            if (mouse_event->button() == Qt::LeftButton
-                && grid_button_global_rect().contains(mouse_event->globalPosition().toPoint())) {
+            if (mouse_event->button() == Qt::LeftButton &&
+                grid_button_global_rect().contains(mouse_event->globalPosition().toPoint())) {
                 open_deck_overview();
                 event->accept();
                 return true;
@@ -310,9 +315,8 @@ private:
 
         if (watched == grid_button_ && event->type() == QEvent::KeyPress) {
             auto* key_event = static_cast<QKeyEvent*>(event);
-            if (key_event->key() == Qt::Key_Return
-                || key_event->key() == Qt::Key_Enter
-                || key_event->key() == Qt::Key_Space) {
+            if (key_event->key() == Qt::Key_Return || key_event->key() == Qt::Key_Enter ||
+                key_event->key() == Qt::Key_Space) {
                 open_deck_overview();
                 event->accept();
                 return true;
@@ -323,7 +327,8 @@ private:
     }
 
     /** @brief Creates a selectable interaction-tool button. */
-    QToolButton* create_tool_button(const QString& text, const QString& icon_name, InteractionTool tool) {
+    QToolButton* create_tool_button(const QString& text, const QString& icon_name,
+                                    InteractionTool tool) {
         auto* button = new QToolButton(this);
         button->setObjectName(QStringLiteral("featureToolButton"));
         button->setCheckable(true);
@@ -333,14 +338,13 @@ private:
         button->setText(text);
         button->setFixedSize(118, 90);
         button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-        connect(button, &QToolButton::clicked, this, [this, tool] {
-            select_tool(tool);
-        });
+        connect(button, &QToolButton::clicked, this, [this, tool] { select_tool(tool); });
         return button;
     }
 
     /** @brief Creates a labeled button for the menu's bottom row. */
-    QToolButton* create_bottom_button(const QString& text, const QString& icon_name, const QString& object_name, int minimum_width) {
+    QToolButton* create_bottom_button(const QString& text, const QString& icon_name,
+                                      const QString& object_name, int minimum_width) {
         auto* button = new QToolButton(this);
         button->setObjectName(object_name);
         button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
@@ -353,7 +357,8 @@ private:
     }
 
     /** @brief Creates an icon-only button for the menu's bottom row. */
-    QToolButton* create_icon_bottom_button(const QString& tool_tip, const QString& icon_name, const QString& object_name) {
+    QToolButton* create_icon_bottom_button(const QString& tool_tip, const QString& icon_name,
+                                           const QString& object_name) {
         auto* button = new QToolButton(this);
         button->setObjectName(object_name);
         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -443,7 +448,9 @@ private:
         switch (audience_->interaction_tool_) {
         case InteractionTool::Cursor:
             if (auto* row = create_settings_row()) {
-                row->addWidget(create_settings_label(QStringLiteral("No settings for classic pointer")), 0, Qt::AlignVCenter);
+                row->addWidget(
+                    create_settings_label(QStringLiteral("No settings for classic pointer")), 0,
+                    Qt::AlignVCenter);
                 row->addStretch(1);
                 settings_layout_->addLayout(row);
             }
@@ -465,14 +472,16 @@ private:
     /** @brief Adds pointer-specific controls to the settings panel. */
     void add_pointer_settings() {
         auto* color_row = create_settings_row();
-        color_row->addWidget(create_settings_label(QStringLiteral("Pointer color")), 0, Qt::AlignVCenter);
-        const std::array<QPair<QString, QColor>, 3> colors{{
-            {QStringLiteral("Bright red"), QColor(255, 36, 36)},
-            {QStringLiteral("Bright green"), QColor(28, 255, 83)},
-            {QStringLiteral("Bright purple"), QColor(190, 82, 255)}
-        }};
+        color_row->addWidget(create_settings_label(QStringLiteral("Pointer color")), 0,
+                             Qt::AlignVCenter);
+        const std::array<QPair<QString, QColor>, 3> colors{
+            {{QStringLiteral("Bright red"), QColor(255, 36, 36)},
+             {QStringLiteral("Bright green"), QColor(28, 255, 83)},
+             {QStringLiteral("Bright purple"), QColor(190, 82, 255)}}};
         for (const auto& color_choice : colors) {
-            QToolButton* button = create_color_button(color_choice.second, color_choice.second == audience_->pointer_color_, color_choice.first);
+            QToolButton* button = create_color_button(
+                color_choice.second, color_choice.second == audience_->pointer_color_,
+                color_choice.first);
             connect(button, &QToolButton::clicked, this, [this, color = color_choice.second] {
                 audience_->set_pointer_color(color);
                 rebuild_settings();
@@ -483,7 +492,8 @@ private:
         settings_layout_->addLayout(color_row);
 
         auto* size_row = create_settings_row();
-        size_row->addWidget(create_settings_label(QStringLiteral("Pointer size")), 0, Qt::AlignVCenter);
+        size_row->addWidget(create_settings_label(QStringLiteral("Pointer size")), 0,
+                            Qt::AlignVCenter);
         auto* slider = new QSlider(Qt::Horizontal, this);
         slider->setObjectName(QStringLiteral("featureSizeSlider"));
         slider->setMinimumWidth(280);
@@ -518,25 +528,26 @@ private:
         color_grid->setHorizontalSpacing(8);
         color_grid->setVerticalSpacing(6);
 
-        const std::array<QPair<QString, QColor>, 14> colors{{
-            {QStringLiteral("#a6cee3"), QColor(0xa6, 0xce, 0xe3)},
-            {QStringLiteral("#1f78b4"), QColor(0x1f, 0x78, 0xb4)},
-            {QStringLiteral("#b2df8a"), QColor(0xb2, 0xdf, 0x8a)},
-            {QStringLiteral("#33a02c"), QColor(0x33, 0xa0, 0x2c)},
-            {QStringLiteral("#fb9a99"), QColor(0xfb, 0x9a, 0x99)},
-            {QStringLiteral("#e31a1c"), QColor(0xe3, 0x1a, 0x1c)},
-            {QStringLiteral("#fdbf6f"), QColor(0xfd, 0xbf, 0x6f)},
-            {QStringLiteral("#ff7f00"), QColor(0xff, 0x7f, 0x00)},
-            {QStringLiteral("#cab2d6"), QColor(0xca, 0xb2, 0xd6)},
-            {QStringLiteral("#6a3d9a"), QColor(0x6a, 0x3d, 0x9a)},
-            {QStringLiteral("#ffff99"), QColor(0xff, 0xff, 0x99)},
-            {QStringLiteral("#b15928"), QColor(0xb1, 0x59, 0x28)},
-            {QStringLiteral("#000000"), QColor(0x00, 0x00, 0x00)},
-            {QStringLiteral("#ffffff"), QColor(0xff, 0xff, 0xff)}
-        }};
+        const std::array<QPair<QString, QColor>, 14> colors{
+            {{QStringLiteral("#a6cee3"), QColor(0xa6, 0xce, 0xe3)},
+             {QStringLiteral("#1f78b4"), QColor(0x1f, 0x78, 0xb4)},
+             {QStringLiteral("#b2df8a"), QColor(0xb2, 0xdf, 0x8a)},
+             {QStringLiteral("#33a02c"), QColor(0x33, 0xa0, 0x2c)},
+             {QStringLiteral("#fb9a99"), QColor(0xfb, 0x9a, 0x99)},
+             {QStringLiteral("#e31a1c"), QColor(0xe3, 0x1a, 0x1c)},
+             {QStringLiteral("#fdbf6f"), QColor(0xfd, 0xbf, 0x6f)},
+             {QStringLiteral("#ff7f00"), QColor(0xff, 0x7f, 0x00)},
+             {QStringLiteral("#cab2d6"), QColor(0xca, 0xb2, 0xd6)},
+             {QStringLiteral("#6a3d9a"), QColor(0x6a, 0x3d, 0x9a)},
+             {QStringLiteral("#ffff99"), QColor(0xff, 0xff, 0x99)},
+             {QStringLiteral("#b15928"), QColor(0xb1, 0x59, 0x28)},
+             {QStringLiteral("#000000"), QColor(0x00, 0x00, 0x00)},
+             {QStringLiteral("#ffffff"), QColor(0xff, 0xff, 0xff)}}};
         for (qsizetype index = 0; index < qsizetype(colors.size()); ++index) {
             const auto& color_choice = colors[std::size_t(index)];
-            QToolButton* button = create_color_button(color_choice.second, color_choice.second == audience_->annotation_color_, color_choice.first);
+            QToolButton* button = create_color_button(
+                color_choice.second, color_choice.second == audience_->annotation_color_,
+                color_choice.first);
             connect(button, &QToolButton::clicked, this, [this, color = color_choice.second] {
                 audience_->set_annotation_color(color);
                 rebuild_settings();
@@ -550,7 +561,8 @@ private:
         auto* row = create_settings_row();
         row->addWidget(create_settings_label(QStringLiteral("Size")), 0, Qt::AlignVCenter);
         for (const int thickness : {3, 6, 10, 16, 24}) {
-            QToolButton* button = create_size_button(thickness, thickness == audience_->annotation_thickness_);
+            QToolButton* button =
+                create_size_button(thickness, thickness == audience_->annotation_thickness_);
             connect(button, &QToolButton::clicked, this, [this, thickness] {
                 audience_->set_annotation_thickness(thickness);
                 rebuild_settings();
@@ -571,7 +583,8 @@ private:
         auto* size_column = new QVBoxLayout;
         size_column->setContentsMargins(0, 0, 0, 0);
         size_column->setSpacing(4);
-        auto* label = create_settings_label(QStringLiteral("Eraser size: %1 px").arg(audience_->eraser_thickness_));
+        auto* label = create_settings_label(
+            QStringLiteral("Eraser size: %1 px").arg(audience_->eraser_thickness_));
         auto* slider = new QSlider(Qt::Horizontal, this);
         slider->setObjectName(QStringLiteral("featureSizeSlider"));
         slider->setMinimumWidth(340);
@@ -590,9 +603,11 @@ private:
         settings_layout_->addLayout(slider_row);
 
         auto* preset_row = create_settings_row();
-        preset_row->addWidget(create_settings_label(QStringLiteral("Presets")), 0, Qt::AlignVCenter);
+        preset_row->addWidget(create_settings_label(QStringLiteral("Presets")), 0,
+                              Qt::AlignVCenter);
         for (const int thickness : {8, 16, 24, 36, 48, 64}) {
-            QToolButton* button = create_size_button(thickness, thickness == audience_->eraser_thickness_);
+            QToolButton* button =
+                create_size_button(thickness, thickness == audience_->eraser_thickness_);
             connect(button, &QToolButton::clicked, this, [this, thickness] {
                 audience_->set_eraser_thickness(thickness);
                 rebuild_settings();
@@ -634,9 +649,7 @@ private:
     }
 
     /** @brief Closes the feature menu. */
-    void close_menu() {
-        close();
-    }
+    void close_menu() { close(); }
 
     /** @brief Closes the feature menu and opens deck overview. */
     void open_deck_overview() {
@@ -648,9 +661,7 @@ private:
         QPointer<AudienceWindow> audience = audience_;
         qApp->removeEventFilter(this);
         hide();
-        QTimer::singleShot(0, this, [this] {
-            close_menu();
-        });
+        QTimer::singleShot(0, this, [this] { close_menu(); });
         QTimer::singleShot(0, audience, [audience] {
             if (audience) {
                 audience->enter_deck_overview();
@@ -672,8 +683,8 @@ private:
         if (QLayout* root_layout = layout()) {
             root_layout->activate();
             const QSize target_size = root_layout->totalSizeHint()
-                .expandedTo(root_layout->totalMinimumSize())
-                .expandedTo(minimumSize());
+                                          .expandedTo(root_layout->totalMinimumSize())
+                                          .expandedTo(minimumSize());
             resize(target_size);
             updateGeometry();
             return;
@@ -732,82 +743,83 @@ private:
     bool opening_deck_overview_ = false;
 };
 
-AudienceWindow::AudienceWindow()
-    : QWidget(nullptr, Qt::Window) {
-  atomic_orbital_cache_ = std::make_unique<AtomicOrbitalCache>();
-  connect(atomic_orbital_cache_.get(), &AtomicOrbitalCache::volume_ready, this,
-          [this](const QByteArray& key, const AtomicOrbitalVolume& volume, const QString& error) {
+AudienceWindow::AudienceWindow() : QWidget(nullptr, Qt::Window) {
+    atomic_orbital_cache_ = std::make_unique<AtomicOrbitalCache>();
+    connect(
+        atomic_orbital_cache_.get(), &AtomicOrbitalCache::volume_ready, this,
+        [this](const QByteArray& key, const AtomicOrbitalVolume& volume, const QString& error) {
             for (auto& overlay : atomic_orbital_overlays_) {
-              if (!overlay.slide_rect.isValid() || overlay.geometry_key != key || overlay.ready)
-                continue;
-              overlay.widget->set_prepared_definition(overlay.definition, volume, error);
-              overlay.ready = volume.is_valid();
+                if (!overlay.slide_rect.isValid() || overlay.geometry_key != key || overlay.ready)
+                    continue;
+                overlay.widget->set_prepared_definition(overlay.definition, volume, error);
+                overlay.ready = volume.is_valid();
             }
             update_atomic_orbital_overlay_geometry();
             update();
-          });
-  // QOpenGLWidget changes a top-level widget to OpenGL-backed composition. If
-  // the first one is added after the audience window is visible, Qt may
-  // recreate the native window and briefly expose the desktop. Keep one
-  // hidden orbital widget in the hierarchy before the first show and reuse it.
-  AtomicOrbitalOverlayState initial_orbital;
-  initial_orbital.widget = create_atomic_orbital_widget();
-  atomic_orbital_overlays_.push_back(std::move(initial_orbital));
-  QSettings settings;
-  pointer_size_ = std::clamp(
-      settings.value(QString::fromLatin1(kPointerSizeSettingsKey), kDefaultPointerSize).toInt(),
-      kMinimumPointerSize, kMaximumPointerSize);
-  setWindowTitle(QStringLiteral("uil Audience"));
-  setWindowIcon(QIcon(QStringLiteral(":/icons/uil.png")));
-  resize(960, 540);
-  setMouseTracking(true);
-  setFocusPolicy(Qt::StrongFocus);
-  setContextMenuPolicy(Qt::DefaultContextMenu);
-  setAttribute(Qt::WA_OpaquePaintEvent, true);
-  setAttribute(Qt::WA_NoSystemBackground, true);
+        });
+    // QOpenGLWidget changes a top-level widget to OpenGL-backed composition. If
+    // the first one is added after the audience window is visible, Qt may
+    // recreate the native window and briefly expose the desktop. Keep one
+    // hidden orbital widget in the hierarchy before the first show and reuse it.
+    AtomicOrbitalOverlayState initial_orbital;
+    initial_orbital.widget = create_atomic_orbital_widget();
+    atomic_orbital_overlays_.push_back(std::move(initial_orbital));
+    QSettings settings;
+    pointer_size_ = std::clamp(
+        settings.value(QString::fromLatin1(kPointerSizeSettingsKey), kDefaultPointerSize).toInt(),
+        kMinimumPointerSize, kMaximumPointerSize);
+    setWindowTitle(QStringLiteral("uil Audience"));
+    setWindowIcon(QIcon(QStringLiteral(":/icons/uil.png")));
+    resize(960, 540);
+    setMouseTracking(true);
+    setFocusPolicy(Qt::StrongFocus);
+    setContextMenuPolicy(Qt::DefaultContextMenu);
+    setAttribute(Qt::WA_OpaquePaintEvent, true);
+    setAttribute(Qt::WA_NoSystemBackground, true);
 
-  cursor_hide_timer_.setSingleShot(true);
-  cursor_hide_timer_.setInterval(2000);
-  connect(&cursor_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_cursor);
+    cursor_hide_timer_.setSingleShot(true);
+    cursor_hide_timer_.setInterval(2000);
+    connect(&cursor_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_cursor);
 
-  // Presentation navigation must not depend on keyboard focus. In particular,
-  // native QOpenGLWidget surfaces can consume key delivery even when every
-  // embedded control has Qt::NoFocus. Window-scoped shortcuts are therefore
-  // the durable navigation path; keep this when adding future live widgets.
-  const auto add_navigation_shortcut = [this](Qt::Key key, bool forward) {
-    auto* shortcut = new QShortcut(QKeySequence(key), this);
-    shortcut->setContext(Qt::WindowShortcut);
-    connect(shortcut, &QShortcut::activated, this, [this, key, forward] {
-      show_cursor_temporarily();
-      if (deck_overview_visible_ && key == Qt::Key_PageDown) {
-        scroll_deck_overview_by(deck_overview_viewport_rect().height());
-      } else if (deck_overview_visible_ && key == Qt::Key_PageUp) {
-        scroll_deck_overview_by(-deck_overview_viewport_rect().height());
-      } else if (deck_overview_visible_ && key == Qt::Key_Down) {
-        scroll_deck_overview_by(80);
-      } else if (deck_overview_visible_ && key == Qt::Key_Up) {
-        scroll_deck_overview_by(-80);
-      } else if (forward) {
-        emit next_requested();
-      } else {
-        emit previous_requested();
-      }
-    });
-  };
-  add_navigation_shortcut(Qt::Key_Right, true);
-  add_navigation_shortcut(Qt::Key_Down, true);
-  add_navigation_shortcut(Qt::Key_PageDown, true);
-  add_navigation_shortcut(Qt::Key_Left, false);
-  add_navigation_shortcut(Qt::Key_Up, false);
-  add_navigation_shortcut(Qt::Key_PageUp, false);
+    // Presentation navigation must not depend on keyboard focus. In particular,
+    // native QOpenGLWidget surfaces can consume key delivery even when every
+    // embedded control has Qt::NoFocus. Window-scoped shortcuts are therefore
+    // the durable navigation path; keep this when adding future live widgets.
+    const auto add_navigation_shortcut = [this](Qt::Key key, bool forward) {
+        auto* shortcut = new QShortcut(QKeySequence(key), this);
+        shortcut->setContext(Qt::WindowShortcut);
+        connect(shortcut, &QShortcut::activated, this, [this, key, forward] {
+            show_cursor_temporarily();
+            if (deck_overview_visible_ && key == Qt::Key_PageDown) {
+                scroll_deck_overview_by(deck_overview_viewport_rect().height());
+            } else if (deck_overview_visible_ && key == Qt::Key_PageUp) {
+                scroll_deck_overview_by(-deck_overview_viewport_rect().height());
+            } else if (deck_overview_visible_ && key == Qt::Key_Down) {
+                scroll_deck_overview_by(80);
+            } else if (deck_overview_visible_ && key == Qt::Key_Up) {
+                scroll_deck_overview_by(-80);
+            } else if (forward) {
+                emit next_requested();
+            } else {
+                emit previous_requested();
+            }
+        });
+    };
+    add_navigation_shortcut(Qt::Key_Right, true);
+    add_navigation_shortcut(Qt::Key_Down, true);
+    add_navigation_shortcut(Qt::Key_PageDown, true);
+    add_navigation_shortcut(Qt::Key_Left, false);
+    add_navigation_shortcut(Qt::Key_Up, false);
+    add_navigation_shortcut(Qt::Key_PageUp, false);
 
-  pointer_hide_timer_.setSingleShot(true);
-  pointer_hide_timer_.setInterval(kPointerInactivityTimeoutMs);
-  connect(&pointer_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_pointer);
+    pointer_hide_timer_.setSingleShot(true);
+    pointer_hide_timer_.setInterval(kPointerInactivityTimeoutMs);
+    connect(&pointer_hide_timer_, &QTimer::timeout, this, &AudienceWindow::hide_pointer);
 
-  annotation_sync_timer_.setSingleShot(true);
-  annotation_sync_timer_.setInterval(kAnnotationSyncIntervalMs);
-  connect(&annotation_sync_timer_, &QTimer::timeout, this, &AudienceWindow::publish_annotation_overlay);
+    annotation_sync_timer_.setSingleShot(true);
+    annotation_sync_timer_.setInterval(kAnnotationSyncIntervalMs);
+    connect(&annotation_sync_timer_, &QTimer::timeout, this,
+            &AudienceWindow::publish_annotation_overlay);
 }
 
 AudienceWindow::~AudienceWindow() {
@@ -861,9 +873,9 @@ bool AudienceWindow::has_visible_opengl_overlay() const {
         return true;
     }
     return std::any_of(atomic_orbital_overlays_.cbegin(), atomic_orbital_overlays_.cend(),
-        [](const AtomicOrbitalOverlayState& overlay) {
-            return overlay.widget && overlay.widget->isVisible();
-        });
+                       [](const AtomicOrbitalOverlayState& overlay) {
+                           return overlay.widget && overlay.widget->isVisible();
+                       });
 }
 
 void AudienceWindow::begin_slide_transition() {
@@ -928,7 +940,8 @@ void AudienceWindow::set_document_overview(int page_count, int current_page) {
     }
 
     if (deck_overview_visible_) {
-        deck_overview_scroll_y_ = std::clamp(deck_overview_scroll_y_, 0, deck_overview_max_scroll_y());
+        deck_overview_scroll_y_ =
+            std::clamp(deck_overview_scroll_y_, 0, deck_overview_max_scroll_y());
         if (page_count_changed) {
             request_visible_deck_overview_renders();
         }
@@ -936,7 +949,8 @@ void AudienceWindow::set_document_overview(int page_count, int current_page) {
     }
 }
 
-void AudienceWindow::set_deck_overview_slide_image(int page_index, const QSize& bounding_pixel_size, const QImage& image) {
+void AudienceWindow::set_deck_overview_slide_image(int page_index, const QSize& bounding_pixel_size,
+                                                   const QImage& image) {
     if (page_index < 0 || page_index >= page_count_ || !bounding_pixel_size.isValid()) {
         return;
     }
@@ -975,12 +989,12 @@ void AudienceWindow::set_video_frame(const QImage& image, QRectF slide_rect) {
 
     // Repaint only the video area for steady playback instead of the whole slide.
     const QRectF slide_area = slide_logical_rect(current_slide_image_.size());
-    if (same_area && slide_area.isValid() && blank_mode_ == BlankMode::None && !deck_overview_visible_) {
-        const QRectF target(
-            slide_area.left() + video_rect_.left() * slide_area.width(),
-            slide_area.top() + video_rect_.top() * slide_area.height(),
-            video_rect_.width() * slide_area.width(),
-            video_rect_.height() * slide_area.height());
+    if (same_area && slide_area.isValid() && blank_mode_ == BlankMode::None &&
+        !deck_overview_visible_) {
+        const QRectF target(slide_area.left() + video_rect_.left() * slide_area.width(),
+                            slide_area.top() + video_rect_.top() * slide_area.height(),
+                            video_rect_.width() * slide_area.width(),
+                            video_rect_.height() * slide_area.height());
         update(target.toAlignedRect().adjusted(-1, -1, 1, 1));
         return;
     }
@@ -998,9 +1012,7 @@ void AudienceWindow::clear_video_overlay() {
     update();
 }
 
-void AudienceWindow::set_molecule_overlay(
-    const MoleculeGeometry& geometry,
-    QRectF slide_rect) {
+void AudienceWindow::set_molecule_overlay(const MoleculeGeometry& geometry, QRectF slide_rect) {
     if (!geometry.is_valid() || !slide_rect.isValid()) {
         clear_molecule_overlay();
         return;
@@ -1008,9 +1020,8 @@ void AudienceWindow::set_molecule_overlay(
 
     if (!molecule_widget_) {
         molecule_widget_ = std::make_unique<MoleculeWidget>(this);
-        molecule_widget_->set_context_menu_handler([this](const QPoint& global_position) {
-            show_feature_menu(global_position);
-        });
+        molecule_widget_->set_context_menu_handler(
+            [this](const QPoint& global_position) { show_feature_menu(global_position); });
     }
     if (molecule_suspended_for_feature_menu_) {
         molecule_snapshot_frame_ = {};
@@ -1029,9 +1040,8 @@ void AudienceWindow::clear_molecule_overlay() {
     }
 }
 
-void AudienceWindow::set_interactive_figure_overlay(
-    const InteractiveFigureDefinition& definition,
-    QRectF slide_rect) {
+void AudienceWindow::set_interactive_figure_overlay(const InteractiveFigureDefinition& definition,
+                                                    QRectF slide_rect) {
     if (!definition.is_valid() || !slide_rect.isValid()) {
         clear_interactive_figure_overlay();
         return;
@@ -1055,83 +1065,81 @@ void AudienceWindow::clear_interactive_figure_overlay() {
     }
 }
 
-void AudienceWindow::set_atomic_orbital_overlay(
-    const AtomicOrbitalDefinition& definition,
-    QRectF slide_rect) {
-  set_atomic_orbital_overlays({{definition, slide_rect}});
+void AudienceWindow::set_atomic_orbital_overlay(const AtomicOrbitalDefinition& definition,
+                                                QRectF slide_rect) {
+    set_atomic_orbital_overlays({{definition, slide_rect}});
 }
 
 void AudienceWindow::set_atomic_orbital_overlays(const QVector<AtomicOrbitalOverlay>& overlays,
                                                  const QVector<AtomicOrbitalDefinition>& nearby,
                                                  const QString& texture_key) {
-  clear_atomic_orbital_overlay();
-  atomic_orbital_slide_identity_ =
-      texture_key.isEmpty() ? QString() : texture_key.section(':', 0, 1);
-  QVector<AtomicOrbitalDefinition> visible;
-  size_t index = 0;
-  for (const auto& overlay : overlays) {
-    if (!overlay.definition.is_valid() || !overlay.slide_rect.isValid()) continue;
-    if (index == atomic_orbital_overlays_.size()) {
-      AtomicOrbitalOverlayState state;
-      state.widget = create_atomic_orbital_widget();
-      atomic_orbital_overlays_.push_back(std::move(state));
+    clear_atomic_orbital_overlay();
+    atomic_orbital_slide_identity_ =
+        texture_key.isEmpty() ? QString() : texture_key.section(':', 0, 1);
+    QVector<AtomicOrbitalDefinition> visible;
+    size_t index = 0;
+    for (const auto& overlay : overlays) {
+        if (!overlay.definition.is_valid() || !overlay.slide_rect.isValid()) continue;
+        if (index == atomic_orbital_overlays_.size()) {
+            AtomicOrbitalOverlayState state;
+            state.widget = create_atomic_orbital_widget();
+            atomic_orbital_overlays_.push_back(std::move(state));
+        }
+        auto& state = atomic_orbital_overlays_[index++];
+        state.slide_rect = overlay.slide_rect;
+        state.definition = overlay.definition;
+        state.geometry_key = atomic_orbital_geometry_key(overlay.definition);
+        visible.push_back(overlay.definition);
+        const auto volume = atomic_orbital_cache_->get(state.geometry_key);
+        if (volume.is_valid()) {
+            state.widget->set_prepared_definition(overlay.definition, volume);
+            state.ready = true;
+        }
     }
-    auto& state = atomic_orbital_overlays_[index++];
-    state.slide_rect = overlay.slide_rect;
-    state.definition = overlay.definition;
-    state.geometry_key = atomic_orbital_geometry_key(overlay.definition);
-    visible.push_back(overlay.definition);
-    const auto volume = atomic_orbital_cache_->get(state.geometry_key);
-    if (volume.is_valid()) {
-      state.widget->set_prepared_definition(overlay.definition, volume);
-      state.ready = true;
-    }
-  }
-  atomic_orbital_cache_->prepare(visible, nearby);
-  update_atomic_orbital_overlay_geometry();
-  update();
+    atomic_orbital_cache_->prepare(visible, nearby);
+    update_atomic_orbital_overlay_geometry();
+    update();
 }
 
 void AudienceWindow::clear_atomic_orbital_overlay() {
-  atomic_orbital_cache_->prepare({});
-  atomic_orbital_slide_identity_.clear();
-  for (auto& overlay : atomic_orbital_overlays_) {
-    overlay.slide_rect = {};
-    overlay.snapshot_frame = {};
-    overlay.ready = false;
-    overlay.geometry_key.clear();
-    overlay.widget->hide();
-  }
-  update();
+    atomic_orbital_cache_->prepare({});
+    atomic_orbital_slide_identity_.clear();
+    for (auto& overlay : atomic_orbital_overlays_) {
+        overlay.slide_rect = {};
+        overlay.snapshot_frame = {};
+        overlay.ready = false;
+        overlay.geometry_key.clear();
+        overlay.widget->hide();
+    }
+    update();
 }
 
-void AudienceWindow::set_molecular_symmetry_overlay(
-    const MolecularSymmetryDefinition& definition, QRectF slide_rect) {
-  if (!definition.is_valid() || !slide_rect.isValid()) {
-    clear_molecular_symmetry_overlay();
-    return;
-  }
-  if (!molecular_symmetry_widget_) {
-    molecular_symmetry_widget_ = std::make_unique<MolecularSymmetryWidget>(this);
-    molecular_symmetry_widget_->set_context_menu_handler(
-        [this](const QPoint& position) { show_feature_menu(position); });
-    if (auto* surface = dynamic_cast<MoleculeWidget*>(
-            molecular_symmetry_widget_->findChild<QWidget*>(
-                QStringLiteral("symmetryMoleculeOpenGLWidget")))) {
-      surface->installEventFilter(this);
+void AudienceWindow::set_molecular_symmetry_overlay(const MolecularSymmetryDefinition& definition,
+                                                    QRectF slide_rect) {
+    if (!definition.is_valid() || !slide_rect.isValid()) {
+        clear_molecular_symmetry_overlay();
+        return;
     }
-  }
-  molecular_symmetry_snapshot_frame_ = {};
-  molecular_symmetry_rect_ = slide_rect;
-  molecular_symmetry_widget_->set_definition(
-      definition, current_texture_key_.section(':', 0, 1));
-  update_molecular_symmetry_overlay_geometry();
+    if (!molecular_symmetry_widget_) {
+        molecular_symmetry_widget_ = std::make_unique<MolecularSymmetryWidget>(this);
+        molecular_symmetry_widget_->set_context_menu_handler(
+            [this](const QPoint& position) { show_feature_menu(position); });
+        if (auto* surface =
+                dynamic_cast<MoleculeWidget*>(molecular_symmetry_widget_->findChild<QWidget*>(
+                    QStringLiteral("symmetryMoleculeOpenGLWidget")))) {
+            surface->installEventFilter(this);
+        }
+    }
+    molecular_symmetry_snapshot_frame_ = {};
+    molecular_symmetry_rect_ = slide_rect;
+    molecular_symmetry_widget_->set_definition(definition, current_texture_key_.section(':', 0, 1));
+    update_molecular_symmetry_overlay_geometry();
 }
 
 void AudienceWindow::clear_molecular_symmetry_overlay() {
-  molecular_symmetry_rect_ = {};
-  molecular_symmetry_snapshot_frame_ = {};
-  if (molecular_symmetry_widget_) molecular_symmetry_widget_->hide();
+    molecular_symmetry_rect_ = {};
+    molecular_symmetry_snapshot_frame_ = {};
+    if (molecular_symmetry_widget_) molecular_symmetry_widget_->hide();
 }
 
 void AudienceWindow::set_audience_screen(QScreen* screen) {
@@ -1198,8 +1206,8 @@ void AudienceWindow::present_fullscreen_frame() {
         present_widget(overlay.widget.get());
     }
     if (molecular_symmetry_widget_ && molecular_symmetry_widget_->isVisible()) {
-        present_widget(dynamic_cast<MoleculeWidget*>(
-            molecular_symmetry_widget_->findChild<QWidget*>(
+        present_widget(
+            dynamic_cast<MoleculeWidget*>(molecular_symmetry_widget_->findChild<QWidget*>(
                 QStringLiteral("symmetryMoleculeOpenGLWidget"))));
         present_widget(molecular_symmetry_widget_.get());
     }
@@ -1403,7 +1411,8 @@ void AudienceWindow::clear_all_annotation_overlays() {
     update();
 }
 
-void AudienceWindow::set_annotation_overlays_by_texture_key(const QHash<QString, QImage>& overlays) {
+void AudienceWindow::set_annotation_overlays_by_texture_key(
+    const QHash<QString, QImage>& overlays) {
     annotation_images_ = overlays;
     emit annotation_overlay_changed(current_annotation_overlay_image());
     update();
@@ -1468,21 +1477,15 @@ qreal AudienceWindow::render_device_pixel_ratio() const {
     return devicePixelRatioF();
 }
 
-int AudienceWindow::pointer_size() const {
-    return pointer_size_;
-}
+int AudienceWindow::pointer_size() const { return pointer_size_; }
 
-bool AudienceWindow::is_pointer_visible() const {
-    return pointer_visible_;
-}
+bool AudienceWindow::is_pointer_visible() const { return pointer_visible_; }
 
 bool AudienceWindow::is_pointer_tool_selected() const {
     return interaction_tool_ == InteractionTool::Pointer;
 }
 
-bool AudienceWindow::is_deck_overview_visible() const {
-    return deck_overview_visible_;
-}
+bool AudienceWindow::is_deck_overview_visible() const { return deck_overview_visible_; }
 
 void AudienceWindow::closeEvent(QCloseEvent* event) {
     is_fullscreen_ = false;
@@ -1532,11 +1535,10 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
     painter.drawImage(slide_rect, current_slide_image_, image_source_rect(current_slide_image_));
 
     if (has_video_overlay_ && !video_frame_.isNull() && video_rect_.isValid()) {
-        const QRectF target(
-            slide_rect.left() + video_rect_.left() * slide_rect.width(),
-            slide_rect.top() + video_rect_.top() * slide_rect.height(),
-            video_rect_.width() * slide_rect.width(),
-            video_rect_.height() * slide_rect.height());
+        const QRectF target(slide_rect.left() + video_rect_.left() * slide_rect.width(),
+                            slide_rect.top() + video_rect_.top() * slide_rect.height(),
+                            video_rect_.width() * slide_rect.width(),
+                            video_rect_.height() * slide_rect.height());
         painter.drawImage(target, video_frame_, image_source_rect(video_frame_));
     }
 
@@ -1545,81 +1547,79 @@ void AudienceWindow::paintEvent(QPaintEvent* event) {
         painter.drawImage(slide_rect, *annotation, image_source_rect(*annotation));
     }
 
-    const bool molecule_is_interactive = molecule_widget_ && molecule_widget_->isVisible()
-        && interaction_tool_ == InteractionTool::Cursor
-        && !molecule_suspended_for_feature_menu_;
-    if (!molecule_is_interactive && !molecule_snapshot_frame_.isNull()
-        && molecule_rect_.isValid()) {
-        const QRectF target(
-            slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
-            slide_rect.top() + molecule_rect_.top() * slide_rect.height(),
-            molecule_rect_.width() * slide_rect.width(),
-            molecule_rect_.height() * slide_rect.height());
+    const bool molecule_is_interactive = molecule_widget_ && molecule_widget_->isVisible() &&
+                                         interaction_tool_ == InteractionTool::Cursor &&
+                                         !molecule_suspended_for_feature_menu_;
+    if (!molecule_is_interactive && !molecule_snapshot_frame_.isNull() &&
+        molecule_rect_.isValid()) {
+        const QRectF target(slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
+                            slide_rect.top() + molecule_rect_.top() * slide_rect.height(),
+                            molecule_rect_.width() * slide_rect.width(),
+                            molecule_rect_.height() * slide_rect.height());
         painter.drawImage(target, molecule_snapshot_frame_,
-            image_source_rect(molecule_snapshot_frame_));
+                          image_source_rect(molecule_snapshot_frame_));
     }
 
-    const bool figure_is_interactive = interactive_figure_widget_
-        && interactive_figure_widget_->isVisible()
-        && interaction_tool_ == InteractionTool::Cursor
-        && !interactive_figure_suspended_for_feature_menu_;
-    if (!figure_is_interactive && !interactive_figure_snapshot_frame_.isNull()
-        && interactive_figure_rect_.isValid()) {
+    const bool figure_is_interactive = interactive_figure_widget_ &&
+                                       interactive_figure_widget_->isVisible() &&
+                                       interaction_tool_ == InteractionTool::Cursor &&
+                                       !interactive_figure_suspended_for_feature_menu_;
+    if (!figure_is_interactive && !interactive_figure_snapshot_frame_.isNull() &&
+        interactive_figure_rect_.isValid()) {
         const QRectF target(
             slide_rect.left() + interactive_figure_rect_.left() * slide_rect.width(),
             slide_rect.top() + interactive_figure_rect_.top() * slide_rect.height(),
             interactive_figure_rect_.width() * slide_rect.width(),
             interactive_figure_rect_.height() * slide_rect.height());
         painter.drawImage(target, interactive_figure_snapshot_frame_,
-            image_source_rect(interactive_figure_snapshot_frame_));
+                          image_source_rect(interactive_figure_snapshot_frame_));
     }
 
     for (const auto& overlay : atomic_orbital_overlays_) {
-      const bool orbital_is_interactive = overlay.widget && overlay.widget->isVisible() &&
-                                          interaction_tool_ == InteractionTool::Cursor &&
-                                          !atomic_orbital_suspended_for_feature_menu_;
-      if (!orbital_is_interactive && !overlay.snapshot_frame.isNull() &&
-          overlay.slide_rect.isValid()) {
-        const QRectF target(slide_rect.left() + overlay.slide_rect.left() * slide_rect.width(),
-                            slide_rect.top() + overlay.slide_rect.top() * slide_rect.height(),
-                            overlay.slide_rect.width() * slide_rect.width(),
-                            overlay.slide_rect.height() * slide_rect.height());
-        painter.drawImage(target, overlay.snapshot_frame,
-                          image_source_rect(overlay.snapshot_frame));
-      }
+        const bool orbital_is_interactive = overlay.widget && overlay.widget->isVisible() &&
+                                            interaction_tool_ == InteractionTool::Cursor &&
+                                            !atomic_orbital_suspended_for_feature_menu_;
+        if (!orbital_is_interactive && !overlay.snapshot_frame.isNull() &&
+            overlay.slide_rect.isValid()) {
+            const QRectF target(slide_rect.left() + overlay.slide_rect.left() * slide_rect.width(),
+                                slide_rect.top() + overlay.slide_rect.top() * slide_rect.height(),
+                                overlay.slide_rect.width() * slide_rect.width(),
+                                overlay.slide_rect.height() * slide_rect.height());
+            painter.drawImage(target, overlay.snapshot_frame,
+                              image_source_rect(overlay.snapshot_frame));
+        }
     }
-    const bool symmetry_is_interactive = molecular_symmetry_widget_
-        && molecular_symmetry_widget_->isVisible()
-        && interaction_tool_ == InteractionTool::Cursor
-        && !molecular_symmetry_suspended_for_feature_menu_;
+    const bool symmetry_is_interactive = molecular_symmetry_widget_ &&
+                                         molecular_symmetry_widget_->isVisible() &&
+                                         interaction_tool_ == InteractionTool::Cursor &&
+                                         !molecular_symmetry_suspended_for_feature_menu_;
     if (symmetry_is_interactive && molecular_symmetry_rect_.isValid()) {
-      // The PDF contains a static fallback poster at this location. The live
-      // widget intentionally has transparent spacing, so blank the fallback
-      // first or its border pixels show through between child panels.
-      const QRectF target(
-          slide_rect.left() + molecular_symmetry_rect_.left() * slide_rect.width(),
-          slide_rect.top() + molecular_symmetry_rect_.top() * slide_rect.height(),
-          molecular_symmetry_rect_.width() * slide_rect.width(),
-          molecular_symmetry_rect_.height() * slide_rect.height());
-      painter.fillRect(target.adjusted(-1.0, -1.0, 1.0, 1.0), Qt::white);
+        // The PDF contains a static fallback poster at this location. The live
+        // widget intentionally has transparent spacing, so blank the fallback
+        // first or its border pixels show through between child panels.
+        const QRectF target(
+            slide_rect.left() + molecular_symmetry_rect_.left() * slide_rect.width(),
+            slide_rect.top() + molecular_symmetry_rect_.top() * slide_rect.height(),
+            molecular_symmetry_rect_.width() * slide_rect.width(),
+            molecular_symmetry_rect_.height() * slide_rect.height());
+        painter.fillRect(target.adjusted(-1.0, -1.0, 1.0, 1.0), Qt::white);
     }
-    if (!symmetry_is_interactive && !molecular_symmetry_snapshot_frame_.isNull()
-        && molecular_symmetry_rect_.isValid()) {
-      const QRectF target(
-          slide_rect.left() + molecular_symmetry_rect_.left() * slide_rect.width(),
-          slide_rect.top() + molecular_symmetry_rect_.top() * slide_rect.height(),
-          molecular_symmetry_rect_.width() * slide_rect.width(),
-          molecular_symmetry_rect_.height() * slide_rect.height());
-      painter.drawImage(target, molecular_symmetry_snapshot_frame_,
-                        image_source_rect(molecular_symmetry_snapshot_frame_));
+    if (!symmetry_is_interactive && !molecular_symmetry_snapshot_frame_.isNull() &&
+        molecular_symmetry_rect_.isValid()) {
+        const QRectF target(
+            slide_rect.left() + molecular_symmetry_rect_.left() * slide_rect.width(),
+            slide_rect.top() + molecular_symmetry_rect_.top() * slide_rect.height(),
+            molecular_symmetry_rect_.width() * slide_rect.width(),
+            molecular_symmetry_rect_.height() * slide_rect.height());
+        painter.drawImage(target, molecular_symmetry_snapshot_frame_,
+                          image_source_rect(molecular_symmetry_snapshot_frame_));
     }
 
     if (molecule_is_interactive && molecule_rect_.isValid()) {
-        const QRectF target(
-            slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
-            slide_rect.top() + molecule_rect_.top() * slide_rect.height(),
-            molecule_rect_.width() * slide_rect.width(),
-            molecule_rect_.height() * slide_rect.height());
+        const QRectF target(slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
+                            slide_rect.top() + molecule_rect_.top() * slide_rect.height(),
+                            molecule_rect_.width() * slide_rect.width(),
+                            molecule_rect_.height() * slide_rect.height());
         painter.save();
         painter.setRenderHint(QPainter::Antialiasing, false);
         painter.setBrush(Qt::NoBrush);
@@ -1755,11 +1755,11 @@ void AudienceWindow::keyPressEvent(QKeyEvent* event) {
 }
 
 bool AudienceWindow::eventFilter(QObject* watched, QEvent* event) {
-    if (molecular_symmetry_widget_ && event
-        && (event->type() == QEvent::Enter || event->type() == QEvent::MouseMove)) {
+    if (molecular_symmetry_widget_ && event &&
+        (event->type() == QEvent::Enter || event->type() == QEvent::MouseMove)) {
         auto* widget = qobject_cast<QWidget*>(watched);
-        if (widget && (widget == molecular_symmetry_widget_.get()
-                       || molecular_symmetry_widget_->isAncestorOf(widget))) {
+        if (widget && (widget == molecular_symmetry_widget_.get() ||
+                       molecular_symmetry_widget_->isAncestorOf(widget))) {
             show_cursor_temporarily();
         }
     }
@@ -1789,9 +1789,8 @@ void AudienceWindow::mouseMoveEvent(QMouseEvent* event) {
     }
 
     if (interaction_tool_ == InteractionTool::Eraser) {
-        const QRect previous_cursor = eraser_cursor_visible_
-            ? eraser_cursor_bounds(eraser_cursor_position_)
-            : QRect();
+        const QRect previous_cursor =
+            eraser_cursor_visible_ ? eraser_cursor_bounds(eraser_cursor_position_) : QRect();
         eraser_cursor_position_ = event->position();
         eraser_cursor_visible_ = true;
         if (is_annotating_ && (event->buttons() & Qt::LeftButton)) {
@@ -1830,14 +1829,13 @@ void AudienceWindow::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
-    if (event->button() == Qt::LeftButton
-        && (interaction_tool_ == InteractionTool::Pen || interaction_tool_ == InteractionTool::Eraser)) {
+    if (event->button() == Qt::LeftButton && (interaction_tool_ == InteractionTool::Pen ||
+                                              interaction_tool_ == InteractionTool::Eraser)) {
         is_annotating_ = true;
         last_annotation_point_ = event->position();
         if (interaction_tool_ == InteractionTool::Eraser) {
-            const QRect previous_cursor = eraser_cursor_visible_
-                ? eraser_cursor_bounds(eraser_cursor_position_)
-                : QRect();
+            const QRect previous_cursor =
+                eraser_cursor_visible_ ? eraser_cursor_bounds(eraser_cursor_position_) : QRect();
             eraser_cursor_position_ = event->position();
             eraser_cursor_visible_ = true;
             update(previous_cursor.united(eraser_cursor_bounds(eraser_cursor_position_)));
@@ -1893,8 +1891,8 @@ void AudienceWindow::wheelEvent(QWheelEvent* event) {
     const int delta_y = angle_delta_y != 0 ? angle_delta_y : pixel_delta_y;
     const int threshold = angle_delta_y != 0 ? 120 : 80;
     if (delta_y != 0 && page_count_ > 0 && blank_mode_ == BlankMode::None) {
-        if ((delta_y > 0 && slide_wheel_remainder_y_ < 0)
-            || (delta_y < 0 && slide_wheel_remainder_y_ > 0)) {
+        if ((delta_y > 0 && slide_wheel_remainder_y_ < 0) ||
+            (delta_y < 0 && slide_wheel_remainder_y_ > 0)) {
             slide_wheel_remainder_y_ = 0;
         }
 
@@ -1971,9 +1969,9 @@ void AudienceWindow::hide_cursor() {
 }
 
 bool AudienceWindow::molecular_symmetry_surface_is_active() const {
-    return molecular_symmetry_widget_ && molecular_symmetry_widget_->isVisible()
-        && interaction_tool_ == InteractionTool::Cursor
-        && !molecular_symmetry_suspended_for_feature_menu_;
+    return molecular_symmetry_widget_ && molecular_symmetry_widget_->isVisible() &&
+           interaction_tool_ == InteractionTool::Cursor &&
+           !molecular_symmetry_suspended_for_feature_menu_;
 }
 
 void AudienceWindow::update_cursor_appearance() {
@@ -2015,31 +2013,26 @@ QRectF AudienceWindow::slide_logical_rect(QSize texture_size) const {
     // size to within rounding, place it 1:1 on whole device pixels so QPainter can blit it
     // instead of resampling the full-resolution image on every paint.
     const qreal dpr = devicePixelRatioF();
-    if (std::abs(displayed_size.width() * dpr - texture_size.width()) <= 1.0
-        && std::abs(displayed_size.height() * dpr - texture_size.height()) <= 1.0) {
+    if (std::abs(displayed_size.width() * dpr - texture_size.width()) <= 1.0 &&
+        std::abs(displayed_size.height() * dpr - texture_size.height()) <= 1.0) {
         displayed_size = QSizeF(texture_size) / dpr;
-        return QRectF(
-            std::round((width() - displayed_size.width()) / 2.0 * dpr) / dpr,
-            std::round((height() - displayed_size.height()) / 2.0 * dpr) / dpr,
-            displayed_size.width(),
-            displayed_size.height());
+        return QRectF(std::round((width() - displayed_size.width()) / 2.0 * dpr) / dpr,
+                      std::round((height() - displayed_size.height()) / 2.0 * dpr) / dpr,
+                      displayed_size.width(), displayed_size.height());
     }
 
-    return QRectF(
-        (width() - displayed_size.width()) / 2.0,
-        (height() - displayed_size.height()) / 2.0,
-        displayed_size.width(),
-        displayed_size.height());
+    return QRectF((width() - displayed_size.width()) / 2.0,
+                  (height() - displayed_size.height()) / 2.0, displayed_size.width(),
+                  displayed_size.height());
 }
 
 void AudienceWindow::update_molecule_overlay_geometry() {
     if (!molecule_widget_) {
         return;
     }
-    if (molecule_suspended_for_feature_menu_ || !molecule_rect_.isValid()
-        || current_slide_image_.isNull()
-        || blank_mode_ != BlankMode::None || deck_overview_visible_
-        || interaction_tool_ != InteractionTool::Cursor) {
+    if (molecule_suspended_for_feature_menu_ || !molecule_rect_.isValid() ||
+        current_slide_image_.isNull() || blank_mode_ != BlankMode::None || deck_overview_visible_ ||
+        interaction_tool_ != InteractionTool::Cursor) {
         molecule_widget_->hide();
         return;
     }
@@ -2050,11 +2043,10 @@ void AudienceWindow::update_molecule_overlay_geometry() {
         return;
     }
 
-    const QRect target = QRectF(
-        slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
-        slide_rect.top() + molecule_rect_.top() * slide_rect.height(),
-        molecule_rect_.width() * slide_rect.width(),
-        molecule_rect_.height() * slide_rect.height())
+    const QRect target = QRectF(slide_rect.left() + molecule_rect_.left() * slide_rect.width(),
+                                slide_rect.top() + molecule_rect_.top() * slide_rect.height(),
+                                molecule_rect_.width() * slide_rect.width(),
+                                molecule_rect_.height() * slide_rect.height())
                              .toAlignedRect();
     if (target.width() < 2 || target.height() < 2) {
         molecule_widget_->hide();
@@ -2080,12 +2072,9 @@ void AudienceWindow::update_interactive_figure_overlay_geometry() {
     if (!interactive_figure_widget_) {
         return;
     }
-    if (interactive_figure_suspended_for_feature_menu_
-        || !interactive_figure_rect_.isValid()
-        || current_slide_image_.isNull()
-        || blank_mode_ != BlankMode::None
-        || deck_overview_visible_
-        || interaction_tool_ != InteractionTool::Cursor) {
+    if (interactive_figure_suspended_for_feature_menu_ || !interactive_figure_rect_.isValid() ||
+        current_slide_image_.isNull() || blank_mode_ != BlankMode::None || deck_overview_visible_ ||
+        interaction_tool_ != InteractionTool::Cursor) {
         interactive_figure_widget_->hide();
         return;
     }
@@ -2095,11 +2084,12 @@ void AudienceWindow::update_interactive_figure_overlay_geometry() {
         interactive_figure_widget_->hide();
         return;
     }
-    const QRect target = QRectF(
-        slide_rect.left() + interactive_figure_rect_.left() * slide_rect.width(),
-        slide_rect.top() + interactive_figure_rect_.top() * slide_rect.height(),
-        interactive_figure_rect_.width() * slide_rect.width(),
-        interactive_figure_rect_.height() * slide_rect.height()).toAlignedRect();
+    const QRect target =
+        QRectF(slide_rect.left() + interactive_figure_rect_.left() * slide_rect.width(),
+               slide_rect.top() + interactive_figure_rect_.top() * slide_rect.height(),
+               interactive_figure_rect_.width() * slide_rect.width(),
+               interactive_figure_rect_.height() * slide_rect.height())
+            .toAlignedRect();
     if (target.width() < 2 || target.height() < 2) {
         interactive_figure_widget_->hide();
         return;
@@ -2119,96 +2109,99 @@ void AudienceWindow::capture_interactive_figure_frame() {
 }
 
 void AudienceWindow::update_atomic_orbital_overlay_geometry() {
-  for (auto& overlay : atomic_orbital_overlays_) {
-    if (!overlay.ready ||
-        (!atomic_orbital_slide_identity_.isEmpty() &&
-         atomic_orbital_slide_identity_ != current_texture_key_.section(':', 0, 1)) ||
-        atomic_orbital_suspended_for_feature_menu_ || !overlay.slide_rect.isValid() ||
-        current_slide_image_.isNull() || blank_mode_ != BlankMode::None || deck_overview_visible_ ||
-        interaction_tool_ != InteractionTool::Cursor) {
-      overlay.widget->hide();
-      continue;
+    for (auto& overlay : atomic_orbital_overlays_) {
+        if (!overlay.ready ||
+            (!atomic_orbital_slide_identity_.isEmpty() &&
+             atomic_orbital_slide_identity_ != current_texture_key_.section(':', 0, 1)) ||
+            atomic_orbital_suspended_for_feature_menu_ || !overlay.slide_rect.isValid() ||
+            current_slide_image_.isNull() || blank_mode_ != BlankMode::None ||
+            deck_overview_visible_ || interaction_tool_ != InteractionTool::Cursor) {
+            overlay.widget->hide();
+            continue;
+        }
+        const QRectF slide_rect = slide_logical_rect(current_slide_image_.size());
+        if (!slide_rect.isValid()) {
+            overlay.widget->hide();
+            continue;
+        }
+        const QRect target =
+            QRectF(slide_rect.left() + overlay.slide_rect.left() * slide_rect.width(),
+                   slide_rect.top() + overlay.slide_rect.top() * slide_rect.height(),
+                   overlay.slide_rect.width() * slide_rect.width(),
+                   overlay.slide_rect.height() * slide_rect.height())
+                .toAlignedRect();
+        if (target.width() < 2 || target.height() < 2) {
+            overlay.widget->hide();
+            continue;
+        }
+        place_overlay_widget(overlay.widget.get(), target);
+        overlay.snapshot_frame = {};
     }
-    const QRectF slide_rect = slide_logical_rect(current_slide_image_.size());
-    if (!slide_rect.isValid()) {
-      overlay.widget->hide();
-      continue;
-    }
-    const QRect target = QRectF(slide_rect.left() + overlay.slide_rect.left() * slide_rect.width(),
-                                slide_rect.top() + overlay.slide_rect.top() * slide_rect.height(),
-                                overlay.slide_rect.width() * slide_rect.width(),
-                                overlay.slide_rect.height() * slide_rect.height())
-                             .toAlignedRect();
-    if (target.width() < 2 || target.height() < 2) {
-      overlay.widget->hide();
-      continue;
-    }
-    place_overlay_widget(overlay.widget.get(), target);
-    overlay.snapshot_frame = {};
-  }
 }
 
 void AudienceWindow::capture_atomic_orbital_frame() {
-  for (auto& overlay : atomic_orbital_overlays_) {
-    if (!overlay.widget->isVisible()) continue;
-    const QImage snapshot = overlay.widget->capture_frame();
-    if (!snapshot.isNull()) overlay.snapshot_frame = snapshot;
-  }
+    for (auto& overlay : atomic_orbital_overlays_) {
+        if (!overlay.widget->isVisible()) continue;
+        const QImage snapshot = overlay.widget->capture_frame();
+        if (!snapshot.isNull()) overlay.snapshot_frame = snapshot;
+    }
 }
 
 void AudienceWindow::update_molecular_symmetry_overlay_geometry() {
-  if (!molecular_symmetry_widget_) return;
-  if (molecular_symmetry_suspended_for_feature_menu_ || !molecular_symmetry_rect_.isValid()
-      || current_slide_image_.isNull() || blank_mode_ != BlankMode::None
-      || deck_overview_visible_ || interaction_tool_ != InteractionTool::Cursor) {
-    molecular_symmetry_widget_->hide();
-    return;
-  }
-  const QRectF slide_rect = slide_logical_rect(current_slide_image_.size());
-  if (!slide_rect.isValid()) {
-    molecular_symmetry_widget_->hide();
-    return;
-  }
-  const QRect target = QRectF(
-      slide_rect.left() + molecular_symmetry_rect_.left() * slide_rect.width(),
-      slide_rect.top() + molecular_symmetry_rect_.top() * slide_rect.height(),
-      molecular_symmetry_rect_.width() * slide_rect.width(),
-      molecular_symmetry_rect_.height() * slide_rect.height()).toAlignedRect();
-  if (target.width() < 2 || target.height() < 2) {
-    molecular_symmetry_widget_->hide();
-    return;
-  }
-  const bool newly_placed = place_overlay_widget(molecular_symmetry_widget_.get(), target);
-  molecular_symmetry_snapshot_frame_ = {};
-  // Reveal the cursor when the player appears, not on every repaint (that would keep
-  // restarting the hide timer, e.g. throughout video playback).
-  if (newly_placed) show_cursor_temporarily();
+    if (!molecular_symmetry_widget_) return;
+    if (molecular_symmetry_suspended_for_feature_menu_ || !molecular_symmetry_rect_.isValid() ||
+        current_slide_image_.isNull() || blank_mode_ != BlankMode::None || deck_overview_visible_ ||
+        interaction_tool_ != InteractionTool::Cursor) {
+        molecular_symmetry_widget_->hide();
+        return;
+    }
+    const QRectF slide_rect = slide_logical_rect(current_slide_image_.size());
+    if (!slide_rect.isValid()) {
+        molecular_symmetry_widget_->hide();
+        return;
+    }
+    const QRect target =
+        QRectF(slide_rect.left() + molecular_symmetry_rect_.left() * slide_rect.width(),
+               slide_rect.top() + molecular_symmetry_rect_.top() * slide_rect.height(),
+               molecular_symmetry_rect_.width() * slide_rect.width(),
+               molecular_symmetry_rect_.height() * slide_rect.height())
+            .toAlignedRect();
+    if (target.width() < 2 || target.height() < 2) {
+        molecular_symmetry_widget_->hide();
+        return;
+    }
+    const bool newly_placed = place_overlay_widget(molecular_symmetry_widget_.get(), target);
+    molecular_symmetry_snapshot_frame_ = {};
+    // Reveal the cursor when the player appears, not on every repaint (that would keep
+    // restarting the hide timer, e.g. throughout video playback).
+    if (newly_placed) show_cursor_temporarily();
 }
 
 bool AudienceWindow::place_overlay_widget(QWidget* widget, const QRect& target) {
-  const bool geometry_changed = widget->geometry() != target;
-  const bool was_hidden = widget->isHidden();
-  if (geometry_changed) widget->setGeometry(target);
-  if (was_hidden) widget->show();
-  if (geometry_changed || was_hidden) widget->raise();
-  return geometry_changed || was_hidden;
+    const bool geometry_changed = widget->geometry() != target;
+    const bool was_hidden = widget->isHidden();
+    if (geometry_changed) widget->setGeometry(target);
+    if (was_hidden) widget->show();
+    if (geometry_changed || was_hidden) widget->raise();
+    return geometry_changed || was_hidden;
 }
 
 void AudienceWindow::capture_molecular_symmetry_frame() {
-  if (!molecular_symmetry_widget_ || !molecular_symmetry_widget_->isVisible()) return;
-  const QImage snapshot = molecular_symmetry_widget_->capture_frame();
-  if (!snapshot.isNull()) molecular_symmetry_snapshot_frame_ = snapshot;
+    if (!molecular_symmetry_widget_ || !molecular_symmetry_widget_->isVisible()) return;
+    const QImage snapshot = molecular_symmetry_widget_->capture_frame();
+    if (!snapshot.isNull()) molecular_symmetry_snapshot_frame_ = snapshot;
 }
 
 std::unique_ptr<AtomicOrbitalWidget> AudienceWindow::create_atomic_orbital_widget() {
-  auto widget = std::make_unique<AtomicOrbitalWidget>(this);
-  widget->set_context_menu_handler(
-      [this](const QPoint& global_position) { show_feature_menu(global_position); });
-  widget->hide();
-  return widget;
+    auto widget = std::make_unique<AtomicOrbitalWidget>(this);
+    widget->set_context_menu_handler(
+        [this](const QPoint& global_position) { show_feature_menu(global_position); });
+    widget->hide();
+    return widget;
 }
 
-QPointF AudienceWindow::slide_image_point(QPointF window_point, QSize texture_size, bool* inside) const {
+QPointF AudienceWindow::slide_image_point(QPointF window_point, QSize texture_size,
+                                          bool* inside) const {
     const QRectF slide_rect = slide_logical_rect(texture_size);
     const bool contains = slide_rect.contains(window_point);
     if (inside) {
@@ -2272,9 +2265,7 @@ void AudienceWindow::draw_annotation_segment(QPointF from_window_point, QPointF 
     QPen pen(
         annotation_color_,
         interaction_tool_ == InteractionTool::Eraser ? eraser_thickness_ : annotation_thickness_,
-        Qt::SolidLine,
-        Qt::RoundCap,
-        Qt::RoundJoin);
+        Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
     if (interaction_tool_ == InteractionTool::Eraser) {
         painter.setCompositionMode(QPainter::CompositionMode_Clear);
         pen.setColor(Qt::transparent);
@@ -2299,12 +2290,11 @@ void AudienceWindow::draw_annotation_segment(QPointF from_window_point, QPointF 
     const QRectF slide_rect = slide_logical_rect(target_size);
     const qreal scale = slide_rect.width() / qreal(target_size.width());
     const qreal half_pen = pen.widthF() / 2.0 + 2.0;
-    const QRectF image_area = QRectF(from, to).normalized().adjusted(-half_pen, -half_pen, half_pen, half_pen);
-    const QRectF window_area(
-        slide_rect.left() + image_area.left() * scale,
-        slide_rect.top() + image_area.top() * scale,
-        image_area.width() * scale,
-        image_area.height() * scale);
+    const QRectF image_area =
+        QRectF(from, to).normalized().adjusted(-half_pen, -half_pen, half_pen, half_pen);
+    const QRectF window_area(slide_rect.left() + image_area.left() * scale,
+                             slide_rect.top() + image_area.top() * scale,
+                             image_area.width() * scale, image_area.height() * scale);
     update(window_area.toAlignedRect().adjusted(-2, -2, 2, 2));
 }
 
@@ -2370,17 +2360,15 @@ QRect AudienceWindow::eraser_cursor_bounds(const QPointF& position) const {
 }
 
 void AudienceWindow::draw_eraser_cursor(QPainter& painter) const {
-    if (!eraser_cursor_visible_ || interaction_tool_ != InteractionTool::Eraser || current_slide_image_.isNull()) {
+    if (!eraser_cursor_visible_ || interaction_tool_ != InteractionTool::Eraser ||
+        current_slide_image_.isNull()) {
         return;
     }
 
     const qreal diameter = eraser_logical_diameter();
     const qreal radius = diameter / 2.0;
-    const QRectF circle(
-        eraser_cursor_position_.x() - radius,
-        eraser_cursor_position_.y() - radius,
-        diameter,
-        diameter);
+    const QRectF circle(eraser_cursor_position_.x() - radius, eraser_cursor_position_.y() - radius,
+                        diameter, diameter);
 
     QColor fill(0x00, 0x8c, 0x8c, 36);
     QColor outline(Qt::white);
@@ -2432,7 +2420,8 @@ void AudienceWindow::enter_deck_overview() {
     const int vertical_spacing = std::max(16, viewport.height() / 36);
     const int row = std::max(0, current_page_index_) / kDeckOverviewColumns;
     const int focused_center_y = row * (tile_height + vertical_spacing) + tile_height / 2;
-    deck_overview_scroll_y_ = std::clamp(focused_center_y - viewport.height() / 2, 0, deck_overview_max_scroll_y());
+    deck_overview_scroll_y_ =
+        std::clamp(focused_center_y - viewport.height() / 2, 0, deck_overview_max_scroll_y());
 
     request_visible_deck_overview_renders();
     update();
@@ -2459,7 +2448,8 @@ void AudienceWindow::draw_deck_overview(QPainter& painter) {
     const int vertical_spacing = std::max(16, viewport.height() / 36);
     const int tile_width = slide_bounds.width();
     const int tile_height = slide_bounds.height() + kDeckOverviewFooterHeight;
-    const int grid_width = kDeckOverviewColumns * tile_width + (kDeckOverviewColumns - 1) * horizontal_spacing;
+    const int grid_width =
+        kDeckOverviewColumns * tile_width + (kDeckOverviewColumns - 1) * horizontal_spacing;
     const int left = grid_viewport.left() + std::max(0, (grid_viewport.width() - grid_width) / 2);
     deck_overview_scroll_y_ = std::clamp(deck_overview_scroll_y_, 0, deck_overview_max_scroll_y());
     const int top = viewport.top() - deck_overview_scroll_y_;
@@ -2471,21 +2461,21 @@ void AudienceWindow::draw_deck_overview(QPainter& painter) {
     for (int page = 0; page < page_count_; ++page) {
         const int row = page / kDeckOverviewColumns;
         const int column = page % kDeckOverviewColumns;
-        const QRect tile_rect(
-            left + column * (tile_width + horizontal_spacing),
-            top + row * (tile_height + vertical_spacing),
-            tile_width,
-            tile_height);
+        const QRect tile_rect(left + column * (tile_width + horizontal_spacing),
+                              top + row * (tile_height + vertical_spacing), tile_width,
+                              tile_height);
         if (!tile_rect.intersects(viewport)) {
             continue;
         }
 
-        const QRect slide_frame(tile_rect.left(), tile_rect.top(), tile_rect.width(), slide_bounds.height());
+        const QRect slide_frame(tile_rect.left(), tile_rect.top(), tile_rect.width(),
+                                slide_bounds.height());
         painter.fillRect(slide_frame, QColor(0x08, 0x08, 0x08));
 
         const QImage image = deck_overview_images_.value(page);
         if (!image.isNull()) {
-            const QRect image_rect = centered_rect_for_image(image.size(), slide_frame.adjusted(1, 1, -1, -1));
+            const QRect image_rect =
+                centered_rect_for_image(image.size(), slide_frame.adjusted(1, 1, -1, -1));
             painter.drawImage(image_rect, image);
         } else {
             painter.setPen(QColor(0x8a, 0x8a, 0x8a));
@@ -2493,30 +2483,40 @@ void AudienceWindow::draw_deck_overview(QPainter& painter) {
         }
 
         const bool is_selected = page == current_page_index_;
-        painter.setPen(QPen(is_selected ? QColor(0x00, 0xb3, 0xb3) : QColor(0x3a, 0x3a, 0x3a), is_selected ? 4 : 1));
+        painter.setPen(QPen(is_selected ? QColor(0x00, 0xb3, 0xb3) : QColor(0x3a, 0x3a, 0x3a),
+                            is_selected ? 4 : 1));
         painter.drawRect(slide_frame.adjusted(0, 0, -1, -1));
 
-        QRect number_rect(tile_rect.left(), slide_frame.bottom() + 5, tile_rect.width() - 2, kDeckOverviewFooterHeight - 5);
+        QRect number_rect(tile_rect.left(), slide_frame.bottom() + 5, tile_rect.width() - 2,
+                          kDeckOverviewFooterHeight - 5);
         painter.setPen(is_selected ? QColor(0xff, 0xff, 0xff) : QColor(0xb0, 0xb0, 0xb0));
         painter.drawText(number_rect, Qt::AlignRight | Qt::AlignVCenter, QString::number(page + 1));
     }
 
     if (deck_overview_max_scroll_y() > 0) {
-        const QRect track(viewport.right() - kDeckOverviewScrollTrackWidth, viewport.top(), kDeckOverviewScrollTrackWidth, viewport.height());
-        const qreal visible_fraction = qreal(viewport.height()) / qreal(deck_overview_content_height());
+        const QRect track(viewport.right() - kDeckOverviewScrollTrackWidth, viewport.top(),
+                          kDeckOverviewScrollTrackWidth, viewport.height());
+        const qreal visible_fraction =
+            qreal(viewport.height()) / qreal(deck_overview_content_height());
         const int handle_height = std::max(36, int(track.height() * visible_fraction));
-        const int handle_y = track.top() + int(qreal(track.height() - handle_height) * qreal(deck_overview_scroll_y_) / qreal(deck_overview_max_scroll_y()));
+        const int handle_y =
+            track.top() + int(qreal(track.height() - handle_height) *
+                              qreal(deck_overview_scroll_y_) / qreal(deck_overview_max_scroll_y()));
         painter.fillRect(track, QColor(0x2c, 0x2c, 0x2c));
-        painter.fillRect(QRect(track.left(), handle_y, kDeckOverviewScrollTrackWidth, handle_height), QColor(0x00, 0xb3, 0xb3));
+        painter.fillRect(
+            QRect(track.left(), handle_y, kDeckOverviewScrollTrackWidth, handle_height),
+            QColor(0x00, 0xb3, 0xb3));
     }
 
     painter.restore();
 }
 
 QSize AudienceWindow::deck_overview_thumbnail_bounding_pixel_size() const {
-    const QRect viewport = deck_overview_viewport_rect().adjusted(0, 0, -kDeckOverviewScrollbarGutter, 0);
+    const QRect viewport =
+        deck_overview_viewport_rect().adjusted(0, 0, -kDeckOverviewScrollbarGutter, 0);
     const int horizontal_spacing = std::max(14, viewport.width() / 70);
-    const int available_width = std::max(0, viewport.width() - (kDeckOverviewColumns - 1) * horizontal_spacing);
+    const int available_width =
+        std::max(0, viewport.width() - (kDeckOverviewColumns - 1) * horizontal_spacing);
     const int slide_width = std::max(96, available_width / kDeckOverviewColumns);
     const int slide_height = std::max(54, int(qreal(slide_width) * 9.0 / 16.0));
     return QSize(slide_width, slide_height);
@@ -2525,7 +2525,8 @@ QSize AudienceWindow::deck_overview_thumbnail_bounding_pixel_size() const {
 QRect AudienceWindow::deck_overview_viewport_rect() const {
     const int horizontal_margin = std::clamp(width() / 28, 28, 72);
     const int vertical_margin = std::clamp(height() / 24, 24, 64);
-    return rect().adjusted(horizontal_margin, vertical_margin, -horizontal_margin, -vertical_margin);
+    return rect().adjusted(horizontal_margin, vertical_margin, -horizontal_margin,
+                           -vertical_margin);
 }
 
 int AudienceWindow::deck_overview_content_height() const {
@@ -2537,7 +2538,8 @@ int AudienceWindow::deck_overview_content_height() const {
     const QSize slide_bounds = deck_overview_thumbnail_bounding_pixel_size();
     const int vertical_spacing = std::max(16, viewport.height() / 36);
     const int rows = (page_count_ + kDeckOverviewColumns - 1) / kDeckOverviewColumns;
-    return rows * (slide_bounds.height() + kDeckOverviewFooterHeight) + std::max(0, rows - 1) * vertical_spacing;
+    return rows * (slide_bounds.height() + kDeckOverviewFooterHeight) +
+           std::max(0, rows - 1) * vertical_spacing;
 }
 
 int AudienceWindow::deck_overview_max_scroll_y() const {
@@ -2555,16 +2557,10 @@ QPair<int, int> AudienceWindow::deck_overview_visible_page_range() const {
     const int row_stride = slide_bounds.height() + kDeckOverviewFooterHeight + vertical_spacing;
     const int first_row = std::max(0, deck_overview_scroll_y_ / row_stride);
     const int last_row = std::max(
-        first_row,
-        (deck_overview_scroll_y_ + std::max(0, viewport.height() - 1)) / row_stride);
-    const int first_page = std::clamp(
-        first_row * kDeckOverviewColumns,
-        0,
-        page_count_ - 1);
-    const int last_page = std::clamp(
-        (last_row + 1) * kDeckOverviewColumns - 1,
-        first_page,
-        page_count_ - 1);
+        first_row, (deck_overview_scroll_y_ + std::max(0, viewport.height() - 1)) / row_stride);
+    const int first_page = std::clamp(first_row * kDeckOverviewColumns, 0, page_count_ - 1);
+    const int last_page =
+        std::clamp((last_row + 1) * kDeckOverviewColumns - 1, first_page, page_count_ - 1);
     return {first_page, last_page};
 }
 
@@ -2574,11 +2570,9 @@ void AudienceWindow::request_visible_deck_overview_renders() {
     }
 
     const auto [first_visible_page, last_visible_page] = deck_overview_visible_page_range();
-    emit deck_overview_renders_requested(
-        deck_overview_thumbnail_bounding_pixel_size(),
-        current_page_index_,
-        first_visible_page,
-        last_visible_page);
+    emit deck_overview_renders_requested(deck_overview_thumbnail_bounding_pixel_size(),
+                                         current_page_index_, first_visible_page,
+                                         last_visible_page);
 }
 
 int AudienceWindow::deck_overview_page_at(const QPoint& position) const {
@@ -2597,7 +2591,8 @@ int AudienceWindow::deck_overview_page_at(const QPoint& position) const {
     const int vertical_spacing = std::max(16, viewport.height() / 36);
     const int tile_width = slide_bounds.width();
     const int tile_height = slide_bounds.height() + kDeckOverviewFooterHeight;
-    const int grid_width = kDeckOverviewColumns * tile_width + (kDeckOverviewColumns - 1) * horizontal_spacing;
+    const int grid_width =
+        kDeckOverviewColumns * tile_width + (kDeckOverviewColumns - 1) * horizontal_spacing;
     const int left = grid_viewport.left() + std::max(0, (grid_viewport.width() - grid_width) / 2);
     const int content_x = position.x() - left;
     const int content_y = position.y() - viewport.top() + deck_overview_scroll_y_;
@@ -2621,7 +2616,8 @@ int AudienceWindow::deck_overview_page_at(const QPoint& position) const {
 }
 
 void AudienceWindow::scroll_deck_overview_by(int delta_y) {
-    const int next_scroll_y = std::clamp(deck_overview_scroll_y_ + delta_y, 0, deck_overview_max_scroll_y());
+    const int next_scroll_y =
+        std::clamp(deck_overview_scroll_y_ + delta_y, 0, deck_overview_max_scroll_y());
     if (next_scroll_y == deck_overview_scroll_y_) {
         return;
     }
@@ -2699,7 +2695,8 @@ void AudienceWindow::show_feature_menu(const QPoint& global_position) {
 void AudienceWindow::save_annotated_slide_image() {
     const QImage image = current_annotated_slide_image();
     if (image.isNull()) {
-        QMessageBox::information(this, QStringLiteral("Save Annotated Slide"), QStringLiteral("No slide image is available to save."));
+        QMessageBox::information(this, QStringLiteral("Save Annotated Slide"),
+                                 QStringLiteral("No slide image is available to save."));
         return;
     }
 
@@ -2709,8 +2706,7 @@ void AudienceWindow::save_annotated_slide_image() {
     }
 
     const QString path = QFileDialog::getSaveFileName(
-        this,
-        QStringLiteral("Save Annotated Slide"),
+        this, QStringLiteral("Save Annotated Slide"),
         QDir(default_directory).filePath(QStringLiteral("annotated-slide.png")),
         QStringLiteral("PNG image (*.png);;JPEG image (*.jpg *.jpeg)"));
 
@@ -2719,7 +2715,9 @@ void AudienceWindow::save_annotated_slide_image() {
     }
 
     const QString suffix = QFileInfo(path).suffix().toLower();
-    const QByteArray format = (suffix == QStringLiteral("jpg") || suffix == QStringLiteral("jpeg")) ? QByteArrayLiteral("JPG") : QByteArrayLiteral("PNG");
+    const QByteArray format = (suffix == QStringLiteral("jpg") || suffix == QStringLiteral("jpeg"))
+                                  ? QByteArrayLiteral("JPG")
+                                  : QByteArrayLiteral("PNG");
     QImage output = image;
     if (format == QByteArrayLiteral("JPG")) {
         output = image.convertToFormat(QImage::Format_RGB888);

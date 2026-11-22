@@ -59,12 +59,9 @@ struct InteractiveFigureDefinition {
     bool loop = false;
     bool show_energy_reference = true;
     QVector<QColor> basis_colors = {
-        QColor(QStringLiteral("#2563eb")),
-        QColor(QStringLiteral("#0f766e")),
-        QColor(QStringLiteral("#b45309")),
-        QColor(QStringLiteral("#7c3aed")),
-        QColor(QStringLiteral("#be185d")),
-        QColor(QStringLiteral("#0369a1")),
+        QColor(QStringLiteral("#2563eb")), QColor(QStringLiteral("#0f766e")),
+        QColor(QStringLiteral("#b45309")), QColor(QStringLiteral("#7c3aed")),
+        QColor(QStringLiteral("#be185d")), QColor(QStringLiteral("#0369a1")),
     };
 
     // Particle-in-box and displaced-state basis expansions.
@@ -97,7 +94,5 @@ struct InteractiveFigureDefinition {
  * @param error_message Optional; receives the reason on failure and is cleared on success.
  * @return True when the payload is valid.
  */
-bool parse_interactive_figure(
-    const QByteArray& payload,
-    InteractiveFigureDefinition* definition,
-    QString* error_message = nullptr);
+bool parse_interactive_figure(const QByteArray& payload, InteractiveFigureDefinition* definition,
+                              QString* error_message = nullptr);

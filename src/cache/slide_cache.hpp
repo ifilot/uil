@@ -22,7 +22,8 @@ public:
      */
     explicit SlideCache(qint64 memory_limit_bytes = -1);
 
-    /** @brief Returns the default budget: 1/8 of physical memory within [128 MiB, 1 GiB] on Windows, 512 MiB elsewhere. */
+    /** @brief Returns the default budget: 1/8 of physical memory within [128 MiB, 1 GiB] on
+     * Windows, 512 MiB elsewhere. */
     static qint64 recommended_memory_limit_bytes();
 
     /** @brief Returns whether an image is cached for @p key. */

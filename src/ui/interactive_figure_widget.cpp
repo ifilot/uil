@@ -5,8 +5,8 @@
 #include "figure/particle_in_box_basis.hpp"
 
 #include <QContextMenuEvent>
-#include <QFrame>
 #include <QFontMetricsF>
+#include <QFrame>
 #include <QGridLayout>
 #include <QHideEvent>
 #include <QImage>
@@ -14,13 +14,13 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QStringList>
 #include <QSvgRenderer>
 #include <QTimer>
 #include <QVBoxLayout>
-#include <QShowEvent>
 
 #include <algorithm>
 #include <array>
@@ -49,14 +49,14 @@ int slider_position(double value, double minimum, double maximum) {
 
 /** @brief Returns whether @p kind is played back along the harmonic-oscillator time axis. */
 bool is_harmonic_time_figure(InteractiveFigureDefinition::Kind kind) {
-    return kind == InteractiveFigureDefinition::Kind::HarmonicBondWavepacket
-        || kind == InteractiveFigureDefinition::Kind::HarmonicBasisStates;
+    return kind == InteractiveFigureDefinition::Kind::HarmonicBondWavepacket ||
+           kind == InteractiveFigureDefinition::Kind::HarmonicBasisStates;
 }
 
 /** @brief Returns whether @p kind shows a truncated basis expansion selected by N. */
 bool is_basis_expansion_figure(InteractiveFigureDefinition::Kind kind) {
-    return kind == InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion
-        || kind == InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion;
+    return kind == InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion ||
+           kind == InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion;
 }
 
 /** @brief Returns whether @p kind expands a displaced oscillator ground state. */
@@ -70,16 +70,11 @@ QSizeF math_text_size(const QString& text, const QFont& font) {
 }
 
 /** @brief Draws a LaTeX-subset label aligned in @p bounds; GUI thread only (shared cache). */
-void draw_math_text(
-    QPainter& painter,
-    const QRectF& bounds,
-    const QString& text,
-    Qt::Alignment alignment,
-    const QFont& font,
-    const QColor& color) {
+void draw_math_text(QPainter& painter, const QRectF& bounds, const QString& text,
+                    Qt::Alignment alignment, const QFont& font, const QColor& color) {
     ui_math_text::draw(painter, bounds, text, alignment, font, color);
 }
-}
+}  // namespace
 
 /**
  * @brief Plot area of an interactive figure.
@@ -91,8 +86,7 @@ void draw_math_text(
 class InteractiveFigureWidget::PlotCanvas final : public QWidget {
 public:
     /** @brief Creates an empty, expanding canvas. */
-    explicit PlotCanvas(QWidget* parent = nullptr)
-        : QWidget(parent) {
+    explicit PlotCanvas(QWidget* parent = nullptr) : QWidget(parent) {
         setMinimumSize(240, 140);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     }
@@ -119,22 +113,41 @@ public:
     }
 
     /** @brief Sets the sine-wave amplitude and repaints. */
-    void set_amplitude(double value) { amplitude_ = value; update(); }
+    void set_amplitude(double value) {
+        amplitude_ = value;
+        update();
+    }
     /** @brief Sets the sine-wave angular wavenumber and repaints. */
-    void set_frequency(double value) { frequency_ = value; update(); }
+    void set_frequency(double value) {
+        frequency_ = value;
+        update();
+    }
     /** @brief Moves the sine wave by @p seconds of travel and repaints. */
     void advance_phase(double seconds) {
         phase_ = std::fmod(phase_ + kSinePhaseRadiansPerSecond * seconds, 2.0 * std::numbers::pi);
         update();
     }
     /** @brief Returns the sine wave to its initial phase and repaints. */
-    void reset_phase() { phase_ = 0.0; update(); }
+    void reset_phase() {
+        phase_ = 0.0;
+        update();
+    }
     /** @brief Sets the harmonic playback phase, in oscillation periods, and repaints. */
-    void set_harmonic_phase(double value) { harmonic_phase_ = value; update(); }
+    void set_harmonic_phase(double value) {
+        harmonic_phase_ = value;
+        update();
+    }
     /** @brief Sets the harmonic initial stretch and repaints. */
-    void set_stretch(double value) { stretch_ = value; update(); }
+    void set_stretch(double value) {
+        stretch_ = value;
+        update();
+    }
     /** @brief Selects the number of basis functions in the shown partial sum and repaints. */
-    void set_basis_count(int value) { basis_count_ = value; update(); }
+    void set_basis_count(int value) {
+        basis_count_ = value;
+        update();
+    }
+
 protected:
     /** @brief Paints the cached background and then the active figure kind. */
     void paintEvent(QPaintEvent*) override {
@@ -168,29 +181,25 @@ protected:
         const qreal right_margin = std::max(34, width() / 40);
         const qreal bottom_margin = std::clamp(height() / 6, 62, 120);
         const QRectF plot_rect = QRectF(rect()).adjusted(
-            left_margin,
-            title_top + title_height + 8.0,
-            -right_margin,
-            -bottom_margin);
+            left_margin, title_top + title_height + 8.0, -right_margin, -bottom_margin);
         if (!plot_rect.isValid()) {
             return;
         }
 
         painter.setPen(QColor(15, 23, 42));
         painter.setFont(title_font);
-        const QString displayed_title = title_metrics.elidedText(
-            definition_.title, Qt::ElideRight, std::max(0.0, width() - 32.0));
-        painter.drawText(
-            QRectF(16.0, title_top, width() - 32.0, title_height),
-            Qt::AlignHCenter | Qt::AlignVCenter,
-            displayed_title);
+        const QString displayed_title = title_metrics.elidedText(definition_.title, Qt::ElideRight,
+                                                                 std::max(0.0, width() - 32.0));
+        painter.drawText(QRectF(16.0, title_top, width() - 32.0, title_height),
+                         Qt::AlignHCenter | Qt::AlignVCenter, displayed_title);
 
         const auto map_point = [&](double x, double y) {
-            return QPointF(
-                plot_rect.left() + (x - definition_.x_min)
-                    / (definition_.x_max - definition_.x_min) * plot_rect.width(),
-                plot_rect.bottom() - (y - definition_.y_min)
-                    / (definition_.y_max - definition_.y_min) * plot_rect.height());
+            return QPointF(plot_rect.left() + (x - definition_.x_min) /
+                                                  (definition_.x_max - definition_.x_min) *
+                                                  plot_rect.width(),
+                           plot_rect.bottom() - (y - definition_.y_min) /
+                                                    (definition_.y_max - definition_.y_min) *
+                                                    plot_rect.height());
         };
 
         painter.save();
@@ -216,8 +225,8 @@ protected:
         QPainterPath curve;
         constexpr int kSamples = 600;
         for (int sample = 0; sample <= kSamples; ++sample) {
-            const double x = definition_.x_min
-                + (definition_.x_max - definition_.x_min) * sample / kSamples;
+            const double x =
+                definition_.x_min + (definition_.x_max - definition_.x_min) * sample / kSamples;
             const double y = amplitude_ * std::sin(frequency_ * x - phase_);
             const QPointF point = map_point(x, y);
             if (sample == 0) {
@@ -226,7 +235,8 @@ protected:
                 curve.lineTo(point);
             }
         }
-        painter.setPen(QPen(definition_.curve_color, 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setPen(
+            QPen(definition_.curve_color, 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter.drawPath(curve);
         painter.restore();
 
@@ -237,26 +247,22 @@ protected:
         painter.setPen(QColor(71, 85, 105));
         const QFontMetricsF tick_metrics(tick_font);
         for (int i = 0; i <= 8; ++i) {
-            const double value = definition_.x_min
-                + (definition_.x_max - definition_.x_min) * i / 8.0;
+            const double value =
+                definition_.x_min + (definition_.x_max - definition_.x_min) * i / 8.0;
             const QString text = QString::number(value, 'g', 3);
             const qreal x = plot_rect.left() + plot_rect.width() * i / 8.0;
             painter.drawText(
                 QRectF(x - 30.0, plot_rect.bottom() + 4.0, 60.0, tick_metrics.height()),
-                Qt::AlignHCenter | Qt::AlignTop,
-                text);
+                Qt::AlignHCenter | Qt::AlignTop, text);
         }
         for (int i = 0; i <= 4; ++i) {
-            const double value = definition_.y_max
-                - (definition_.y_max - definition_.y_min) * i / 4.0;
+            const double value =
+                definition_.y_max - (definition_.y_max - definition_.y_min) * i / 4.0;
             painter.drawText(
                 QRectF(27.0,
-                       plot_rect.top() + plot_rect.height() * i / 4.0
-                           - tick_metrics.height() / 2.0,
-                       plot_rect.left() - 39.0,
-                       tick_metrics.height()),
-                Qt::AlignRight | Qt::AlignVCenter,
-                QString::number(value, 'g', 3));
+                       plot_rect.top() + plot_rect.height() * i / 4.0 - tick_metrics.height() / 2.0,
+                       plot_rect.left() - 39.0, tick_metrics.height()),
+                Qt::AlignRight | Qt::AlignVCenter, QString::number(value, 'g', 3));
         }
 
         QFont axis_font = tick_font;
@@ -265,25 +271,17 @@ protected:
         const QFontMetricsF axis_metrics(axis_font);
         painter.setFont(axis_font);
         painter.setPen(QColor(30, 41, 59));
-        draw_math_text(
-            painter,
-            QRectF(plot_rect.left(), height() - axis_metrics.height() - 5.0,
-                   plot_rect.width(), axis_metrics.height()),
-            definition_.x_label,
-            Qt::AlignCenter,
-            axis_font,
-            QColor(30, 41, 59));
+        draw_math_text(painter,
+                       QRectF(plot_rect.left(), height() - axis_metrics.height() - 5.0,
+                              plot_rect.width(), axis_metrics.height()),
+                       definition_.x_label, Qt::AlignCenter, axis_font, QColor(30, 41, 59));
         painter.save();
         painter.translate(18.0, plot_rect.center().y());
         painter.rotate(-90.0);
-        draw_math_text(
-            painter,
-            QRectF(-plot_rect.height() / 2.0, -axis_metrics.height() / 2.0,
-                   plot_rect.height(), axis_metrics.height()),
-            definition_.y_label,
-            Qt::AlignCenter,
-            axis_font,
-            QColor(30, 41, 59));
+        draw_math_text(painter,
+                       QRectF(-plot_rect.height() / 2.0, -axis_metrics.height() / 2.0,
+                              plot_rect.height(), axis_metrics.height()),
+                       definition_.y_label, Qt::AlignCenter, axis_font, QColor(30, 41, 59));
         painter.restore();
     }
 
@@ -304,8 +302,8 @@ private:
             values.reserve(kSamples + 1);
             double maximum = 0.0;
             for (int i = 0; i <= kSamples; ++i) {
-                const double x = definition_.x_min
-                    + (definition_.x_max - definition_.x_min) * i / kSamples;
+                const double x =
+                    definition_.x_min + (definition_.x_max - definition_.x_min) * i / kSamples;
                 const double value = harmonic_basis_wavefunction(n, x);
                 values.push_back(value);
                 maximum = std::max(maximum, std::abs(value));
@@ -317,21 +315,17 @@ private:
     /** @brief Rasterizes the SVG background when the size or device-pixel ratio changed. */
     void ensure_background_cache() {
         const qreal device_pixel_ratio = devicePixelRatioF();
-        if (!background_cache_.isNull()
-            && background_cache_logical_size_ == size()
-            && qFuzzyCompare(background_cache_device_pixel_ratio_, device_pixel_ratio)) {
+        if (!background_cache_.isNull() && background_cache_logical_size_ == size() &&
+            qFuzzyCompare(background_cache_device_pixel_ratio_, device_pixel_ratio)) {
             return;
         }
-        const QSize pixel_size(
-            std::max(1, qCeil(width() * device_pixel_ratio)),
-            std::max(1, qCeil(height() * device_pixel_ratio)));
+        const QSize pixel_size(std::max(1, qCeil(width() * device_pixel_ratio)),
+                               std::max(1, qCeil(height() * device_pixel_ratio)));
         QImage image(pixel_size, QImage::Format_ARGB32_Premultiplied);
         image.setDevicePixelRatio(device_pixel_ratio);
         image.fill(Qt::transparent);
         QPainter background_painter(&image);
-        renderer_.render(
-            &background_painter,
-            QRectF(QPointF(0.0, 0.0), QSizeF(size())));
+        renderer_.render(&background_painter, QRectF(QPointF(0.0, 0.0), QSizeF(size())));
         background_cache_ = std::move(image);
         background_cache_logical_size_ = size();
         background_cache_device_pixel_ratio_ = device_pixel_ratio;
@@ -339,8 +333,8 @@ private:
 
     /** @brief Paints the potential with the wavepacket's mean position and its density. */
     void paint_harmonic_wavepacket(QPainter& painter) {
-        const HarmonicWavepacketObservation observation = evaluate_harmonic_wavepacket(
-            harmonic_phase_, stretch_);
+        const HarmonicWavepacketObservation observation =
+            evaluate_harmonic_wavepacket(harmonic_phase_, stretch_);
 
         QFont title_font = painter.font();
         title_font.setBold(true);
@@ -350,10 +344,8 @@ private:
         const qreal title_height = title_metrics.height() + 6.0;
         painter.setFont(title_font);
         painter.setPen(QColor(15, 23, 42));
-        painter.drawText(
-            QRectF(16.0, title_top, width() - 32.0, title_height),
-            Qt::AlignCenter,
-            title_metrics.elidedText(definition_.title, Qt::ElideRight, width() - 32));
+        painter.drawText(QRectF(16.0, title_top, width() - 32.0, title_height), Qt::AlignCenter,
+                         title_metrics.elidedText(definition_.title, Qt::ElideRight, width() - 32));
 
         const qreal left_margin = std::clamp(width() / 13, 90, 150);
         const qreal right_margin = std::max(34, width() / 35);
@@ -365,14 +357,13 @@ private:
             return;
         }
         const qreal plot_height = available_height / 2.0;
-        const QRectF upper(left_margin, plot_top,
-                           width() - left_margin - right_margin, plot_height);
-        const QRectF lower(left_margin, upper.bottom() + plot_gap,
-                           upper.width(), plot_height);
+        const QRectF upper(left_margin, plot_top, width() - left_margin - right_margin,
+                           plot_height);
+        const QRectF lower(left_margin, upper.bottom() + plot_gap, upper.width(), plot_height);
 
         const auto map_x = [&](double x) {
-            return upper.left() + (x - definition_.x_min)
-                / (definition_.x_max - definition_.x_min) * upper.width();
+            return upper.left() + (x - definition_.x_min) /
+                                      (definition_.x_max - definition_.x_min) * upper.width();
         };
         const auto map_upper_y = [&](double y) {
             return upper.bottom() - y / definition_.potential_y_max * upper.height();
@@ -406,8 +397,8 @@ private:
         QPainterPath potential;
         constexpr int kPotentialSamples = 500;
         for (int i = 0; i <= kPotentialSamples; ++i) {
-            const double x = definition_.x_min
-                + (definition_.x_max - definition_.x_min) * i / kPotentialSamples;
+            const double x =
+                definition_.x_min + (definition_.x_max - definition_.x_min) * i / kPotentialSamples;
             const QPointF point(map_x(x), map_upper_y(0.5 * x * x));
             i == 0 ? potential.moveTo(point) : potential.lineTo(point);
         }
@@ -439,7 +430,10 @@ private:
         QPainterPath outline;
         for (int i = 0; i < density.size(); ++i) {
             const QPointF point(map_x(density.at(i).x()), map_lower_y(density.at(i).y()));
-            if (i == 0) outline.moveTo(point); else outline.lineTo(point);
+            if (i == 0)
+                outline.moveTo(point);
+            else
+                outline.lineTo(point);
             fill.lineTo(point);
         }
         fill.lineTo(lower.right(), lower.bottom());
@@ -460,21 +454,19 @@ private:
         painter.setPen(QColor(71, 85, 105));
         const QFontMetricsF metrics(text_font);
         for (int i = 0; i <= 8; ++i) {
-            const double value = definition_.x_min
-                + (definition_.x_max - definition_.x_min) * i / 8.0;
+            const double value =
+                definition_.x_min + (definition_.x_max - definition_.x_min) * i / 8.0;
             const qreal x = lower.left() + lower.width() * i / 8.0;
             painter.drawText(QRectF(x - 28.0, lower.bottom() + 3.0, 56.0, metrics.height()),
-                             Qt::AlignHCenter | Qt::AlignTop,
-                             QString::number(value, 'g', 3));
+                             Qt::AlignHCenter | Qt::AlignTop, QString::number(value, 'g', 3));
         }
         const auto draw_y_ticks = [&](const QRectF& area, double maximum) {
             for (int i = 0; i <= 2; ++i) {
                 const double value = maximum * (2 - i) / 2.0;
                 const qreal y = area.top() + area.height() * i / 2.0;
-                painter.drawText(QRectF(31.0, y - metrics.height() / 2.0,
-                                        area.left() - 43.0, metrics.height()),
-                                 Qt::AlignRight | Qt::AlignVCenter,
-                                 QString::number(value, 'g', 3));
+                painter.drawText(
+                    QRectF(31.0, y - metrics.height() / 2.0, area.left() - 43.0, metrics.height()),
+                    Qt::AlignRight | Qt::AlignVCenter, QString::number(value, 'g', 3));
             }
         };
         draw_y_ticks(upper, definition_.potential_y_max);
@@ -486,26 +478,18 @@ private:
         const QFontMetricsF label_metrics(label_font);
         painter.setFont(label_font);
         painter.setPen(QColor(30, 41, 59));
-        draw_math_text(
-            painter,
-            QRectF(lower.left(), height() - label_metrics.height() - 8.0,
-                   lower.width(), label_metrics.height() + 4.0),
-            definition_.x_label,
-            Qt::AlignCenter,
-            label_font,
-            QColor(30, 41, 59));
+        draw_math_text(painter,
+                       QRectF(lower.left(), height() - label_metrics.height() - 8.0, lower.width(),
+                              label_metrics.height() + 4.0),
+                       definition_.x_label, Qt::AlignCenter, label_font, QColor(30, 41, 59));
         const auto draw_vertical_label = [&](const QRectF& area, const QString& label) {
             painter.save();
             painter.translate(18.0, area.center().y());
             painter.rotate(-90.0);
-            draw_math_text(
-                painter,
-                QRectF(-area.height() / 2.0, -label_metrics.height() / 2.0 - 2.0,
-                       area.height(), label_metrics.height() + 4.0),
-                label,
-                Qt::AlignCenter,
-                label_font,
-                QColor(30, 41, 59));
+            draw_math_text(painter,
+                           QRectF(-area.height() / 2.0, -label_metrics.height() / 2.0 - 2.0,
+                                  area.height(), label_metrics.height() + 4.0),
+                           label, Qt::AlignCenter, label_font, QColor(30, 41, 59));
             painter.restore();
         };
         draw_vertical_label(upper, definition_.potential_label);
@@ -513,12 +497,12 @@ private:
 
         painter.setFont(text_font);
         painter.setPen(QColor(51, 65, 85));
-        painter.drawText(QRectF(upper.left() + 7.0, upper.top() + 4.0,
-                                upper.width() - 14.0, metrics.height()),
-                         Qt::AlignLeft | Qt::AlignTop, QStringLiteral("Harmonic potential"));
-        painter.drawText(QRectF(lower.left() + 7.0, lower.top() + 4.0,
-                                lower.width() - 14.0, metrics.height()),
-                         Qt::AlignLeft | Qt::AlignTop, QStringLiteral("Probability density"));
+        painter.drawText(
+            QRectF(upper.left() + 7.0, upper.top() + 4.0, upper.width() - 14.0, metrics.height()),
+            Qt::AlignLeft | Qt::AlignTop, QStringLiteral("Harmonic potential"));
+        painter.drawText(
+            QRectF(lower.left() + 7.0, lower.top() + 4.0, lower.width() - 14.0, metrics.height()),
+            Qt::AlignLeft | Qt::AlignTop, QStringLiteral("Probability density"));
     }
 
     /** @brief Paints the coherent-state density above its six weighted basis components. */
@@ -532,8 +516,7 @@ private:
         const qreal title_height = title_metrics.height() + 6.0;
         painter.setFont(title_font);
         painter.setPen(QColor(15, 23, 42));
-        painter.drawText(QRectF(16.0, title_top, width() - 32.0, title_height),
-                         Qt::AlignCenter,
+        painter.drawText(QRectF(16.0, title_top, width() - 32.0, title_height), Qt::AlignCenter,
                          title_metrics.elidedText(definition_.title, Qt::ElideRight, width() - 32));
 
         const qreal left_margin = std::clamp(width() / 16, 70, 125);
@@ -560,8 +543,8 @@ private:
         painter.setFont(text_font);
 
         const auto map_x = [&](const QRectF& panel, double x) {
-            return panel.left() + (x - definition_.x_min)
-                / (definition_.x_max - definition_.x_min) * panel.width();
+            return panel.left() + (x - definition_.x_min) /
+                                      (definition_.x_max - definition_.x_min) * panel.width();
         };
 
         const auto draw_grid = [&](const QRectF& panel, bool centered_axis) {
@@ -582,8 +565,8 @@ private:
             }
         };
 
-        const HarmonicWavepacketObservation observation = evaluate_harmonic_wavepacket(
-            harmonic_phase_, stretch_);
+        const HarmonicWavepacketObservation observation =
+            evaluate_harmonic_wavepacket(harmonic_phase_, stretch_);
         painter.save();
         painter.setClipRect(coherent_panel);
         draw_grid(coherent_panel, false);
@@ -592,12 +575,16 @@ private:
         density_fill.moveTo(coherent_panel.left(), coherent_panel.bottom());
         constexpr int kSamples = 420;
         for (int i = 0; i <= kSamples; ++i) {
-            const double x = definition_.x_min
-                + (definition_.x_max - definition_.x_min) * i / kSamples;
+            const double x =
+                definition_.x_min + (definition_.x_max - definition_.x_min) * i / kSamples;
             const double density = harmonic_probability_density(x, observation.mean_position);
-            const QPointF point(map_x(coherent_panel, x), coherent_panel.bottom()
-                - density / definition_.density_y_max * coherent_panel.height());
-            if (i == 0) density_outline.moveTo(point); else density_outline.lineTo(point);
+            const QPointF point(map_x(coherent_panel, x),
+                                coherent_panel.bottom() -
+                                    density / definition_.density_y_max * coherent_panel.height());
+            if (i == 0)
+                density_outline.moveTo(point);
+            else
+                density_outline.lineTo(point);
             density_fill.lineTo(point);
         }
         density_fill.lineTo(coherent_panel.right(), coherent_panel.bottom());
@@ -612,19 +599,12 @@ private:
         painter.drawLine(QPointF(mean_x, coherent_panel.top()),
                          QPointF(mean_x, coherent_panel.bottom()));
         painter.restore();
-        const QRectF coherent_caption(
-            coherent_panel.left() + 5.0,
-            coherent_panel.top() + 4.0,
-            coherent_panel.width() - 10.0,
-            metrics.height() + 6.0);
-        draw_math_text(
-            painter,
-            coherent_caption.adjusted(5.0, 0.0, -5.0, 0.0),
-            QStringLiteral("$\\mathrm{Coherent-state density}\\quad X=%1\\ell$")
-                .arg(observation.mean_position, 0, 'f', 2),
-            Qt::AlignLeft | Qt::AlignVCenter,
-            text_font,
-            QColor(30, 41, 59));
+        const QRectF coherent_caption(coherent_panel.left() + 5.0, coherent_panel.top() + 4.0,
+                                      coherent_panel.width() - 10.0, metrics.height() + 6.0);
+        draw_math_text(painter, coherent_caption.adjusted(5.0, 0.0, -5.0, 0.0),
+                       QStringLiteral("$\\mathrm{Coherent-state density}\\quad X=%1\\ell$")
+                           .arg(observation.mean_position, 0, 'f', 2),
+                       Qt::AlignLeft | Qt::AlignVCenter, text_font, QColor(30, 41, 59));
 
         double component_limit = 0.0;
         std::array<double, kBasisCount> component_amplitudes{};
@@ -633,55 +613,46 @@ private:
         for (int n = 0; n < kBasisCount; ++n) {
             component_weights[n] = coherent_state_basis_weight(n, stretch_);
             component_amplitudes[n] = std::sqrt(component_weights[n]);
-            component_phase_factors[n] = std::cos(
-                2.0 * std::numbers::pi * n * harmonic_phase_);
-            component_limit = std::max(
-                component_limit,
-                component_amplitudes[n] * harmonic_basis_maxima_.value(n));
+            component_phase_factors[n] = std::cos(2.0 * std::numbers::pi * n * harmonic_phase_);
+            component_limit = std::max(component_limit,
+                                       component_amplitudes[n] * harmonic_basis_maxima_.value(n));
         }
         component_limit = std::max(0.08, component_limit * 1.12);
 
         for (int n = 0; n < kBasisCount; ++n) {
             const int row = n / 3;
             const int column = n % 3;
-            const QRectF panel(
-                left_margin + column * (component_width + column_gap),
-                grid_top + row * (component_height + row_gap),
-                component_width,
-                component_height);
+            const QRectF panel(left_margin + column * (component_width + column_gap),
+                               grid_top + row * (component_height + row_gap), component_width,
+                               component_height);
             painter.save();
             painter.setClipRect(panel);
             draw_grid(panel, true);
             QPainterPath outline;
             for (int i = 0; i <= kSamples; ++i) {
-                const double component = component_amplitudes[n]
-                    * harmonic_basis_samples_.value(n).value(i)
-                    * component_phase_factors[n];
+                const double component = component_amplitudes[n] *
+                                         harmonic_basis_samples_.value(n).value(i) *
+                                         component_phase_factors[n];
                 const QPointF point(
                     panel.left() + panel.width() * i / kSamples,
-                    panel.center().y()
-                    - component / component_limit * panel.height() / 2.0);
-                if (i == 0) outline.moveTo(point); else outline.lineTo(point);
+                    panel.center().y() - component / component_limit * panel.height() / 2.0);
+                if (i == 0)
+                    outline.moveTo(point);
+                else
+                    outline.lineTo(point);
             }
             QColor color = definition_.basis_colors.value(n, definition_.density_color);
             painter.setPen(QPen(color, 2.0));
             painter.drawPath(outline);
             painter.restore();
 
-            const QRectF component_caption(
-                panel.left() + 4.0,
-                panel.top() + 3.0,
-                panel.width() - 8.0,
-                metrics.height() + 5.0);
-            draw_math_text(
-                painter,
-                component_caption.adjusted(4.0, 0.0, -4.0, 0.0),
-                QStringLiteral("$n=%1\\quad |c_{%1}|^2=%2%$")
-                    .arg(n)
-                    .arg(100.0 * component_weights[n], 0, 'f', 1),
-                Qt::AlignLeft | Qt::AlignVCenter,
-                text_font,
-                QColor(30, 41, 59));
+            const QRectF component_caption(panel.left() + 4.0, panel.top() + 3.0,
+                                           panel.width() - 8.0, metrics.height() + 5.0);
+            draw_math_text(painter, component_caption.adjusted(4.0, 0.0, -4.0, 0.0),
+                           QStringLiteral("$n=%1\\quad |c_{%1}|^2=%2%$")
+                               .arg(n)
+                               .arg(100.0 * component_weights[n], 0, 'f', 1),
+                           Qt::AlignLeft | Qt::AlignVCenter, text_font, QColor(30, 41, 59));
         }
 
         const QRectF bottom_left(left_margin, grid_top + component_height + row_gap,
@@ -689,17 +660,14 @@ private:
         painter.setFont(text_font);
         painter.setPen(QColor(71, 85, 105));
         for (int column = 0; column < 3; ++column) {
-            const QRectF panel(
-                left_margin + column * (component_width + column_gap),
-                bottom_left.top(), component_width, component_height);
+            const QRectF panel(left_margin + column * (component_width + column_gap),
+                               bottom_left.top(), component_width, component_height);
             for (int i = 0; i <= 2; ++i) {
-            const double value = definition_.x_min
-                    + (definition_.x_max - definition_.x_min) * i / 2.0;
+                const double value =
+                    definition_.x_min + (definition_.x_max - definition_.x_min) * i / 2.0;
                 const qreal x = panel.left() + panel.width() * i / 2.0;
-                painter.drawText(
-                    QRectF(x - 22.0, panel.bottom() + 1.0, 44.0, metrics.height()),
-                    Qt::AlignHCenter | Qt::AlignTop,
-                    QString::number(value, 'g', 3));
+                painter.drawText(QRectF(x - 22.0, panel.bottom() + 1.0, 44.0, metrics.height()),
+                                 Qt::AlignHCenter | Qt::AlignTop, QString::number(value, 'g', 3));
             }
         }
         QFont label_font = text_font;
@@ -708,26 +676,19 @@ private:
         const QFontMetricsF label_metrics(label_font);
         painter.setFont(label_font);
         painter.setPen(QColor(30, 41, 59));
-        draw_math_text(
-            painter,
-            QRectF(left_margin, height() - label_metrics.height() - 7.0,
-                   full_width, label_metrics.height() + 4.0),
-            definition_.x_label,
-            Qt::AlignCenter,
-            label_font,
-            QColor(30, 41, 59));
+        draw_math_text(painter,
+                       QRectF(left_margin, height() - label_metrics.height() - 7.0, full_width,
+                              label_metrics.height() + 4.0),
+                       definition_.x_label, Qt::AlignCenter, label_font, QColor(30, 41, 59));
         painter.save();
         painter.translate(17.0, grid_top + component_height + row_gap / 2.0);
         painter.rotate(-90.0);
         draw_math_text(
             painter,
-            QRectF(-(2.0 * component_height + row_gap) / 2.0,
-                   -label_metrics.height() / 2.0 - 2.0,
+            QRectF(-(2.0 * component_height + row_gap) / 2.0, -label_metrics.height() / 2.0 - 2.0,
                    2.0 * component_height + row_gap, label_metrics.height() + 4.0),
-            QStringLiteral("$\\mathrm{Re}[c_n \\psi_n(x)e^{-in\\omega t}]$"),
-            Qt::AlignCenter,
-            label_font,
-            QColor(30, 41, 59));
+            QStringLiteral("$\\mathrm{Re}[c_n \\psi_n(x)e^{-in\\omega t}]$"), Qt::AlignCenter,
+            label_font, QColor(30, 41, 59));
         painter.restore();
     }
 
@@ -750,8 +711,7 @@ private:
         constexpr int kSampleCount = 1001;
         basis_partial_sum_samples_.resize(definition_.basis_count_max + 1);
         basis_captured_fractions_.resize(definition_.basis_count_max + 1);
-        for (int count = definition_.basis_count_min;
-             count <= definition_.basis_count_max;
+        for (int count = definition_.basis_count_min; count <= definition_.basis_count_max;
              ++count) {
             basis_partial_sum_samples_[count].reserve(kSampleCount);
         }
@@ -760,25 +720,23 @@ private:
             coefficients.reserve(definition_.basis_count_max);
             double captured = 0.0;
             for (int n = 0; n < definition_.basis_count_max; ++n) {
-                const double coefficient = harmonic_displaced_state_coefficient(
-                    n, definition_.displacement);
+                const double coefficient =
+                    harmonic_displaced_state_coefficient(n, definition_.displacement);
                 coefficients.push_back(coefficient);
                 captured += coefficient * coefficient;
                 basis_captured_fractions_[n + 1] = std::clamp(captured, 0.0, 1.0);
             }
             basis_target_samples_.reserve(kSampleCount);
             for (int i = 0; i < kSampleCount; ++i) {
-                const double x = definition_.x_min
-                    + (definition_.x_max - definition_.x_min) * i
-                        / double(kSampleCount - 1);
-                basis_target_samples_.push_back(QPointF(
-                    x, harmonic_displaced_ground_state(x, definition_.displacement)));
+                const double x = definition_.x_min + (definition_.x_max - definition_.x_min) * i /
+                                                         double(kSampleCount - 1);
+                basis_target_samples_.push_back(
+                    QPointF(x, harmonic_displaced_ground_state(x, definition_.displacement)));
                 double partial_sum = 0.0;
                 for (int n = 0; n < definition_.basis_count_max; ++n) {
                     partial_sum += coefficients.at(n) * harmonic_basis_wavefunction(n, x);
                     if (n + 1 >= definition_.basis_count_min) {
-                        basis_partial_sum_samples_[n + 1].push_back(
-                            QPointF(x, partial_sum));
+                        basis_partial_sum_samples_[n + 1].push_back(QPointF(x, partial_sum));
                     }
                 }
             }
@@ -799,18 +757,17 @@ private:
                 n, definition_.step_position, definition_.step_height);
             coefficients.push_back(coefficient);
             captured += coefficient * coefficient;
-            basis_captured_fractions_[n] = std::clamp(
-                0.5 * captured / (definition_.step_height * definition_.step_height
-                                  * (1.0 - definition_.step_position)),
-                0.0,
-                1.0);
+            basis_captured_fractions_[n] =
+                std::clamp(0.5 * captured /
+                               (definition_.step_height * definition_.step_height *
+                                (1.0 - definition_.step_position)),
+                           0.0, 1.0);
         }
         for (int i = 0; i < kSampleCount; ++i) {
             const double x = i / double(kSampleCount - 1);
             double partial_sum = 0.0;
             for (int n = 1; n <= definition_.basis_count_max; ++n) {
-                partial_sum += coefficients.at(n - 1)
-                    * std::sin(n * std::numbers::pi * x);
+                partial_sum += coefficients.at(n - 1) * std::sin(n * std::numbers::pi * x);
                 if (n >= definition_.basis_count_min) {
                     basis_partial_sum_samples_[n].push_back(QPointF(x, partial_sum));
                 }
@@ -820,16 +777,17 @@ private:
 
     /** @brief Maps the cached samples to screen-space paths when @p plot_rect changed. */
     void ensure_basis_screen_path_cache(const QRectF& plot_rect) {
-        if (basis_cached_plot_rect_ == plot_rect
-            && basis_screen_paths_.size() == basis_partial_sum_samples_.size()) {
+        if (basis_cached_plot_rect_ == plot_rect &&
+            basis_screen_paths_.size() == basis_partial_sum_samples_.size()) {
             return;
         }
         const auto map_point = [&](const QPointF& point) {
-            return QPointF(
-                plot_rect.left() + (point.x() - definition_.x_min)
-                    / (definition_.x_max - definition_.x_min) * plot_rect.width(),
-                plot_rect.bottom() - (point.y() - definition_.y_min)
-                    / (definition_.y_max - definition_.y_min) * plot_rect.height());
+            return QPointF(plot_rect.left() + (point.x() - definition_.x_min) /
+                                                  (definition_.x_max - definition_.x_min) *
+                                                  plot_rect.width(),
+                           plot_rect.bottom() - (point.y() - definition_.y_min) /
+                                                    (definition_.y_max - definition_.y_min) *
+                                                    plot_rect.height());
         };
         const auto make_path = [&](const QVector<QPointF>& samples) {
             QPainterPath path;
@@ -860,29 +818,25 @@ private:
         const qreal title_height = title_metrics.height() + 8.0;
         painter.setFont(title_font);
         painter.setPen(QColor(15, 23, 42));
-        painter.drawText(
-            QRectF(16.0, title_top, width() - 32.0, title_height),
-            Qt::AlignCenter,
-            title_metrics.elidedText(definition_.title, Qt::ElideRight, width() - 32));
+        painter.drawText(QRectF(16.0, title_top, width() - 32.0, title_height), Qt::AlignCenter,
+                         title_metrics.elidedText(definition_.title, Qt::ElideRight, width() - 32));
 
         const qreal left_margin = std::clamp(width() / 14, 90, 150);
         const qreal right_margin = std::max(30, width() / 38);
         const qreal bottom_margin = std::clamp(height() / 6, 75, 140);
         const QRectF plot_rect = QRectF(rect()).adjusted(
-            left_margin,
-            title_top + title_height + 9.0,
-            -right_margin,
-            -bottom_margin);
+            left_margin, title_top + title_height + 9.0, -right_margin, -bottom_margin);
         if (!plot_rect.isValid()) {
             return;
         }
 
         const auto map_point = [&](double x, double y) {
-            return QPointF(
-                plot_rect.left() + (x - definition_.x_min)
-                    / (definition_.x_max - definition_.x_min) * plot_rect.width(),
-                plot_rect.bottom() - (y - definition_.y_min)
-                    / (definition_.y_max - definition_.y_min) * plot_rect.height());
+            return QPointF(plot_rect.left() + (x - definition_.x_min) /
+                                                  (definition_.x_max - definition_.x_min) *
+                                                  plot_rect.width(),
+                           plot_rect.bottom() - (y - definition_.y_min) /
+                                                    (definition_.y_max - definition_.y_min) *
+                                                    plot_rect.height());
         };
 
         ensure_basis_screen_path_cache(plot_rect);
@@ -902,15 +856,13 @@ private:
         painter.setPen(QPen(QColor(71, 85, 105), 1.2));
         painter.drawRect(plot_rect);
         if (definition_.y_min <= 0.0 && definition_.y_max >= 0.0) {
-            painter.drawLine(
-                map_point(definition_.x_min, 0.0),
-                map_point(definition_.x_max, 0.0));
+            painter.drawLine(map_point(definition_.x_min, 0.0), map_point(definition_.x_max, 0.0));
         }
 
         painter.setPen(QPen(definition_.target_color, 2.2, Qt::DashLine));
         painter.drawPath(basis_target_screen_path_);
-        painter.setPen(QPen(
-            definition_.approximation_color, 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setPen(
+            QPen(definition_.approximation_color, 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         if (basis_count_ >= 0 && basis_count_ < basis_screen_paths_.size()) {
             painter.drawPath(basis_screen_paths_.at(basis_count_));
         }
@@ -925,35 +877,29 @@ private:
         QStringList x_tick_labels;
         if (harmonic_expansion) {
             for (int i = 0; i <= x_divisions; ++i) {
-                const double value = definition_.x_min
-                    + (definition_.x_max - definition_.x_min) * i / x_divisions;
+                const double value =
+                    definition_.x_min + (definition_.x_max - definition_.x_min) * i / x_divisions;
                 x_tick_labels.push_back(QString::number(value, 'g', 3));
             }
         } else {
-            x_tick_labels = {
-                QStringLiteral("0"), QStringLiteral("L/4"), QStringLiteral("L/2"),
-                QStringLiteral("3L/4"), QStringLiteral("L")};
+            x_tick_labels = {QStringLiteral("0"), QStringLiteral("L/4"), QStringLiteral("L/2"),
+                             QStringLiteral("3L/4"), QStringLiteral("L")};
         }
         for (int i = 0; i <= x_divisions; ++i) {
             const qreal x = plot_rect.left() + plot_rect.width() * i / x_divisions;
             draw_math_text(
                 painter,
-                QRectF(x - 46.0, plot_rect.bottom() + 5.0,
-                       92.0, tick_metrics.height() + 8.0),
-                x_tick_labels.at(i),
-                Qt::AlignHCenter | Qt::AlignTop,
-                tick_font,
+                QRectF(x - 46.0, plot_rect.bottom() + 5.0, 92.0, tick_metrics.height() + 8.0),
+                x_tick_labels.at(i), Qt::AlignHCenter | Qt::AlignTop, tick_font,
                 QColor(71, 85, 105));
         }
         for (int i = 0; i <= 4; ++i) {
-            const double value = definition_.y_max
-                - (definition_.y_max - definition_.y_min) * i / 4.0;
+            const double value =
+                definition_.y_max - (definition_.y_max - definition_.y_min) * i / 4.0;
             const qreal y = plot_rect.top() + plot_rect.height() * i / 4.0;
-            painter.drawText(
-                QRectF(24.0, y - tick_metrics.height() / 2.0,
-                       plot_rect.left() - 36.0, tick_metrics.height()),
-                Qt::AlignRight | Qt::AlignVCenter,
-                QString::number(value, 'g', 3));
+            painter.drawText(QRectF(24.0, y - tick_metrics.height() / 2.0, plot_rect.left() - 36.0,
+                                    tick_metrics.height()),
+                             Qt::AlignRight | Qt::AlignVCenter, QString::number(value, 'g', 3));
         }
 
         QFont label_font = tick_font;
@@ -965,23 +911,15 @@ private:
         draw_math_text(
             painter,
             QRectF(plot_rect.left(), plot_rect.bottom() + tick_metrics.height() + 15.0,
-                   plot_rect.width(),
-                   height() - plot_rect.bottom() - tick_metrics.height() - 23.0),
-            definition_.x_label,
-            Qt::AlignCenter,
-            label_font,
-            QColor(30, 41, 59));
+                   plot_rect.width(), height() - plot_rect.bottom() - tick_metrics.height() - 23.0),
+            definition_.x_label, Qt::AlignCenter, label_font, QColor(30, 41, 59));
         painter.save();
         painter.translate(18.0, plot_rect.center().y());
         painter.rotate(-90.0);
-        draw_math_text(
-            painter,
-            QRectF(-plot_rect.height() / 2.0, -label_metrics.height() / 2.0,
-                   plot_rect.height(), label_metrics.height() + 2.0),
-            definition_.y_label,
-            Qt::AlignCenter,
-            label_font,
-            QColor(30, 41, 59));
+        draw_math_text(painter,
+                       QRectF(-plot_rect.height() / 2.0, -label_metrics.height() / 2.0,
+                              plot_rect.height(), label_metrics.height() + 2.0),
+                       definition_.y_label, Qt::AlignCenter, label_font, QColor(30, 41, 59));
         painter.restore();
 
         const qreal legend_left = plot_rect.left() + 12.0;
@@ -990,68 +928,43 @@ private:
         painter.setPen(QPen(definition_.target_color, 2.2, Qt::DashLine));
         painter.drawLine(QPointF(legend_left, legend_top + legend_row_height / 2.0),
                          QPointF(legend_left + 40.0, legend_top + legend_row_height / 2.0));
-        draw_math_text(
-            painter,
-            QRectF(legend_left + 50.0, legend_top, 300.0, legend_row_height),
-            harmonic_expansion
-                ? QStringLiteral("$\\mathrm{target}\\quad \\Phi(y)$")
-                : QStringLiteral("target f(x)"),
-            Qt::AlignLeft | Qt::AlignVCenter,
-            tick_font,
-            QColor(51, 65, 85));
+        draw_math_text(painter, QRectF(legend_left + 50.0, legend_top, 300.0, legend_row_height),
+                       harmonic_expansion ? QStringLiteral("$\\mathrm{target}\\quad \\Phi(y)$")
+                                          : QStringLiteral("target f(x)"),
+                       Qt::AlignLeft | Qt::AlignVCenter, tick_font, QColor(51, 65, 85));
         painter.setPen(QPen(definition_.approximation_color, 3.0));
-        painter.drawLine(
-            QPointF(legend_left, legend_top + 1.5 * legend_row_height),
-            QPointF(legend_left + 40.0, legend_top + 1.5 * legend_row_height));
+        painter.drawLine(QPointF(legend_left, legend_top + 1.5 * legend_row_height),
+                         QPointF(legend_left + 40.0, legend_top + 1.5 * legend_row_height));
         draw_math_text(
             painter,
-            QRectF(legend_left + 50.0, legend_top + legend_row_height,
-                   300.0, legend_row_height),
-            harmonic_expansion
-                ? QStringLiteral("$S_{%1}(y)$").arg(basis_count_)
-                : QStringLiteral("$S_{%1}(x)$").arg(basis_count_),
-            Qt::AlignLeft | Qt::AlignVCenter,
-            tick_font,
-            QColor(51, 65, 85));
+            QRectF(legend_left + 50.0, legend_top + legend_row_height, 300.0, legend_row_height),
+            harmonic_expansion ? QStringLiteral("$S_{%1}(y)$").arg(basis_count_)
+                               : QStringLiteral("$S_{%1}(x)$").arg(basis_count_),
+            Qt::AlignLeft | Qt::AlignVCenter, tick_font, QColor(51, 65, 85));
 
-        const double percentage = basis_count_ >= 0
-                && basis_count_ < basis_captured_fractions_.size()
-            ? 100.0 * basis_captured_fractions_.at(basis_count_)
-            : 0.0;
+        const double percentage =
+            basis_count_ >= 0 && basis_count_ < basis_captured_fractions_.size()
+                ? 100.0 * basis_captured_fractions_.at(basis_count_)
+                : 0.0;
         QFont percentage_font = label_font;
         percentage_font.setPixelSize(std::clamp(height() / 20, 24, 44));
         const QString basis_text = QStringLiteral("$N = %1$").arg(basis_count_);
         const QString fit_text = QStringLiteral("$%1% \\mathrm{fit}$")
-            .arg(percentage, 0, 'f', harmonic_expansion ? 2 : 1);
+                                     .arg(percentage, 0, 'f', harmonic_expansion ? 2 : 1);
         const QSizeF basis_text_size = math_text_size(basis_text, percentage_font);
         const QSizeF fit_text_size = math_text_size(fit_text, percentage_font);
-        const qreal label_gap = std::clamp(
-            2.0 * percentage_font.pixelSize(), 56.0, 96.0);
+        const qreal label_gap = std::clamp(2.0 * percentage_font.pixelSize(), 56.0, 96.0);
         const qreal label_bottom = plot_rect.bottom() - 8.0;
-        const QRectF fit_rect(
-            plot_rect.right() - fit_text_size.width() - 10.0,
-            label_bottom - fit_text_size.height(),
-            fit_text_size.width(),
-            fit_text_size.height());
-        const QRectF basis_rect(
-            fit_rect.left() - label_gap - basis_text_size.width(),
-            label_bottom - basis_text_size.height(),
-            basis_text_size.width(),
-            basis_text_size.height());
-        draw_math_text(
-            painter,
-            basis_rect,
-            basis_text,
-            Qt::AlignLeft | Qt::AlignTop,
-            percentage_font,
-            definition_.approximation_color);
-        draw_math_text(
-            painter,
-            fit_rect,
-            fit_text,
-            Qt::AlignLeft | Qt::AlignTop,
-            percentage_font,
-            definition_.approximation_color);
+        const QRectF fit_rect(plot_rect.right() - fit_text_size.width() - 10.0,
+                              label_bottom - fit_text_size.height(), fit_text_size.width(),
+                              fit_text_size.height());
+        const QRectF basis_rect(fit_rect.left() - label_gap - basis_text_size.width(),
+                                label_bottom - basis_text_size.height(), basis_text_size.width(),
+                                basis_text_size.height());
+        draw_math_text(painter, basis_rect, basis_text, Qt::AlignLeft | Qt::AlignTop,
+                       percentage_font, definition_.approximation_color);
+        draw_math_text(painter, fit_rect, fit_text, Qt::AlignLeft | Qt::AlignTop, percentage_font,
+                       definition_.approximation_color);
     }
 
     InteractiveFigureDefinition definition_;
@@ -1075,8 +988,7 @@ private:
     QVector<double> harmonic_basis_maxima_;
 };
 
-InteractiveFigureWidget::InteractiveFigureWidget(QWidget* parent)
-    : QWidget(parent) {
+InteractiveFigureWidget::InteractiveFigureWidget(QWidget* parent) : QWidget(parent) {
     setObjectName(QStringLiteral("interactiveFigureWidget"));
     setAutoFillBackground(true);
     QFont audience_font = font();
@@ -1178,34 +1090,36 @@ InteractiveFigureWidget::InteractiveFigureWidget(QWidget* parent)
             canvas_->set_basis_count(position);
             update_basis_expansion_status();
         } else if (is_harmonic_time_figure(definition_.kind)) {
-            canvas_->set_stretch(slider_value(
-                position, definition_.stretch_min, definition_.stretch_max));
+            canvas_->set_stretch(
+                slider_value(position, definition_.stretch_min, definition_.stretch_max));
             update_harmonic_status();
         } else {
-            canvas_->set_amplitude(slider_value(
-                position, definition_.amplitude_min, definition_.amplitude_max));
+            canvas_->set_amplitude(
+                slider_value(position, definition_.amplitude_min, definition_.amplitude_max));
         }
         update_labels();
     });
     connect(frequency_slider_, &QSlider::valueChanged, this, [this](int position) {
         if (is_harmonic_time_figure(definition_.kind)) {
-            set_harmonic_phase(slider_value(
-                position, definition_.phase_min, definition_.phase_max), false);
+            set_harmonic_phase(slider_value(position, definition_.phase_min, definition_.phase_max),
+                               false);
             if (animation_requested_) {
                 playback_start_phase_ = harmonic_phase_;
                 playback_elapsed_.restart();
             } else {
-                animation_button_->setText(!definition_.loop
-                        && harmonic_phase_ >= definition_.phase_max
-                    ? QStringLiteral("Replay") : QStringLiteral("Play"));
+                animation_button_->setText(!definition_.loop &&
+                                                   harmonic_phase_ >= definition_.phase_max
+                                               ? QStringLiteral("Replay")
+                                               : QStringLiteral("Play"));
             }
         } else {
-            canvas_->set_frequency(slider_value(
-                position, definition_.frequency_min, definition_.frequency_max));
+            canvas_->set_frequency(
+                slider_value(position, definition_.frequency_min, definition_.frequency_max));
         }
         update_labels();
     });
-    connect(animation_button_, &QPushButton::toggled, this, &InteractiveFigureWidget::set_animation_running);
+    connect(animation_button_, &QPushButton::toggled, this,
+            &InteractiveFigureWidget::set_animation_running);
     connect(reset_button_, &QPushButton::clicked, this, &InteractiveFigureWidget::reset_controls);
 }
 
@@ -1219,10 +1133,8 @@ void InteractiveFigureWidget::set_definition(const InteractiveFigureDefinition& 
     frequency_slider_->show();
     animation_button_->show();
     controls_layout_->removeWidget(reset_button_);
-    controls_layout_->addWidget(
-        reset_button_,
-        is_basis_expansion_figure(definition.kind) ? 0 : 1,
-        2);
+    controls_layout_->addWidget(reset_button_, is_basis_expansion_figure(definition.kind) ? 0 : 1,
+                                2);
     if (is_harmonic_time_figure(definition.kind)) {
         root_layout_->insertWidget(0, controls_frame_);
         status_label_->show();
@@ -1258,13 +1170,11 @@ void InteractiveFigureWidget::contextMenuEvent(QContextMenuEvent* event) {
 }
 
 void InteractiveFigureWidget::hideEvent(QHideEvent* event) {
-    if (is_harmonic_time_figure(definition_.kind)
-        && animation_requested_ && playback_elapsed_.isValid()) {
-        const HarmonicPlaybackSample sample = harmonic_playback_sample(
-            playback_start_phase_,
-            playback_elapsed_.elapsed() / 1000.0,
-            definition_.period_seconds,
-            definition_.loop);
+    if (is_harmonic_time_figure(definition_.kind) && animation_requested_ &&
+        playback_elapsed_.isValid()) {
+        const HarmonicPlaybackSample sample =
+            harmonic_playback_sample(playback_start_phase_, playback_elapsed_.elapsed() / 1000.0,
+                                     definition_.period_seconds, definition_.loop);
         set_harmonic_phase(sample.phase, true);
         playback_start_phase_ = harmonic_phase_;
         playback_elapsed_.invalidate();
@@ -1321,22 +1231,29 @@ void InteractiveFigureWidget::reset_controls() {
 
 void InteractiveFigureWidget::update_labels() {
     if (is_basis_expansion_figure(definition_.kind)) {
-        amplitude_label_->setText(QStringLiteral("Basis functions <i>N</i>: %1")
-            .arg(amplitude_slider_->value()));
+        amplitude_label_->setText(
+            QStringLiteral("Basis functions <i>N</i>: %1").arg(amplitude_slider_->value()));
         return;
     }
     if (is_harmonic_time_figure(definition_.kind)) {
-        amplitude_label_->setText(QStringLiteral("Initial stretch A: %1").arg(
-            slider_value(amplitude_slider_->value(), definition_.stretch_min, definition_.stretch_max),
-            0, 'f', 2));
-        frequency_label_->setText(QStringLiteral("Phase τ: %1 T").arg(
-            harmonic_phase_, 0, 'f', 3));
+        amplitude_label_->setText(
+            QStringLiteral("Initial stretch A: %1")
+                .arg(slider_value(amplitude_slider_->value(), definition_.stretch_min,
+                                  definition_.stretch_max),
+                     0, 'f', 2));
+        frequency_label_->setText(QStringLiteral("Phase τ: %1 T").arg(harmonic_phase_, 0, 'f', 3));
         return;
     }
-    amplitude_label_->setText(QStringLiteral("Amplitude: %1").arg(
-        slider_value(amplitude_slider_->value(), definition_.amplitude_min, definition_.amplitude_max), 0, 'f', 2));
-    frequency_label_->setText(QStringLiteral("Frequency: %1").arg(
-        slider_value(frequency_slider_->value(), definition_.frequency_min, definition_.frequency_max), 0, 'f', 2));
+    amplitude_label_->setText(
+        QStringLiteral("Amplitude: %1")
+            .arg(slider_value(amplitude_slider_->value(), definition_.amplitude_min,
+                              definition_.amplitude_max),
+                 0, 'f', 2));
+    frequency_label_->setText(
+        QStringLiteral("Frequency: %1")
+            .arg(slider_value(frequency_slider_->value(), definition_.frequency_min,
+                              definition_.frequency_max),
+                 0, 'f', 2));
 }
 
 void InteractiveFigureWidget::update_basis_expansion_status() {
@@ -1345,24 +1262,23 @@ void InteractiveFigureWidget::update_basis_expansion_status() {
     }
     const int basis_count = amplitude_slider_->value();
     if (is_harmonic_displaced_expansion(definition_.kind)) {
-        const double percentage = 100.0 * harmonic_displaced_captured_fraction(
-            basis_count, definition_.displacement);
+        const double percentage =
+            100.0 * harmonic_displaced_captured_fraction(basis_count, definition_.displacement);
         status_label_->setText(
-            QStringLiteral(
-                "<i>N</i> = %1 &emsp; &Sigma;<sub><i>v</i>=0</sub>"
-                "<sup><i>N</i>&minus;1</sup> |<i>c</i><sub><i>v</i></sub>|"
-                "<sup>2</sup> = %2% &emsp; — fraction of &Phi;(<i>y</i>) reproduced")
+            QStringLiteral("<i>N</i> = %1 &emsp; &Sigma;<sub><i>v</i>=0</sub>"
+                           "<sup><i>N</i>&minus;1</sup> |<i>c</i><sub><i>v</i></sub>|"
+                           "<sup>2</sup> = %2% &emsp; — fraction of &Phi;(<i>y</i>) reproduced")
                 .arg(basis_count)
                 .arg(percentage, 0, 'f', 2));
         return;
     }
-    const double percentage = 100.0 * particle_in_box_step_captured_fraction(
-        basis_count, definition_.step_position, definition_.step_height);
+    const double percentage =
+        100.0 * particle_in_box_step_captured_fraction(basis_count, definition_.step_position,
+                                                       definition_.step_height);
     status_label_->setText(
-        QStringLiteral(
-            "<i>N</i> = %1 &emsp; &Sigma;<sub><i>n</i>=1</sub><sup><i>N</i></sup> "
-            "<i>a</i><sub><i>n</i></sub><sup>2</sup> = %2% &emsp; "
-            "— fraction of <i>f</i>(<i>x</i>) reproduced")
+        QStringLiteral("<i>N</i> = %1 &emsp; &Sigma;<sub><i>n</i>=1</sub><sup><i>N</i></sup> "
+                       "<i>a</i><sub><i>n</i></sub><sup>2</sup> = %2% &emsp; "
+                       "— fraction of <i>f</i>(<i>x</i>) reproduced")
             .arg(basis_count)
             .arg(percentage, 0, 'f', 1));
 }
@@ -1371,34 +1287,32 @@ void InteractiveFigureWidget::update_harmonic_status() {
     if (!is_harmonic_time_figure(definition_.kind)) {
         return;
     }
-    const double stretch = slider_value(
-        amplitude_slider_->value(), definition_.stretch_min, definition_.stretch_max);
+    const double stretch =
+        slider_value(amplitude_slider_->value(), definition_.stretch_min, definition_.stretch_max);
     if (definition_.kind == InteractiveFigureDefinition::Kind::HarmonicBasisStates) {
         double displayed_weight = 0.0;
         for (int n = 0; n < 6; ++n) {
             displayed_weight += coherent_state_basis_weight(n, stretch);
         }
-        status_label_->setText(
-            QStringLiteral("τ = %1 <i>T</i> &emsp; "
-                           "&Sigma;<sub>n=0</sub><sup>5</sup> "
-                           "|<i>c</i><sub>n</sub>|<sup>2</sup> = %2%")
-                .arg(harmonic_phase_, 0, 'f', 3)
-                .arg(100.0 * displayed_weight, 0, 'f', 1));
+        status_label_->setText(QStringLiteral("τ = %1 <i>T</i> &emsp; "
+                                              "&Sigma;<sub>n=0</sub><sup>5</sup> "
+                                              "|<i>c</i><sub>n</sub>|<sup>2</sup> = %2%")
+                                   .arg(harmonic_phase_, 0, 'f', 3)
+                                   .arg(100.0 * displayed_weight, 0, 'f', 1));
         return;
     }
-    const HarmonicWavepacketObservation observation = evaluate_harmonic_wavepacket(
-        harmonic_phase_, stretch);
+    const HarmonicWavepacketObservation observation =
+        evaluate_harmonic_wavepacket(harmonic_phase_, stretch);
     status_label_->setText(QStringLiteral("X = %1 ℓ     P = %2 ħ/ℓ     — %3")
-        .arg(observation.mean_position, 0, 'f', 2)
-        .arg(observation.mean_momentum, 0, 'f', 2)
-        .arg(observation.stage));
+                               .arg(observation.mean_position, 0, 'f', 2)
+                               .arg(observation.mean_momentum, 0, 'f', 2)
+                               .arg(observation.stage));
 }
 
 void InteractiveFigureWidget::advance_animation() {
     if (!is_harmonic_time_figure(definition_.kind)) {
         if (!sine_frame_clock_.isValid()) sine_frame_clock_.start();
-        const qint64 step_ns =
-            std::min(sine_frame_clock_.nsecsElapsed(), kMaximumAnimationStepNs);
+        const qint64 step_ns = std::min(sine_frame_clock_.nsecsElapsed(), kMaximumAnimationStepNs);
         sine_frame_clock_.restart();
         canvas_->advance_phase(double(step_ns) * 1.0e-9);
         return;
@@ -1407,11 +1321,9 @@ void InteractiveFigureWidget::advance_animation() {
         playback_start_phase_ = harmonic_phase_;
         playback_elapsed_.start();
     }
-    const HarmonicPlaybackSample sample = harmonic_playback_sample(
-        playback_start_phase_,
-        playback_elapsed_.elapsed() / 1000.0,
-        definition_.period_seconds,
-        definition_.loop);
+    const HarmonicPlaybackSample sample =
+        harmonic_playback_sample(playback_start_phase_, playback_elapsed_.elapsed() / 1000.0,
+                                 definition_.period_seconds, definition_.loop);
     set_harmonic_phase(sample.phase, true);
     if (!sample.running) {
         animation_button_->setChecked(false);
@@ -1423,8 +1335,8 @@ void InteractiveFigureWidget::set_harmonic_phase(double phase, bool update_slide
     canvas_->set_harmonic_phase(harmonic_phase_);
     if (update_slider) {
         const QSignalBlocker blocker(frequency_slider_);
-        frequency_slider_->setValue(slider_position(
-            harmonic_phase_, definition_.phase_min, definition_.phase_max));
+        frequency_slider_->setValue(
+            slider_position(harmonic_phase_, definition_.phase_min, definition_.phase_max));
     }
     update_labels();
     update_harmonic_status();
@@ -1435,10 +1347,8 @@ void InteractiveFigureWidget::set_animation_running(bool running) {
     if (is_harmonic_time_figure(definition_.kind)) {
         if (!running && playback_elapsed_.isValid()) {
             const HarmonicPlaybackSample sample = harmonic_playback_sample(
-                playback_start_phase_,
-                playback_elapsed_.elapsed() / 1000.0,
-                definition_.period_seconds,
-                definition_.loop);
+                playback_start_phase_, playback_elapsed_.elapsed() / 1000.0,
+                definition_.period_seconds, definition_.loop);
             set_harmonic_phase(sample.phase, true);
         }
         if (running && harmonic_phase_ >= definition_.phase_max) {
@@ -1450,10 +1360,11 @@ void InteractiveFigureWidget::set_animation_running(bool running) {
         } else {
             playback_elapsed_.invalidate();
         }
-        animation_button_->setText(running
-            ? QStringLiteral("Pause")
-            : (!definition_.loop && harmonic_phase_ >= definition_.phase_max
-                ? QStringLiteral("Replay") : QStringLiteral("Play")));
+        animation_button_->setText(
+            running ? QStringLiteral("Pause")
+                    : (!definition_.loop && harmonic_phase_ >= definition_.phase_max
+                           ? QStringLiteral("Replay")
+                           : QStringLiteral("Play")));
     } else {
         animation_button_->setText(running ? QStringLiteral("Pause") : QStringLiteral("Play"));
     }

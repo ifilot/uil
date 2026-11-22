@@ -27,17 +27,16 @@ bool QtPdfBackend::open_data(const QByteArray& data, QString* error_message) {
 
     // QBuffer is random access, so QPdfDocument parses it synchronously here.
     document_.load(&buffer_);
-    const QPdfDocument::Error error = document_.status() == QPdfDocument::Status::Ready
-        ? QPdfDocument::Error::None
-        : (document_.error() == QPdfDocument::Error::None ? QPdfDocument::Error::Unknown
-                                                          : document_.error());
+    const QPdfDocument::Error error =
+        document_.status() == QPdfDocument::Status::Ready
+            ? QPdfDocument::Error::None
+            : (document_.error() == QPdfDocument::Error::None ? QPdfDocument::Error::Unknown
+                                                              : document_.error());
     return finish_open(error, QStringLiteral("<memory>"), error_message);
 }
 
-bool QtPdfBackend::finish_open(
-    QPdfDocument::Error error,
-    const QString& source,
-    QString* error_message) {
+bool QtPdfBackend::finish_open(QPdfDocument::Error error, const QString& source,
+                               QString* error_message) {
     if (error != QPdfDocument::Error::None) {
         if (error_message) {
             *error_message = error_to_string(error);
@@ -50,9 +49,7 @@ bool QtPdfBackend::finish_open(
     return true;
 }
 
-int QtPdfBackend::page_count() const {
-    return document_.pageCount();
-}
+int QtPdfBackend::page_count() const { return document_.pageCount(); }
 
 QSizeF QtPdfBackend::page_size_points(int page_index) const {
     if (page_index < 0 || page_index >= document_.pageCount()) {

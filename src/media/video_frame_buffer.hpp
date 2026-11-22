@@ -34,8 +34,7 @@ public:
      * @return The next frame; std::nullopt with an empty @p error_message for the end of the
      *         stream, or std::nullopt with a message for a failure.
      */
-    virtual std::optional<DecodedVideoFrame> read_next_frame(
-        QString* error_message) = 0;
+    virtual std::optional<DecodedVideoFrame> read_next_frame(QString* error_message) = 0;
     /**
      * @brief Registers a flag that VideoFrameBuffer::stop() raises from another thread.
      *
@@ -43,8 +42,7 @@ public:
      * return early with an error once it is true. The default implementation ignores it. The
      * flag outlives the source.
      */
-    virtual void set_interrupt_flag(const std::atomic<bool>* /*interrupt_requested*/) {
-    }
+    virtual void set_interrupt_flag(const std::atomic<bool>* /*interrupt_requested*/) {}
 };
 
 /**

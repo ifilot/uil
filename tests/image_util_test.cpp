@@ -24,13 +24,12 @@ void ImageUtilTest::contained_size_data() {
     QTest::addColumn<QSize>("bounding_size");
     QTest::addColumn<QSize>("expected_size");
 
-    QTest::newRow("exact fit") << QSizeF(1920, 1080) << QSize(1920, 1080)
-                                << QSize(1920, 1080);
+    QTest::newRow("exact fit") << QSizeF(1920, 1080) << QSize(1920, 1080) << QSize(1920, 1080);
     QTest::newRow("wide into square") << QSizeF(16, 9) << QSize(100, 100) << QSize(100, 56);
     QTest::newRow("tall into square") << QSizeF(9, 16) << QSize(100, 100) << QSize(56, 100);
     QTest::newRow("square into wide") << QSizeF(1, 1) << QSize(320, 180) << QSize(180, 180);
-    QTest::newRow("thin dimension remains visible") << QSizeF(1000, 1) << QSize(5, 5)
-                                                     << QSize(5, 1);
+    QTest::newRow("thin dimension remains visible")
+        << QSizeF(1000, 1) << QSize(5, 5) << QSize(5, 1);
 }
 
 void ImageUtilTest::contained_size() {

@@ -67,7 +67,8 @@ public:
      * Thumbnails rendered for another view (another @p bounding_pixel_size, such as the
      * presenter's strip) are ignored.
      */
-    void set_deck_overview_slide_image(int page_index, const QSize& bounding_pixel_size, const QImage& image);
+    void set_deck_overview_slide_image(int page_index, const QSize& bounding_pixel_size,
+                                       const QImage& image);
     /** @brief Displays a decoded video frame over its slide rectangle. */
     void set_video_frame(const QImage& image, QRectF slide_rect);
     /** @brief Clears the active video overlay. */
@@ -77,18 +78,15 @@ public:
     /** @brief Clears the active interactive molecule. */
     void clear_molecule_overlay();
     /** @brief Displays an embedded interactive figure over a normalized slide rectangle. */
-    void set_interactive_figure_overlay(
-        const InteractiveFigureDefinition& definition,
-        QRectF slide_rect);
+    void set_interactive_figure_overlay(const InteractiveFigureDefinition& definition,
+                                        QRectF slide_rect);
     /** @brief Clears the active embedded interactive figure. */
     void clear_interactive_figure_overlay();
     /** @brief Displays an embedded atomic orbital over a normalized slide rectangle. */
-    void set_atomic_orbital_overlay(
-        const AtomicOrbitalDefinition& definition,
-        QRectF slide_rect);
+    void set_atomic_orbital_overlay(const AtomicOrbitalDefinition& definition, QRectF slide_rect);
     struct AtomicOrbitalOverlay {
-      AtomicOrbitalDefinition definition;
-      QRectF slide_rect;
+        AtomicOrbitalDefinition definition;
+        QRectF slide_rect;
     };
     /** @brief Replaces all embedded orbitals using normalized slide rectangles. */
     void set_atomic_orbital_overlays(const QVector<AtomicOrbitalOverlay>& overlays,
@@ -97,8 +95,8 @@ public:
     /** @brief Clears all active embedded atomic orbitals. */
     void clear_atomic_orbital_overlay();
     /** @brief Displays an embedded molecular-symmetry player. */
-    void set_molecular_symmetry_overlay(
-        const MolecularSymmetryDefinition& definition, QRectF slide_rect);
+    void set_molecular_symmetry_overlay(const MolecularSymmetryDefinition& definition,
+                                        QRectF slide_rect);
     /** @brief Clears the active molecular-symmetry player. */
     void clear_molecular_symmetry_overlay();
     /** @brief Selects the screen on which the audience window appears. */
@@ -171,12 +169,10 @@ signals:
     void last_requested();
     /** @brief Emitted when the user requests a specific page. */
     void page_requested(int page_index);
-    /** @brief Emitted when deck-overview thumbnails need rendering; an empty size withdraws the request. */
-    void deck_overview_renders_requested(
-        const QSize& bounding_pixel_size,
-        int focused_page_index,
-        int first_visible_page,
-        int last_visible_page);
+    /** @brief Emitted when deck-overview thumbnails need rendering; an empty size withdraws the
+     * request. */
+    void deck_overview_renders_requested(const QSize& bounding_pixel_size, int focused_page_index,
+                                         int first_visible_page, int last_visible_page);
     /** @brief Emitted when the user toggles media playback. */
     void play_pause_requested();
     /** @brief Emitted when audience render dimensions change. */
@@ -220,18 +216,9 @@ protected:
 private:
     class FeatureMenuPanel;
 
-    enum class InteractionTool {
-        Cursor,
-        Pointer,
-        Pen,
-        Eraser
-    };
+    enum class InteractionTool { Cursor, Pointer, Pen, Eraser };
 
-    enum class BlankMode {
-        None,
-        Black,
-        White
-    };
+    enum class BlankMode { None, Black, White };
 
     /** @brief Applies the selected screen geometry for windowed or full-screen mode. */
     void apply_screen_geometry(bool fullscreen);
@@ -255,7 +242,8 @@ private:
     const QImage* current_annotation_image() const;
     /** @brief Draws one annotation segment between two window positions. */
     void draw_annotation_segment(QPointF from_window_point, QPointF to_window_point);
-    /** @brief Publishes the current annotation overlay now and cancels any pending throttled update. */
+    /** @brief Publishes the current annotation overlay now and cancels any pending throttled
+     * update. */
     void publish_annotation_overlay();
     /** @brief Returns the window area covered by the laser pointer at @p position. */
     QRect pointer_bounds(const QPointF& position) const;
@@ -337,12 +325,12 @@ private:
     QRectF interactive_figure_rect_;
     QImage interactive_figure_snapshot_frame_;
     struct AtomicOrbitalOverlayState {
-      std::unique_ptr<AtomicOrbitalWidget> widget;
-      QRectF slide_rect;
-      QImage snapshot_frame;
-      AtomicOrbitalDefinition definition;
-      QByteArray geometry_key;
-      bool ready = false;
+        std::unique_ptr<AtomicOrbitalWidget> widget;
+        QRectF slide_rect;
+        QImage snapshot_frame;
+        AtomicOrbitalDefinition definition;
+        QByteArray geometry_key;
+        bool ready = false;
     };
     std::vector<AtomicOrbitalOverlayState> atomic_orbital_overlays_;
     std::unique_ptr<AtomicOrbitalCache> atomic_orbital_cache_;

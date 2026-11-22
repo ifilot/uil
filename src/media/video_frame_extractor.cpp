@@ -56,11 +56,8 @@ public:
         timer.start();
 
         configure_library_names();
-        available_ = load_library(avutil_) &&
-                     load_library(swscale_) &&
-                     load_library(avcodec_) &&
-                     load_library(avformat_) &&
-                     resolve_symbols();
+        available_ = load_library(avutil_) && load_library(swscale_) && load_library(avcodec_) &&
+                     load_library(avformat_) && resolve_symbols();
 
         if (!available_) {
             unload_libraries();
@@ -70,9 +67,9 @@ public:
         }
 
         performance_log::record_duration(
-            QStringLiteral("media.ffmpeg_runtime_load"),
-            timer.elapsed(),
-            {{QStringLiteral("outcome"), available_ ? QStringLiteral("loaded") : QStringLiteral("failed")}});
+            QStringLiteral("media.ffmpeg_runtime_load"), timer.elapsed(),
+            {{QStringLiteral("outcome"),
+              available_ ? QStringLiteral("loaded") : QStringLiteral("failed")}});
         return available_;
     }
 
@@ -104,7 +101,7 @@ public:
     decltype(&::sws_getCachedContext) sws_get_cached_context_fn = nullptr;  // Optional.
     decltype(&::sws_scale) sws_scale_fn = nullptr;
     decltype(&::sws_freeContext) sws_free_context_fn = nullptr;
-    decltype(&::sws_getCoefficients) sws_get_coefficients_fn = nullptr;  // Optional.
+    decltype(&::sws_getCoefficients) sws_get_coefficients_fn = nullptr;             // Optional.
     decltype(&::sws_setColorspaceDetails) sws_set_colorspace_details_fn = nullptr;  // Optional.
 
 private:
@@ -112,18 +109,14 @@ private:
     void configure_library_names() {
 #if defined(Q_OS_WIN)
         const QDir application_directory(QCoreApplication::applicationDirPath());
-        set_windows_library_name(
-            avutil_, application_directory,
-            QStringLiteral("avutil-%1.dll").arg(LIBAVUTIL_VERSION_MAJOR));
-        set_windows_library_name(
-            swscale_, application_directory,
-            QStringLiteral("swscale-%1.dll").arg(LIBSWSCALE_VERSION_MAJOR));
-        set_windows_library_name(
-            avcodec_, application_directory,
-            QStringLiteral("avcodec-%1.dll").arg(LIBAVCODEC_VERSION_MAJOR));
-        set_windows_library_name(
-            avformat_, application_directory,
-            QStringLiteral("avformat-%1.dll").arg(LIBAVFORMAT_VERSION_MAJOR));
+        set_windows_library_name(avutil_, application_directory,
+                                 QStringLiteral("avutil-%1.dll").arg(LIBAVUTIL_VERSION_MAJOR));
+        set_windows_library_name(swscale_, application_directory,
+                                 QStringLiteral("swscale-%1.dll").arg(LIBSWSCALE_VERSION_MAJOR));
+        set_windows_library_name(avcodec_, application_directory,
+                                 QStringLiteral("avcodec-%1.dll").arg(LIBAVCODEC_VERSION_MAJOR));
+        set_windows_library_name(avformat_, application_directory,
+                                 QStringLiteral("avformat-%1.dll").arg(LIBAVFORMAT_VERSION_MAJOR));
 #else
         avutil_.setFileName(QStringLiteral("avutil"));
         swscale_.setFileName(QStringLiteral("swscale"));
@@ -134,10 +127,8 @@ private:
 
 #if defined(Q_OS_WIN)
     /** @brief Prefers an app-local DLL while retaining a development-build fallback. */
-    static void set_windows_library_name(
-        QLibrary& library,
-        const QDir& application_directory,
-        const QString& file_name) {
+    static void set_windows_library_name(QLibrary& library, const QDir& application_directory,
+                                         const QString& file_name) {
         const QString local_path = application_directory.filePath(file_name);
         library.setFileName(QFileInfo::exists(local_path) ? local_path : file_name);
     }
@@ -148,8 +139,8 @@ private:
         if (library.load()) {
             return true;
         }
-        load_error_ = QStringLiteral("Could not load %1: %2")
-                          .arg(library.fileName(), library.errorString());
+        load_error_ =
+            QStringLiteral("Could not load %1: %2").arg(library.fileName(), library.errorString());
         return false;
     }
 
@@ -160,16 +151,17 @@ private:
         if (*function) {
             return true;
         }
-        load_error_ = QStringLiteral("Could not resolve FFmpeg symbol %1 from %2: %3")
-                          .arg(QString::fromLatin1(name), library.fileName(), library.errorString());
+        load_error_ =
+            QStringLiteral("Could not resolve FFmpeg symbol %1 from %2: %3")
+                .arg(QString::fromLatin1(name), library.fileName(), library.errorString());
         return false;
     }
 
     /** @brief Resolves all FFmpeg entry points used by the video reader. */
     bool resolve_symbols() {
-#define UIL_RESOLVE(library, symbol) \
+#define UIL_RESOLVE(library, symbol)                       \
     if (!resolve_symbol(library, #symbol, &symbol##_fn)) { \
-        return false; \
+        return false;                                      \
     }
 
         UIL_RESOLVE(avformat_, avformat_open_input)
@@ -207,8 +199,8 @@ private:
         resolve_optional_symbol(avutil_, "av_pix_fmt_desc_get", &av_pix_fmt_desc_get_fn);
         resolve_optional_symbol(swscale_, "sws_getCachedContext", &sws_get_cached_context_fn);
         resolve_optional_symbol(swscale_, "sws_getCoefficients", &sws_get_coefficients_fn);
-        resolve_optional_symbol(
-            swscale_, "sws_setColorspaceDetails", &sws_set_colorspace_details_fn);
+        resolve_optional_symbol(swscale_, "sws_setColorspaceDetails",
+                                &sws_set_colorspace_details_fn);
         return true;
     }
 
@@ -222,7 +214,7 @@ private:
         *function = reinterpret_cast<Function>(library.resolve(name));
         if (!*function) {
             qCWarning(log_video) << "Optional FFmpeg symbol" << name << "is unavailable in"
-                                << library.fileName() << "; using a fallback";
+                                 << library.fileName() << "; using a fallback";
         }
     }
 
@@ -268,23 +260,17 @@ struct CodecContextDeleter {
 
 struct FrameDeleter {
     /** @brief Releases an FFmpeg frame. */
-    void operator()(AVFrame* frame) const {
-        ffmpeg_api().av_frame_free_fn(&frame);
-    }
+    void operator()(AVFrame* frame) const { ffmpeg_api().av_frame_free_fn(&frame); }
 };
 
 struct PacketDeleter {
     /** @brief Releases an FFmpeg packet. */
-    void operator()(AVPacket* packet) const {
-        ffmpeg_api().av_packet_free_fn(&packet);
-    }
+    void operator()(AVPacket* packet) const { ffmpeg_api().av_packet_free_fn(&packet); }
 };
 
 struct SwsContextDeleter {
     /** @brief Releases an FFmpeg image-scaling context. */
-    void operator()(SwsContext* context) const {
-        ffmpeg_api().sws_free_context_fn(context);
-    }
+    void operator()(SwsContext* context) const { ffmpeg_api().sws_free_context_fn(context); }
 };
 
 /** @brief Converts an FFmpeg error code to a readable string. */
@@ -296,11 +282,9 @@ QString av_error_to_string(int error_code) {
 
 /** @brief Returns whether decoded frame dimensions fit the application's memory budget. */
 bool is_safe_frame_size(int width, int height) {
-    return width > 0
-        && height > 0
-        && width <= kMaximumVideoDimension
-        && height <= kMaximumVideoDimension
-        && qint64(width) * qint64(height) <= kMaximumVideoPixels;
+    return width > 0 && height > 0 && width <= kMaximumVideoDimension &&
+           height <= kMaximumVideoDimension &&
+           qint64(width) * qint64(height) <= kMaximumVideoPixels;
 }
 
 /**
@@ -330,22 +314,15 @@ bool pixel_format_has_alpha(AVPixelFormat format) {
 QImage allocate_padded_image(int width, int height, QImage::Format format) {
     const qsizetype alignment = qsizetype(kRowAlignmentBytes);
     const qsizetype bytes_per_line = (qsizetype(width) * 4 + alignment - 1) / alignment * alignment;
-    void* buffer = ::operator new(
-        std::size_t(bytes_per_line * height), std::align_val_t(kRowAlignmentBytes), std::nothrow);
+    void* buffer = ::operator new(std::size_t(bytes_per_line * height),
+                                  std::align_val_t(kRowAlignmentBytes), std::nothrow);
     if (!buffer) {
         return {};
     }
 
     QImage image(
-        static_cast<uchar*>(buffer),
-        width,
-        height,
-        bytes_per_line,
-        format,
-        [](void* data) {
-            ::operator delete(data, std::align_val_t(kRowAlignmentBytes));
-        },
-        buffer);
+        static_cast<uchar*>(buffer), width, height, bytes_per_line, format,
+        [](void* data) { ::operator delete(data, std::align_val_t(kRowAlignmentBytes)); }, buffer);
     if (image.isNull()) {
         // QImage only takes ownership through the cleanup function when construction succeeds.
         ::operator delete(buffer, std::align_val_t(kRowAlignmentBytes));
@@ -363,9 +340,7 @@ qint64 frame_timestamp_ms(const AVFrame* frame, const AVStream* stream) {
 }
 
 /** @brief Returns the error reported when the registered interrupt flag aborts decoding. */
-QString interrupted_message() {
-    return QStringLiteral("Video decoding was interrupted");
-}
+QString interrupted_message() { return QStringLiteral("Video decoding was interrupted"); }
 }  // namespace
 
 class VideoFrameReader::Impl {
@@ -383,13 +358,7 @@ public:
 
 private:
     /** @brief Outcome of a single avcodec_receive_frame() attempt. */
-    enum class ReceiveStatus {
-        Frame,
-        NeedsInput,
-        EndOfStream,
-        Recoverable,
-        Failed
-    };
+    enum class ReceiveStatus { Frame, NeedsInput, EndOfStream, Recoverable, Failed };
 
     /**
      * @brief Opens the demuxer and decoder without cleaning up on failure.
@@ -397,10 +366,8 @@ private:
      * @param error_message Receives a readable reason when false is returned.
      * @return True when decoding can start.
      */
-    bool open_input(
-        const QString& path,
-        VideoFrameReader::Threading threading,
-        QString& error_message);
+    bool open_input(const QString& path, VideoFrameReader::Threading threading,
+                    QString& error_message);
     /**
      * @brief Feeds packets to the decoder until a frame, the end of stream, or a failure.
      *
@@ -450,10 +417,8 @@ private:
     bool draining_ = false;
 };
 
-bool VideoFrameReader::Impl::open(
-    const QString& path,
-    QString* error_message,
-    VideoFrameReader::Threading threading) {
+bool VideoFrameReader::Impl::open(const QString& path, QString* error_message,
+                                  VideoFrameReader::Threading threading) {
     close();
     path_ = path;
 
@@ -468,10 +433,8 @@ bool VideoFrameReader::Impl::open(
     return true;
 }
 
-bool VideoFrameReader::Impl::open_input(
-    const QString& path,
-    VideoFrameReader::Threading threading,
-    QString& error_message) {
+bool VideoFrameReader::Impl::open_input(const QString& path, VideoFrameReader::Threading threading,
+                                        QString& error_message) {
     if (!ffmpeg_api().ensure_loaded(&error_message)) {
         qCWarning(log_video) << error_message;
         return false;
@@ -489,26 +452,28 @@ bool VideoFrameReader::Impl::open_input(
     }
 
     const QByteArray encoded_path = QFile::encodeName(path);
-    int result = ffmpeg_api().avformat_open_input_fn(
-        &raw_format_context, encoded_path.constData(), nullptr, nullptr);
+    int result = ffmpeg_api().avformat_open_input_fn(&raw_format_context, encoded_path.constData(),
+                                                     nullptr, nullptr);
     if (result < 0) {
-        error_message = is_interrupt_requested()
-            ? interrupted_message()
-            : QStringLiteral("Could not open video: %1").arg(av_error_to_string(result));
+        error_message =
+            is_interrupt_requested()
+                ? interrupted_message()
+                : QStringLiteral("Could not open video: %1").arg(av_error_to_string(result));
         return false;
     }
     format_context_.reset(raw_format_context);
 
     result = ffmpeg_api().avformat_find_stream_info_fn(format_context_.get(), nullptr);
     if (result < 0) {
-        error_message = is_interrupt_requested()
-            ? interrupted_message()
-            : QStringLiteral("Could not read stream info: %1").arg(av_error_to_string(result));
+        error_message =
+            is_interrupt_requested()
+                ? interrupted_message()
+                : QStringLiteral("Could not read stream info: %1").arg(av_error_to_string(result));
         return false;
     }
 
-    stream_index_ = ffmpeg_api().av_find_best_stream_fn(
-        format_context_.get(), AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    stream_index_ = ffmpeg_api().av_find_best_stream_fn(format_context_.get(), AVMEDIA_TYPE_VIDEO,
+                                                        -1, -1, nullptr, 0);
     if (stream_index_ < 0) {
         error_message = QStringLiteral("No video stream found");
         return false;
@@ -529,14 +494,13 @@ bool VideoFrameReader::Impl::open_input(
 
     result = ffmpeg_api().avcodec_parameters_to_context_fn(codec_context_.get(), stream_->codecpar);
     if (result < 0) {
-        error_message = QStringLiteral("Could not copy codec parameters: %1")
-                            .arg(av_error_to_string(result));
+        error_message =
+            QStringLiteral("Could not copy codec parameters: %1").arg(av_error_to_string(result));
         return false;
     }
 
-    if (codec_context_->width > 0
-        && codec_context_->height > 0
-        && !is_safe_frame_size(codec_context_->width, codec_context_->height)) {
+    if (codec_context_->width > 0 && codec_context_->height > 0 &&
+        !is_safe_frame_size(codec_context_->width, codec_context_->height)) {
         error_message = QStringLiteral("Video dimensions exceed the safe decoding limit");
         return false;
     }
@@ -625,7 +589,7 @@ std::optional<DecodedVideoFrame> VideoFrameReader::Impl::decode_next_frame(QStri
             }
             if (read_result != AVERROR_EOF) {
                 qCWarning(log_video) << "Stopped reading video packets from" << path_ << ":"
-                                    << av_error_to_string(read_result);
+                                     << av_error_to_string(read_result);
             }
             // Enter draining mode so buffered (frame-threaded or reordered) output is returned.
             ffmpeg_api().avcodec_send_packet_fn(codec_context_.get(), nullptr);
@@ -643,7 +607,7 @@ std::optional<DecodedVideoFrame> VideoFrameReader::Impl::decode_next_frame(QStri
         ffmpeg_api().av_packet_unref_fn(packet_.get());
         if (send_result < 0 && send_result != AVERROR(EAGAIN)) {
             qCWarning(log_video) << "Could not send video packet:"
-                                << av_error_to_string(send_result);
+                                 << av_error_to_string(send_result);
         }
     }
 }
@@ -671,8 +635,7 @@ void VideoFrameReader::Impl::set_interrupt_flag(const std::atomic<bool>* interru
 }
 
 VideoFrameReader::Impl::ReceiveStatus VideoFrameReader::Impl::receive_frame(
-    DecodedVideoFrame& decoded,
-    QString& error_message) {
+    DecodedVideoFrame& decoded, QString& error_message) {
     const int receive_result =
         ffmpeg_api().avcodec_receive_frame_fn(codec_context_.get(), frame_.get());
     if (receive_result == AVERROR(EAGAIN)) {
@@ -684,14 +647,14 @@ VideoFrameReader::Impl::ReceiveStatus VideoFrameReader::Impl::receive_frame(
     if (receive_result < 0) {
         // A corrupt packet should cost one frame, not the whole clip; give up only when the
         // decoder keeps failing.
-        if (receive_result == AVERROR_INVALIDDATA
-            && ++consecutive_decode_errors_ <= kMaximumConsecutiveDecodeErrors) {
+        if (receive_result == AVERROR_INVALIDDATA &&
+            ++consecutive_decode_errors_ <= kMaximumConsecutiveDecodeErrors) {
             qCWarning(log_video) << "Skipping undecodable video data:"
-                                << av_error_to_string(receive_result);
+                                 << av_error_to_string(receive_result);
             return ReceiveStatus::Recoverable;
         }
-        error_message = QStringLiteral("Could not receive frame: %1")
-                            .arg(av_error_to_string(receive_result));
+        error_message =
+            QStringLiteral("Could not receive frame: %1").arg(av_error_to_string(receive_result));
         return ReceiveStatus::Failed;
     }
     consecutive_decode_errors_ = 0;
@@ -713,10 +676,8 @@ VideoFrameReader::Impl::ReceiveStatus VideoFrameReader::Impl::receive_frame(
     return ReceiveStatus::Frame;
 }
 
-void VideoFrameReader::Impl::apply_color_details(
-    SwsContext* scaler,
-    const AVFrame* frame,
-    bool fresh_context) {
+void VideoFrameReader::Impl::apply_color_details(SwsContext* scaler, const AVFrame* frame,
+                                                 bool fresh_context) {
     const auto& api = ffmpeg_api();
     if (!api.sws_get_coefficients_fn || !api.sws_set_colorspace_details_fn) {
         return;
@@ -725,8 +686,8 @@ void VideoFrameReader::Impl::apply_color_details(
     // swscale assumes BT.601 unless told otherwise. Follow the stream's tags; for untagged
     // video use the common player convention of BT.709 for HD and BT.601 for SD.
     int color_space = int(frame->colorspace);
-    if (frame->colorspace == AVCOL_SPC_UNSPECIFIED || frame->colorspace == AVCOL_SPC_RESERVED
-        || frame->colorspace == AVCOL_SPC_RGB) {
+    if (frame->colorspace == AVCOL_SPC_UNSPECIFIED || frame->colorspace == AVCOL_SPC_RESERVED ||
+        frame->colorspace == AVCOL_SPC_RGB) {
         color_space = frame->height >= 720 ? SWS_CS_ITU709 : SWS_CS_DEFAULT;
     }
     const int source_full_range = frame->color_range == AVCOL_RANGE_JPEG ? 1 : 0;
@@ -736,15 +697,11 @@ void VideoFrameReader::Impl::apply_color_details(
     }
 
     // Returns -1 for RGB sources, which need no matrix; the scaler then keeps its defaults.
-    api.sws_set_colorspace_details_fn(
-        scaler,
-        api.sws_get_coefficients_fn(color_space),
-        source_full_range,
-        api.sws_get_coefficients_fn(SWS_CS_DEFAULT),
-        1,  // Full-range RGB output.
-        0,
-        1 << 16,
-        1 << 16);
+    api.sws_set_colorspace_details_fn(scaler, api.sws_get_coefficients_fn(color_space),
+                                      source_full_range,
+                                      api.sws_get_coefficients_fn(SWS_CS_DEFAULT),
+                                      1,  // Full-range RGB output.
+                                      0, 1 << 16, 1 << 16);
     color_configured_context_ = fresh_context ? nullptr : scaler;
     color_configured_key_ = fresh_context ? -1 : key;
 }
@@ -758,8 +715,8 @@ QImage VideoFrameReader::Impl::frame_to_image(const AVFrame* frame) {
     // the source has no alpha), which Qt's raster engine draws without per-pixel blending.
     const AVPixelFormat source_format = AVPixelFormat(frame->format);
     const bool has_alpha = pixel_format_has_alpha(source_format);
-    QImage image = allocate_padded_image(
-        frame->width, frame->height, has_alpha ? QImage::Format_ARGB32 : QImage::Format_RGB32);
+    QImage image = allocate_padded_image(frame->width, frame->height,
+                                         has_alpha ? QImage::Format_ARGB32 : QImage::Format_RGB32);
     if (image.isNull()) {
         return {};
     }
@@ -770,30 +727,13 @@ QImage VideoFrameReader::Impl::frame_to_image(const AVFrame* frame) {
         // Returns the same context while size and formats are unchanged; when it cannot build a
         // replacement it frees the old context and returns null.
         sws_context_.reset(ffmpeg_api().sws_get_cached_context_fn(
-            sws_context_.release(),
-            frame->width,
-            frame->height,
-            source_format,
-            frame->width,
-            frame->height,
-            kOutputPixelFormat,
-            SWS_BILINEAR,
-            nullptr,
-            nullptr,
-            nullptr));
+            sws_context_.release(), frame->width, frame->height, source_format, frame->width,
+            frame->height, kOutputPixelFormat, SWS_BILINEAR, nullptr, nullptr, nullptr));
         scaler = sws_context_.get();
     } else {
         uncached_scaler.reset(ffmpeg_api().sws_get_context_fn(
-            frame->width,
-            frame->height,
-            source_format,
-            frame->width,
-            frame->height,
-            kOutputPixelFormat,
-            SWS_BILINEAR,
-            nullptr,
-            nullptr,
-            nullptr));
+            frame->width, frame->height, source_format, frame->width, frame->height,
+            kOutputPixelFormat, SWS_BILINEAR, nullptr, nullptr, nullptr));
         scaler = uncached_scaler.get();
     }
     if (!scaler) {
@@ -804,14 +744,9 @@ QImage VideoFrameReader::Impl::frame_to_image(const AVFrame* frame) {
     // Write straight into the image, honouring its padded row stride.
     uint8_t* destination_data[4] = {image.bits(), nullptr, nullptr, nullptr};
     const int destination_linesize[4] = {int(image.bytesPerLine()), 0, 0, 0};
-    const int converted_height = ffmpeg_api().sws_scale_fn(
-        scaler,
-        frame->data,
-        frame->linesize,
-        0,
-        frame->height,
-        destination_data,
-        destination_linesize);
+    const int converted_height =
+        ffmpeg_api().sws_scale_fn(scaler, frame->data, frame->linesize, 0, frame->height,
+                                  destination_data, destination_linesize);
     if (converted_height <= 0) {
         return {};
     }
@@ -853,24 +788,18 @@ public:
     }
 
     /** @brief Performs no work because no decoder can be opened. */
-    void close() {
-    }
+    void close() {}
 
     /** @brief Returns false because video decoding is unavailable. */
-    bool is_open() const {
-        return false;
-    }
+    bool is_open() const { return false; }
 
     /** @brief Ignores the flag because no decoding work can block. */
-    void set_interrupt_flag(const std::atomic<bool>*) {
-    }
+    void set_interrupt_flag(const std::atomic<bool>*) {}
 };
 
 #endif
 
-VideoFrameReader::VideoFrameReader()
-    : impl_(std::make_unique<Impl>()) {
-}
+VideoFrameReader::VideoFrameReader() : impl_(std::make_unique<Impl>()) {}
 
 VideoFrameReader::~VideoFrameReader() = default;
 
@@ -882,13 +811,9 @@ std::optional<DecodedVideoFrame> VideoFrameReader::read_next_frame(QString* erro
     return impl_->read_next_frame(error_message);
 }
 
-void VideoFrameReader::close() {
-    impl_->close();
-}
+void VideoFrameReader::close() { impl_->close(); }
 
-bool VideoFrameReader::is_open() const {
-    return impl_->is_open();
-}
+bool VideoFrameReader::is_open() const { return impl_->is_open(); }
 
 void VideoFrameReader::set_interrupt_flag(const std::atomic<bool>* interrupt_requested) {
     impl_->set_interrupt_flag(interrupt_requested);

@@ -23,7 +23,8 @@ private slots:
     void reports_missing_and_malformed_documents();
     void reports_password_protected_document();
     void supports_mixed_page_sizes();
-    /** @brief Verifies in-memory loading is independent of the file and yields premultiplied pages. */
+    /** @brief Verifies in-memory loading is independent of the file and yields premultiplied pages.
+     */
     void opens_in_memory_copy_independent_of_file();
 };
 
@@ -31,10 +32,8 @@ void QtPdfBackendTest::opens_bundled_presentations_data() {
     QTest::addColumn<QString>("file_name");
     QTest::addColumn<int>("expected_pages");
 
-    QTest::newRow("getting started")
-        << QStringLiteral("getting-started.pdf") << 4;
-    QTest::newRow("pointer and annotations")
-        << QStringLiteral("pointer-and-annotations.pdf") << 3;
+    QTest::newRow("getting started") << QStringLiteral("getting-started.pdf") << 4;
+    QTest::newRow("pointer and annotations") << QStringLiteral("pointer-and-annotations.pdf") << 3;
 }
 
 void QtPdfBackendTest::opens_bundled_presentations() {
@@ -43,8 +42,7 @@ void QtPdfBackendTest::opens_bundled_presentations() {
 
     QtPdfBackend backend;
     QString error_message;
-    QVERIFY2(backend.open(example_path(file_name), &error_message),
-        qPrintable(error_message));
+    QVERIFY2(backend.open(example_path(file_name), &error_message), qPrintable(error_message));
     QCOMPARE(backend.page_count(), expected_pages);
 
     const QSizeF page_size = backend.page_size_points(0);
@@ -76,8 +74,8 @@ void QtPdfBackendTest::rejects_invalid_page_and_render_requests() {
 void QtPdfBackendTest::reports_missing_and_malformed_documents() {
     QtPdfBackend missing_backend;
     QString missing_error;
-    QVERIFY(!missing_backend.open(
-        example_path(QStringLiteral("does-not-exist.pdf")), &missing_error));
+    QVERIFY(
+        !missing_backend.open(example_path(QStringLiteral("does-not-exist.pdf")), &missing_error));
     QVERIFY(!missing_error.isEmpty());
 
     QTemporaryDir directory;
@@ -96,18 +94,19 @@ void QtPdfBackendTest::reports_missing_and_malformed_documents() {
 void QtPdfBackendTest::reports_password_protected_document() {
     QtPdfBackend backend;
     QString error_message;
-    QVERIFY(!backend.open(
-        QStringLiteral(UIL_TEST_SOURCE_DIR "/tests/fixtures/password-protected.pdf"),
-        &error_message));
+    QVERIFY(
+        !backend.open(QStringLiteral(UIL_TEST_SOURCE_DIR "/tests/fixtures/password-protected.pdf"),
+                      &error_message));
     QCOMPARE(error_message, QStringLiteral("PDF requires a password"));
 }
 
 void QtPdfBackendTest::supports_mixed_page_sizes() {
     QtPdfBackend backend;
     QString error_message;
-    QVERIFY2(backend.open(
-        QStringLiteral(UIL_TEST_SOURCE_DIR "/tests/fixtures/mixed-page-sizes.pdf"),
-        &error_message), qPrintable(error_message));
+    QVERIFY2(
+        backend.open(QStringLiteral(UIL_TEST_SOURCE_DIR "/tests/fixtures/mixed-page-sizes.pdf"),
+                     &error_message),
+        qPrintable(error_message));
     QCOMPARE(backend.page_count(), 2);
     const QSizeF landscape = backend.page_size_points(0);
     const QSizeF portrait = backend.page_size_points(1);

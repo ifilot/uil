@@ -59,7 +59,8 @@ struct UilPackageOpenResult {
  * @return True when the package was extracted completely. Files written before a failure are
  *         left in @p destination.
  */
-bool extract_uil_package(const QString& package_path, QTemporaryDir& destination, UilPackageOpenResult* result, QString* error_message = nullptr);
+bool extract_uil_package(const QString& package_path, QTemporaryDir& destination,
+                         UilPackageOpenResult* result, QString* error_message = nullptr);
 
 /**
  * @brief Writes a UIL package containing a PDF, interactive assets, and overlays.
@@ -84,14 +85,10 @@ bool extract_uil_package(const QString& package_path, QTemporaryDir& destination
  * @return True when the package was written. Unsafe, duplicate (case-insensitive), missing or
  *         oversized inputs fail the whole write.
  */
-bool write_uil_package(
-    const QString& package_path,
-    const QString& source_pdf_path,
-    const QString& entry_pdf_relative_path,
-    const QString& asset_root_path,
-    const QStringList& movie_asset_paths,
-    const QStringList& molecule_asset_paths,
-    const QHash<int, QImage>& overlay_images,
-    const QSet<int>& hidden_overlay_pages,
-    bool overlays_globally_visible,
-    QString* error_message = nullptr);
+bool write_uil_package(const QString& package_path, const QString& source_pdf_path,
+                       const QString& entry_pdf_relative_path, const QString& asset_root_path,
+                       const QStringList& movie_asset_paths,
+                       const QStringList& molecule_asset_paths,
+                       const QHash<int, QImage>& overlay_images,
+                       const QSet<int>& hidden_overlay_pages, bool overlays_globally_visible,
+                       QString* error_message = nullptr);

@@ -36,8 +36,7 @@ namespace ui_math_text {
 inline QString latex_segment_to_html(QString source, bool math_mode) {
     // Compiling a QRegularExpression is comparatively expensive; matching with a shared
     // const instance is thread-safe.
-    static const QRegularExpression kFraction(
-        QStringLiteral(R"(\\frac\{([^{}]+)\}\{([^{}]+)\})"));
+    static const QRegularExpression kFraction(QStringLiteral(R"(\\frac\{([^{}]+)\}\{([^{}]+)\})"));
     static const QRegularExpression kRoman(QStringLiteral(R"(\\mathrm\{([^{}]+)\})"));
     static const QRegularExpression kGroupedSubscript(QStringLiteral(R"(_\{([^{}]+)\})"));
     static const QRegularExpression kGroupedSuperscript(QStringLiteral(R"(\^\{([^{}]+)\})"));
@@ -112,11 +111,11 @@ public:
      * @return A reference that stays valid until the next lookup or clear().
      */
     const PreparedText& get(const QString& text, const QFont& font, const QColor& color) {
-        Q_ASSERT_X(!QCoreApplication::instance()
-                       || QThread::currentThread() == QCoreApplication::instance()->thread(),
+        Q_ASSERT_X(!QCoreApplication::instance() ||
+                       QThread::currentThread() == QCoreApplication::instance()->thread(),
                    "ui_math_text", "math labels must be laid out on the GUI thread");
-        const QString key = text + QChar(0x1f) + font.key() + QChar(0x1f)
-            + (color.isValid() ? color.name(QColor::HexArgb) : QString());
+        const QString key = text + QChar(0x1f) + font.key() + QChar(0x1f) +
+                            (color.isValid() ? color.name(QColor::HexArgb) : QString());
         const auto found = index_.constFind(key);
         if (found != index_.constEnd()) {
             // Move the hit to the front without invalidating stored iterators.
@@ -152,9 +151,8 @@ private:
         document.setDocumentMargin(0.0);
         document.setDefaultFont(font);
         if (color.isValid()) {
-            document.setHtml(QStringLiteral(
-                "<span style='white-space:nowrap; color:%1'>%2</span>")
-                .arg(color.name(QColor::HexRgb), latex_math_html(text)));
+            document.setHtml(QStringLiteral("<span style='white-space:nowrap; color:%1'>%2</span>")
+                                 .arg(color.name(QColor::HexRgb), latex_math_html(text)));
         } else {
             document.setHtml(QStringLiteral("<span style='white-space:nowrap'>%1</span>")
                                  .arg(latex_math_html(text)));
@@ -212,16 +210,11 @@ inline QSizeF size(const QString& text, const QFont& font) {
  * than @p bounds overflows symmetrically for centred alignment. The painter's state is restored
  * afterward. An invalid @p color draws black. GUI thread only.
  */
-inline void draw(
-    QPainter& painter,
-    const QRectF& bounds,
-    const QString& text,
-    Qt::Alignment alignment,
-    const QFont& font,
-    const QColor& color) {
+inline void draw(QPainter& painter, const QRectF& bounds, const QString& text,
+                 Qt::Alignment alignment, const QFont& font, const QColor& color) {
     // An invalid colour has always rendered as black; keep it distinct from size-only entries.
-    const detail::PreparedText& prepared = detail::layout_cache().get(
-        text, font, color.isValid() ? color : QColor(Qt::black));
+    const detail::PreparedText& prepared =
+        detail::layout_cache().get(text, font, color.isValid() ? color : QColor(Qt::black));
     const QSizeF text_size = prepared.size;
     qreal x = bounds.left();
     qreal y = bounds.top();

@@ -1,18 +1,18 @@
 #pragma once
 
 #include <QByteArray>
-#include <QObject>
-#include <QImage>
 #include <QHash>
+#include <QImage>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QObject>
 #include <QSet>
 #include <QSize>
 #include <QString>
 #include <QThreadPool>
 
-#include <optional>
 #include <functional>
+#include <optional>
 
 /** @brief Describes one page rasterization job. */
 struct RenderRequest {
@@ -24,7 +24,8 @@ struct RenderRequest {
     /** @brief Exact output size in device pixels. */
     QSize pixel_size;
     int rotation = 0;
-    /** @brief Scheduler generation the request was created for; see RenderScheduler::generation(). */
+    /** @brief Scheduler generation the request was created for; see RenderScheduler::generation().
+     */
     int generation = 0;
     /**
      * @brief Implicitly shared PDF bytes captured when the document was opened.
@@ -63,10 +64,8 @@ public:
      *            one worker for QtPdfBackend, whose PDFium calls are serialized by a
      *            process-wide lock anyway, otherwise half the ideal thread count within [2, 4].
      */
-    explicit RenderScheduler(
-        QObject* parent = nullptr,
-        RenderFunction render_function = {},
-        int maximum_worker_count = 0);
+    explicit RenderScheduler(QObject* parent = nullptr, RenderFunction render_function = {},
+                             int maximum_worker_count = 0);
     /** @brief Stops queued work and waits for active render workers. */
     ~RenderScheduler() override;
 
@@ -107,7 +106,8 @@ signals:
      * On failure @p image is null and @p error_message is non-empty. Results of stale
      * generations are dropped without emitting this signal.
      */
-    void render_finished(const RenderRequest& request, const QImage& image, qint64 elapsed_ms, const QString& error_message);
+    void render_finished(const RenderRequest& request, const QImage& image, qint64 elapsed_ms,
+                         const QString& error_message);
 
 private:
     struct PendingJob {
@@ -124,11 +124,8 @@ private:
     /** @brief Removes and returns the highest-priority pending job. */
     std::optional<PendingJob> take_next_job();
     /** @brief Completes one active job and conditionally delivers its result. */
-    void complete_job(
-        const PendingJob& job,
-        const QImage& image,
-        qint64 elapsed_ms,
-        const QString& error_message);
+    void complete_job(const PendingJob& job, const QImage& image, qint64 elapsed_ms,
+                      const QString& error_message);
 
     mutable QMutex mutex_;
     QSet<QString> active_jobs_;

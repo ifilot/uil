@@ -17,8 +17,8 @@
 #include <QPixmap>
 #include <QSplashScreen>
 #include <QStyleFactory>
-#include <QSysInfo>
 #include <QSurfaceFormat>
+#include <QSysInfo>
 #include <QThread>
 #include <QThreadPool>
 #include <QTimer>
@@ -35,16 +35,12 @@ class LoadingSplash final : public QSplashScreen {
 public:
     /** @brief Constructs the loading surface from a lightweight raster pixmap. */
     explicit LoadingSplash(const QPixmap& pixmap)
-        : QSplashScreen(
-              pixmap,
-              Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint) {
-    }
+        : QSplashScreen(pixmap,
+                        Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint) {}
 
 protected:
     /** @brief Keeps the loading surface visible when it is clicked. */
-    void mousePressEvent(QMouseEvent* event) override {
-        event->ignore();
-    }
+    void mousePressEvent(QMouseEvent* event) override { event->ignore(); }
 };
 
 /** @brief Creates the raster-only startup image without loading icon plugins. */
@@ -64,16 +60,14 @@ QPixmap create_loading_splash_pixmap() {
     title_font.setPointSize(24);
     title_font.setBold(true);
     painter.setFont(title_font);
-    painter.drawText(QRect(150, 24, kSplashWidth - 182, 48),
-                     Qt::AlignLeft | Qt::AlignVCenter,
+    painter.drawText(QRect(150, 24, kSplashWidth - 182, 48), Qt::AlignLeft | Qt::AlignVCenter,
                      QStringLiteral("uil"));
 
     QFont message_font = QApplication::font();
     message_font.setPointSize(10);
     painter.setFont(message_font);
     painter.setPen(QColor(0xb8, 0xb8, 0xb8));
-    painter.drawText(QRect(152, 80, kSplashWidth - 220, 36),
-                     Qt::AlignLeft | Qt::AlignVCenter,
+    painter.drawText(QRect(152, 80, kSplashWidth - 220, 36), Qt::AlignLeft | Qt::AlignVCenter,
                      QStringLiteral("Loading presenter…"));
 
     painter.setPen(QColor(0x38, 0x38, 0x38));
@@ -84,9 +78,8 @@ QPixmap create_loading_splash_pixmap() {
 #ifdef Q_OS_WIN
 /** @brief Restricts subsequent Windows DLL resolution to trusted search locations. */
 void harden_windows_dll_search() {
-    if (!SetDefaultDllDirectories(
-            LOAD_LIBRARY_SEARCH_APPLICATION_DIR
-            | LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+    if (!SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+                                  LOAD_LIBRARY_SEARCH_SYSTEM32)) {
         SetDllDirectoryW(L"");
     }
 }
@@ -98,12 +91,8 @@ qint64 windows_process_age_ms() {
     FILETIME kernel_time;
     FILETIME user_time;
     FILETIME current_time;
-    if (!GetProcessTimes(
-            GetCurrentProcess(),
-            &creation_time,
-            &exit_time,
-            &kernel_time,
-            &user_time)) {
+    if (!GetProcessTimes(GetCurrentProcess(), &creation_time, &exit_time, &kernel_time,
+                         &user_time)) {
         return 0;
     }
 
@@ -115,18 +104,15 @@ qint64 windows_process_age_ms() {
     current_value.LowPart = current_time.dwLowDateTime;
     current_value.HighPart = current_time.dwHighDateTime;
     return current_value.QuadPart >= creation_value.QuadPart
-        ? qint64((current_value.QuadPart - creation_value.QuadPart) / 10'000ULL)
-        : 0;
+               ? qint64((current_value.QuadPart - creation_value.QuadPart) / 10'000ULL)
+               : 0;
 }
 #else
 /** @brief Performs no DLL search configuration on non-Windows platforms. */
-void harden_windows_dll_search() {
-}
+void harden_windows_dll_search() {}
 
 /** @brief Returns zero when process-creation timing is unavailable. */
-qint64 windows_process_age_ms() {
-    return 0;
-}
+qint64 windows_process_age_ms() { return 0; }
 #endif
 
 /** @brief Loads and applies the bundled Qt application stylesheet. */
@@ -176,14 +162,11 @@ int main(int argc, char* argv[]) {
     QApplication::setOrganizationDomain(QStringLiteral("ivofilot.nl"));
     QApplication::setApplicationVersion(QStringLiteral(UIL_VERSION));
     performance_log::initialize();
-    performance_log::set_process_start_offset_ms(
-        process_to_main_ms + process_start_timer.elapsed());
-    performance_log::record_duration(
-        QStringLiteral("startup.process_to_main"),
-        process_to_main_ms);
-    performance_log::record_duration(
-        QStringLiteral("startup.qt_application"),
-        application_construction_ms);
+    performance_log::set_process_start_offset_ms(process_to_main_ms +
+                                                 process_start_timer.elapsed());
+    performance_log::record_duration(QStringLiteral("startup.process_to_main"), process_to_main_ms);
+    performance_log::record_duration(QStringLiteral("startup.qt_application"),
+                                     application_construction_ms);
     launcher_readiness::record_startup_metrics();
     launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_QT_RUNTIME_READY);
 
@@ -200,29 +183,30 @@ int main(int argc, char* argv[]) {
     }
 
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/uil.png")));
-    performance_log::record_event(QStringLiteral("session.environment"), {
-        {QStringLiteral("build_configuration"), QStringLiteral(UIL_BUILD_CONFIG)},
-        {QStringLiteral("compiler"), QStringLiteral(UIL_COMPILER_ID " " UIL_COMPILER_VERSION)},
-        {QStringLiteral("cpu_architecture"), QSysInfo::currentCpuArchitecture()},
-        {QStringLiteral("ideal_thread_count"), QThread::idealThreadCount()},
-        {QStringLiteral("kernel"), QSysInfo::kernelType() + QLatin1Char(' ') + QSysInfo::kernelVersion()},
-        {QStringLiteral("os"), QSysInfo::prettyProductName()},
-        {QStringLiteral("qt_runtime_version"), QString::fromLatin1(qVersion())},
-        {QStringLiteral("thread_pool_max_count"), QThreadPool::globalInstance()->maxThreadCount()}
-    });
+    performance_log::record_event(
+        QStringLiteral("session.environment"),
+        {{QStringLiteral("build_configuration"), QStringLiteral(UIL_BUILD_CONFIG)},
+         {QStringLiteral("compiler"), QStringLiteral(UIL_COMPILER_ID " " UIL_COMPILER_VERSION)},
+         {QStringLiteral("cpu_architecture"), QSysInfo::currentCpuArchitecture()},
+         {QStringLiteral("ideal_thread_count"), QThread::idealThreadCount()},
+         {QStringLiteral("kernel"),
+          QSysInfo::kernelType() + QLatin1Char(' ') + QSysInfo::kernelVersion()},
+         {QStringLiteral("os"), QSysInfo::prettyProductName()},
+         {QStringLiteral("qt_runtime_version"), QString::fromLatin1(qVersion())},
+         {QStringLiteral("thread_pool_max_count"),
+          QThreadPool::globalInstance()->maxThreadCount()}});
 
     QElapsedTimer startup_initialize_timer;
     startup_initialize_timer.start();
     qint64 previous_startup_checkpoint_ms = 0;
-    const auto record_startup_checkpoint =
-        [&startup_initialize_timer, &previous_startup_checkpoint_ms](const QString& name) {
-            const qint64 total_ms = startup_initialize_timer.elapsed();
-            performance_log::record_duration(
-                QStringLiteral("startup.initialize.") + name,
-                total_ms - previous_startup_checkpoint_ms,
-                {{QStringLiteral("total_ms"), total_ms}});
-            previous_startup_checkpoint_ms = total_ms;
-        };
+    const auto record_startup_checkpoint = [&startup_initialize_timer,
+                                            &previous_startup_checkpoint_ms](const QString& name) {
+        const qint64 total_ms = startup_initialize_timer.elapsed();
+        performance_log::record_duration(QStringLiteral("startup.initialize.") + name,
+                                         total_ms - previous_startup_checkpoint_ms,
+                                         {{QStringLiteral("total_ms"), total_ms}});
+        previous_startup_checkpoint_ms = total_ms;
+    };
 
     apply_application_theme(app);
     record_startup_checkpoint(QStringLiteral("apply_theme"));
@@ -239,24 +223,30 @@ int main(int argc, char* argv[]) {
     launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_PRESENTER_READY);
 
     controller.set_audience_window(&audience_window);
-    QObject::connect(&app, &QGuiApplication::screenAdded, &controller, &AppController::refresh_screens);
-    QObject::connect(&app, &QGuiApplication::screenRemoved, &controller, &AppController::refresh_screens);
-    QObject::connect(&audience_window, &AudienceWindow::next_requested, &controller, &AppController::next_page);
-    QObject::connect(&audience_window, &AudienceWindow::previous_requested, &controller, &AppController::previous_page);
-    QObject::connect(&audience_window, &AudienceWindow::page_requested, &controller, &AppController::go_to_page);
-    QObject::connect(&audience_window, &AudienceWindow::deck_overview_renders_requested, &controller, &AppController::request_deck_overview_renders);
-    QObject::connect(&audience_window, &AudienceWindow::first_requested, &controller, [&controller] {
-        controller.go_to_page(0);
-    });
-    QObject::connect(&audience_window, &AudienceWindow::last_requested, &controller, [&controller] {
-        controller.go_to_page(controller.page_count() - 1);
-    });
-    QObject::connect(&audience_window, &AudienceWindow::play_pause_requested, &controller, &AppController::toggle_media_playback);
+    QObject::connect(&app, &QGuiApplication::screenAdded, &controller,
+                     &AppController::refresh_screens);
+    QObject::connect(&app, &QGuiApplication::screenRemoved, &controller,
+                     &AppController::refresh_screens);
+    QObject::connect(&audience_window, &AudienceWindow::next_requested, &controller,
+                     &AppController::next_page);
+    QObject::connect(&audience_window, &AudienceWindow::previous_requested, &controller,
+                     &AppController::previous_page);
+    QObject::connect(&audience_window, &AudienceWindow::page_requested, &controller,
+                     &AppController::go_to_page);
+    QObject::connect(&audience_window, &AudienceWindow::deck_overview_renders_requested,
+                     &controller, &AppController::request_deck_overview_renders);
+    QObject::connect(&audience_window, &AudienceWindow::first_requested, &controller,
+                     [&controller] { controller.go_to_page(0); });
+    QObject::connect(&audience_window, &AudienceWindow::last_requested, &controller,
+                     [&controller] { controller.go_to_page(controller.page_count() - 1); });
+    QObject::connect(&audience_window, &AudienceWindow::play_pause_requested, &controller,
+                     &AppController::toggle_media_playback);
     QObject::connect(&controller, &AppController::page_changed, &audience_window,
-        [&audience_window](int page_index, int page_count) {
-            audience_window.set_document_overview(page_count, page_index);
-        });
-    QObject::connect(&controller, &AppController::deck_slide_image_changed, &audience_window, &AudienceWindow::set_deck_overview_slide_image);
+                     [&audience_window](int page_index, int page_count) {
+                         audience_window.set_document_overview(page_count, page_index);
+                     });
+    QObject::connect(&controller, &AppController::deck_slide_image_changed, &audience_window,
+                     &AudienceWindow::set_deck_overview_slide_image);
     record_startup_checkpoint(QStringLiteral("connect_windows"));
     launcher_readiness::report_progress(UIL_LAUNCHER_STAGE_CONNECTIONS_READY);
 
@@ -265,24 +255,20 @@ int main(int argc, char* argv[]) {
     presenter_window.show();
     if (loading_splash) {
         loading_splash->finish(&presenter_window);
-        performance_log::record_duration(
-            QStringLiteral("startup.loading_window_visible"),
-            loading_window_visible_timer.elapsed());
+        performance_log::record_duration(QStringLiteral("startup.loading_window_visible"),
+                                         loading_window_visible_timer.elapsed());
         loading_splash.reset();
     }
     record_startup_checkpoint(QStringLiteral("show_presenter"));
     performance_log::record_duration(
-        QStringLiteral("startup.initialize"),
-        startup_initialize_timer.elapsed(),
+        QStringLiteral("startup.initialize"), startup_initialize_timer.elapsed(),
         {{QStringLiteral("outcome"), QStringLiteral("ready_for_event_loop")}});
 
     QTimer::singleShot(0, &app, [&process_start_timer] {
-        performance_log::record_duration(
-            QStringLiteral("startup.main_to_first_event_loop_turn"),
-            process_start_timer.elapsed());
-        performance_log::record_duration(
-            QStringLiteral("startup.process_to_first_event_loop_turn"),
-            performance_log::process_elapsed_ms());
+        performance_log::record_duration(QStringLiteral("startup.main_to_first_event_loop_turn"),
+                                         process_start_timer.elapsed());
+        performance_log::record_duration(QStringLiteral("startup.process_to_first_event_loop_turn"),
+                                         performance_log::process_elapsed_ms());
     });
 
     return app.exec();

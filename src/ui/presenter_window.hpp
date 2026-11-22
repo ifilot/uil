@@ -1,7 +1,7 @@
 #pragma once
 
-#include <QImage>
 #include <QHash>
+#include <QImage>
 #include <QLabel>
 #include <QMainWindow>
 #include <QPointer>
@@ -76,7 +76,8 @@ private slots:
     void open_pdf();
     /** @brief Saves the active presentation package; returns false if cancelled or failed. */
     bool save_package();
-    /** @brief Saves the active presentation package to a new path; returns false if cancelled or failed. */
+    /** @brief Saves the active presentation package to a new path; returns false if cancelled or
+     * failed. */
     bool save_package_as();
     /** @brief Exports the annotated presentation as PDF. */
     void export_as_pdf();

@@ -18,9 +18,7 @@ constexpr qint64 kMaximumBufferedBytes = 256LL * 1024LL * 1024LL;
 constexpr unsigned long kDecoderWaitTimeoutMs = 50;
 
 /** @brief Returns the detached pixel storage occupied by a decoded frame. */
-qint64 frame_bytes(const DecodedVideoFrame& frame) {
-    return qint64(frame.image.sizeInBytes());
-}
+qint64 frame_bytes(const DecodedVideoFrame& frame) { return qint64(frame.image.sizeInBytes()); }
 
 /** @brief Adapts VideoFrameReader to the buffer's source interface. */
 class VideoFrameReaderSource final : public VideoFrameSource {
@@ -31,8 +29,7 @@ public:
     }
 
     /** @brief Decodes the next frame; see VideoFrameReader::read_next_frame(). */
-    std::optional<DecodedVideoFrame> read_next_frame(
-        QString* error_message) override {
+    std::optional<DecodedVideoFrame> read_next_frame(QString* error_message) override {
         return reader_.read_next_frame(error_message);
     }
 
@@ -69,22 +66,14 @@ public:
 };
 
 VideoFrameBuffer::VideoFrameBuffer(QObject* parent)
-    : VideoFrameBuffer([] {
-          return std::make_unique<VideoFrameReaderSource>();
-      }, parent) {
-}
+    : VideoFrameBuffer([] { return std::make_unique<VideoFrameReaderSource>(); }, parent) {}
 
-VideoFrameBuffer::VideoFrameBuffer(
-    FrameSourceFactory source_factory,
-    QObject* parent)
-    : QObject(parent),
-      impl_(std::make_unique<Impl>()) {
+VideoFrameBuffer::VideoFrameBuffer(FrameSourceFactory source_factory, QObject* parent)
+    : QObject(parent), impl_(std::make_unique<Impl>()) {
     impl_->source_factory = std::move(source_factory);
 }
 
-VideoFrameBuffer::~VideoFrameBuffer() {
-    stop();
-}
+VideoFrameBuffer::~VideoFrameBuffer() { stop(); }
 
 void VideoFrameBuffer::start(const QString& path, int target_buffer_ms) {
     stop();
@@ -104,9 +93,7 @@ void VideoFrameBuffer::start(const QString& path, int target_buffer_ms) {
         impl_->buffer_notification_pending = false;
     }
 
-    impl_->thread = QThread::create([this, path, generation] {
-        decode_loop(path, generation);
-    });
+    impl_->thread = QThread::create([this, path, generation] { decode_loop(path, generation); });
     impl_->thread->setObjectName(QStringLiteral("Video decode buffer"));
     impl_->thread->start();
 }
@@ -177,9 +164,8 @@ QString VideoFrameBuffer::error_message() const {
 }
 
 void VideoFrameBuffer::decode_loop(const QString& path, quint64 generation) {
-    std::unique_ptr<VideoFrameSource> source = impl_->source_factory
-        ? impl_->source_factory()
-        : nullptr;
+    std::unique_ptr<VideoFrameSource> source =
+        impl_->source_factory ? impl_->source_factory() : nullptr;
     if (!source) {
         finish_decoding(generation, QStringLiteral("No video decoder is available"));
         return;
@@ -188,19 +174,18 @@ void VideoFrameBuffer::decode_loop(const QString& path, quint64 generation) {
     source->set_interrupt_flag(&impl_->interrupt_requested);
     QString open_error;
     if (!source->open(path, &open_error)) {
-        finish_decoding(
-            generation,
-            open_error.isEmpty() ? QStringLiteral("Could not open video") : open_error);
+        finish_decoding(generation,
+                        open_error.isEmpty() ? QStringLiteral("Could not open video") : open_error);
         return;
     }
 
     while (true) {
         {
             QMutexLocker locker(&impl_->mutex);
-            while (!impl_->stop_requested
-                   && (buffered_duration_locked() >= impl_->target_buffer_ms
-                       || impl_->frames.size() >= kMaximumBufferedFrames
-                       || impl_->buffered_bytes >= kMaximumBufferedBytes)) {
+            while (!impl_->stop_requested &&
+                   (buffered_duration_locked() >= impl_->target_buffer_ms ||
+                    impl_->frames.size() >= kMaximumBufferedFrames ||
+                    impl_->buffered_bytes >= kMaximumBufferedBytes)) {
                 impl_->buffer_changed.wait(&impl_->mutex, kDecoderWaitTimeoutMs);
             }
 
@@ -218,18 +203,16 @@ void VideoFrameBuffer::decode_loop(const QString& path, quint64 generation) {
 
         const qint64 decoded_frame_bytes = frame_bytes(*frame);
         if (decoded_frame_bytes <= 0 || decoded_frame_bytes > kMaximumBufferedBytes) {
-            finish_decoding(
-                generation,
-                QStringLiteral("Decoded video frame exceeds the buffer memory limit"));
+            finish_decoding(generation,
+                            QStringLiteral("Decoded video frame exceeds the buffer memory limit"));
             return;
         }
 
         {
             QMutexLocker locker(&impl_->mutex);
-            while (!impl_->stop_requested
-                   && !impl_->frames.isEmpty()
-                   && (impl_->frames.size() >= kMaximumBufferedFrames
-                       || impl_->buffered_bytes + decoded_frame_bytes > kMaximumBufferedBytes)) {
+            while (!impl_->stop_requested && !impl_->frames.isEmpty() &&
+                   (impl_->frames.size() >= kMaximumBufferedFrames ||
+                    impl_->buffered_bytes + decoded_frame_bytes > kMaximumBufferedBytes)) {
                 impl_->buffer_changed.wait(&impl_->mutex, kDecoderWaitTimeoutMs);
             }
             if (impl_->stop_requested) {
@@ -293,40 +276,49 @@ void VideoFrameBuffer::emit_frame_available_queued(quint64 generation) {
         impl_->frame_notification_pending = true;
     }
 
-    QMetaObject::invokeMethod(this, [this, generation] {
-        {
-            QMutexLocker locker(&impl_->mutex);
-            if (!is_current_generation_locked(generation)) {
-                return;
+    QMetaObject::invokeMethod(
+        this,
+        [this, generation] {
+            {
+                QMutexLocker locker(&impl_->mutex);
+                if (!is_current_generation_locked(generation)) {
+                    return;
+                }
+                impl_->frame_notification_pending = false;
             }
-            impl_->frame_notification_pending = false;
-        }
-        emit frame_available();
-    }, Qt::QueuedConnection);
+            emit frame_available();
+        },
+        Qt::QueuedConnection);
 }
 
 void VideoFrameBuffer::emit_finished_queued(quint64 generation) {
-    QMetaObject::invokeMethod(this, [this, generation] {
-        {
-            QMutexLocker locker(&impl_->mutex);
-            if (!is_current_generation_locked(generation)) {
-                return;
+    QMetaObject::invokeMethod(
+        this,
+        [this, generation] {
+            {
+                QMutexLocker locker(&impl_->mutex);
+                if (!is_current_generation_locked(generation)) {
+                    return;
+                }
             }
-        }
-        emit finished();
-    }, Qt::QueuedConnection);
+            emit finished();
+        },
+        Qt::QueuedConnection);
 }
 
 void VideoFrameBuffer::emit_failed_queued(quint64 generation, const QString& error_message) {
-    QMetaObject::invokeMethod(this, [this, generation, error_message] {
-        {
-            QMutexLocker locker(&impl_->mutex);
-            if (!is_current_generation_locked(generation)) {
-                return;
+    QMetaObject::invokeMethod(
+        this,
+        [this, generation, error_message] {
+            {
+                QMutexLocker locker(&impl_->mutex);
+                if (!is_current_generation_locked(generation)) {
+                    return;
+                }
             }
-        }
-        emit failed(error_message);
-    }, Qt::QueuedConnection);
+            emit failed(error_message);
+        },
+        Qt::QueuedConnection);
 }
 
 void VideoFrameBuffer::emit_buffer_changed_queued(quint64 generation) {
@@ -338,18 +330,21 @@ void VideoFrameBuffer::emit_buffer_changed_queued(quint64 generation) {
         impl_->buffer_notification_pending = true;
     }
 
-    QMetaObject::invokeMethod(this, [this, generation] {
-        int duration_ms = 0;
-        int frame_count = 0;
-        {
-            QMutexLocker locker(&impl_->mutex);
-            if (!is_current_generation_locked(generation)) {
-                return;
+    QMetaObject::invokeMethod(
+        this,
+        [this, generation] {
+            int duration_ms = 0;
+            int frame_count = 0;
+            {
+                QMutexLocker locker(&impl_->mutex);
+                if (!is_current_generation_locked(generation)) {
+                    return;
+                }
+                impl_->buffer_notification_pending = false;
+                duration_ms = buffered_duration_locked();
+                frame_count = impl_->frames.size();
             }
-            impl_->buffer_notification_pending = false;
-            duration_ms = buffered_duration_locked();
-            frame_count = impl_->frames.size();
-        }
-        emit buffer_changed(duration_ms, frame_count);
-    }, Qt::QueuedConnection);
+            emit buffer_changed(duration_ms, frame_count);
+        },
+        Qt::QueuedConnection);
 }

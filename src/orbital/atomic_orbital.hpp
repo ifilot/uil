@@ -3,8 +3,8 @@
 #include <QByteArray>
 #include <QColor>
 #include <QString>
-#include <QVector>
 #include <QVector3D>
+#include <QVector>
 
 inline constexpr double kAtomicOrbitalContourMinimum = 1.0e-8;
 
@@ -70,29 +70,18 @@ struct AtomicOrbitalVolume {
 QVector<AtomicOrbitalCatalogEntry> atomic_orbital_catalog();
 
 /** @brief Resolves a Managlyph-style orbital name to quantum numbers. */
-bool resolve_atomic_orbital(
-    const QString& name,
-    AtomicOrbitalCatalogEntry* entry);
+bool resolve_atomic_orbital(const QString& name, AtomicOrbitalCatalogEntry* entry);
 
 /** @brief Evaluates a real normalized hydrogen-like wavefunction in atomic units. */
-double hydrogenic_atomic_orbital_value(
-    int n,
-    int l,
-    int m,
-    double x,
-    double y,
-    double z);
+double hydrogenic_atomic_orbital_value(int n, int l, int m, double x, double y, double z);
 
 /** @brief Parses and validates a version-one embedded atomic-orbital JSON payload. */
-bool parse_atomic_orbital(
-    const QByteArray& payload,
-    AtomicOrbitalDefinition* definition,
-    QString* error_message = nullptr);
+bool parse_atomic_orbital(const QByteArray& payload, AtomicOrbitalDefinition* definition,
+                          QString* error_message = nullptr);
 
 /** @brief Samples a wavefunction and constructs both signed isosurfaces. */
-AtomicOrbitalVolume build_atomic_orbital_volume(
-    const AtomicOrbitalDefinition& definition,
-    QString* error_message = nullptr);
+AtomicOrbitalVolume build_atomic_orbital_volume(const AtomicOrbitalDefinition& definition,
+                                                QString* error_message = nullptr);
 
 /** @brief Returns a 256-color lookup table for a curated divergent colormap. */
 QVector<QColor> atomic_orbital_colormap(const QString& name);

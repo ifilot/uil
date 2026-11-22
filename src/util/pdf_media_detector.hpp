@@ -155,7 +155,6 @@ struct PdfMediaScanResult {
  * Never throws.
  */
 PdfMediaScanResult scan_pdf_media_annotations(
-    const QString& path,
-    const QString& package_root_path = QString(),
+    const QString& path, const QString& package_root_path = QString(),
     const QStringList& package_movie_asset_paths = {},
     const QStringList& package_molecule_asset_paths = {}) noexcept;

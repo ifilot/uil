@@ -1,8 +1,8 @@
 #pragma once
 
 #include <QIcon>
-#include <QString>
 #include <QSize>
+#include <QString>
 
 /** @brief Bundled Bluecurve action icons rendered from SVG resources. */
 namespace bluecurve {

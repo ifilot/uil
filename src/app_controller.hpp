@@ -1,16 +1,16 @@
 #pragma once
 
 #include "cache/slide_cache.hpp"
-#include "pdf/pdf_backend.hpp"
 #include "media/video_frame_buffer.hpp"
 #include "media/video_frame_extractor.hpp"
+#include "pdf/pdf_backend.hpp"
 #include "render/render_scheduler.hpp"
 #include "util/pdf_media_detector.hpp"
 
-#include <QObject>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QImage>
+#include <QObject>
 #include <QPointer>
 #include <QRectF>
 #include <QScreen>
@@ -72,7 +72,8 @@ public:
      * overlays, and overlays for pages that no longer exist are dropped.
      * @return True when the presentation was reopened.
      */
-    bool reload_current_document(const std::optional<AnnotationState>& presenter_state = std::nullopt);
+    bool reload_current_document(
+        const std::optional<AnnotationState>& presenter_state = std::nullopt);
     /** @brief Advances to the next page when one is available. */
     void next_page();
     /** @brief Returns to the previous page when one is available. */
@@ -89,22 +90,19 @@ public:
      * Visible thumbnails are rendered ahead of slide prefetching because the grid is then the
      * surface the audience is looking at. Results arrive via deck_slide_image_changed().
      */
-    void request_deck_overview_renders(
-        const QSize& bounding_pixel_size,
-        int focused_page_index = -1,
-        int first_visible_page = -1,
-        int last_visible_page = -1);
+    void request_deck_overview_renders(const QSize& bounding_pixel_size,
+                                       int focused_page_index = -1, int first_visible_page = -1,
+                                       int last_visible_page = -1);
     /**
      * @brief Requests thumbnails for the presenter window's always-visible slide strip.
      *
      * These run behind current, next and previous slide renders. Results arrive via
      * deck_slide_image_changed() with @p bounding_pixel_size.
      */
-    void request_presenter_thumbnail_renders(
-        const QSize& bounding_pixel_size,
-        int focused_page_index = -1,
-        int first_visible_page = -1,
-        int last_visible_page = -1);
+    void request_presenter_thumbnail_renders(const QSize& bounding_pixel_size,
+                                             int focused_page_index = -1,
+                                             int first_visible_page = -1,
+                                             int last_visible_page = -1);
 
     /**
      * @brief Returns the PDF file being rendered.
@@ -114,7 +112,8 @@ public:
      * the user or used as a default save location.
      */
     QString current_path() const;
-    /** @brief Returns the file the user opened or last saved: the `.uil` package if any, otherwise the PDF. */
+    /** @brief Returns the file the user opened or last saved: the `.uil` package if any, otherwise
+     * the PDF. */
     QString document_display_path() const;
     /** @brief Returns the screen selected for the audience window. */
     QScreen* selected_audience_screen() const;
@@ -144,7 +143,9 @@ public:
      * @return True on success; the package then becomes the current package and the
      *         annotations count as saved.
      */
-    bool save_uil_package(const QString& path, const QHash<int, QImage>& overlay_images, const QSet<int>& hidden_overlay_pages, bool overlays_globally_visible, QString* error_message = nullptr);
+    bool save_uil_package(const QString& path, const QHash<int, QImage>& overlay_images,
+                          const QSet<int>& hidden_overlay_pages, bool overlays_globally_visible,
+                          QString* error_message = nullptr);
     /**
      * @brief Exports every slide with its annotation overlay as a raster PDF.
      *
@@ -153,14 +154,16 @@ public:
      * @param[out] error_message Receives a readable reason on failure; may be null.
      * @return True when the file was written.
      */
-    bool export_annotated_pdf(const QString& path, const QHash<int, QImage>& overlay_images, QString* error_message = nullptr);
+    bool export_annotated_pdf(const QString& path, const QHash<int, QImage>& overlay_images,
+                              QString* error_message = nullptr);
     /** @brief Clears the annotation overlay for one page and marks annotations as modified. */
     void clear_annotation_overlay_for_page(int page_index);
     /** @brief Clears every annotation overlay and marks annotations as modified. */
     void clear_all_annotation_overlays();
     /** @brief Returns whether annotations changed since the presentation was opened or saved. */
     bool has_unsaved_annotations() const;
-    /** @brief Records an annotation change made outside the audience window, such as visibility toggles. */
+    /** @brief Records an annotation change made outside the audience window, such as visibility
+     * toggles. */
     void mark_annotations_modified();
     /** @brief Returns the path of the currently open UIL package. */
     QString current_package_path() const;
@@ -183,7 +186,8 @@ signals:
     /** @brief Emitted when the next-slide preview image changes. */
     void next_slide_image_changed(const QImage& image);
     /** @brief Emitted when a deck-overview thumbnail becomes available. */
-    void deck_slide_image_changed(int page_index, const QSize& bounding_pixel_size, const QImage& image);
+    void deck_slide_image_changed(int page_index, const QSize& bounding_pixel_size,
+                                  const QImage& image);
     /** @brief Emitted when the user-facing status message changes. */
     void status_message_changed(const QString& message);
     /** @brief Emitted when the selected audience screen changes. */
@@ -197,13 +201,15 @@ private:
     /** @brief Calculates the audience render size for a page. */
     QSize audience_render_pixel_size(int page_index) const;
     /** @brief Builds a cache key for a page and explicit render size. */
-    SlideCacheKey cache_key_for_page_at_size(int page_index, const QSize& bounding_pixel_size) const;
+    SlideCacheKey cache_key_for_page_at_size(int page_index,
+                                             const QSize& bounding_pixel_size) const;
     /** @brief Builds a cache key for a page at the audience render size. */
     SlideCacheKey cache_key_for_page(int page_index) const;
     /** @brief Creates the audience texture key associated with a cache key. */
     QString texture_key_for_cache_key(const SlideCacheKey& key) const;
     /** @brief Builds a render request for a page and explicit render size. */
-    RenderRequest render_request_for_page_at_size(int page_index, const QSize& bounding_pixel_size) const;
+    RenderRequest render_request_for_page_at_size(int page_index,
+                                                  const QSize& bounding_pixel_size) const;
     /** @brief Builds a render request for a page at the audience render size. */
     RenderRequest render_request_for_page(int page_index) const;
     /** @brief Opens @p path, optionally replacing the package's overlays with @p preserved. */
@@ -211,19 +217,18 @@ private:
     /** @brief Identifies one of the two thumbnail views that request renders. */
     enum class OverviewView { Audience = 0, Presenter = 1 };
     /** @brief Queues thumbnail renders for @p view; see request_deck_overview_renders(). */
-    void request_overview_renders(
-        OverviewView view,
-        const QSize& bounding_pixel_size,
-        int focused_page_index,
-        int first_visible_page,
-        int last_visible_page);
+    void request_overview_renders(OverviewView view, const QSize& bounding_pixel_size,
+                                  int focused_page_index, int first_visible_page,
+                                  int last_visible_page);
     /** @brief Re-requests visible thumbnails of every active overview, e.g. after a cache reset. */
     void refresh_deck_overviews();
     /** @brief Drops queued audience-size renders that are no longer near the current page. */
     void prune_stale_slide_renders();
-    /** @brief Blocks until the current media scan result has been applied; returns false if it never arrives. */
+    /** @brief Blocks until the current media scan result has been applied; returns false if it
+     * never arrives. */
     bool wait_for_media_scan();
-    /** @brief Re-renders cached pages whose video poster frames became available after the media scan. */
+    /** @brief Re-renders cached pages whose video poster frames became available after the media
+     * scan. */
     void refresh_media_poster_pages();
     /** @brief Updates the current and next slide images. */
     void update_visible_slides();
@@ -234,7 +239,8 @@ private:
     /** @brief Schedules likely upcoming pages for background rendering. */
     void schedule_predictive_renders();
     /** @brief Queues a page render at an explicit size and priority. */
-    void request_page_render_at_size(int page_index, const QSize& bounding_pixel_size, int priority);
+    void request_page_render_at_size(int page_index, const QSize& bounding_pixel_size,
+                                     int priority);
     /** @brief Queues a page render at the audience size and priority. */
     void request_page_render(int page_index, int priority);
     /** @brief Composites active video frames over a rendered slide. */
@@ -257,7 +263,8 @@ private:
     void start_media_playback();
     /** @brief Stops active media playback and clears its frame overlay. */
     void stop_media_playback();
-    /** @brief Takes the next decoded frame, synthesizing increasing timestamps when the stream lacks them. */
+    /** @brief Takes the next decoded frame, synthesizing increasing timestamps when the stream
+     * lacks them. */
     std::optional<DecodedVideoFrame> take_video_frame();
     /** @brief Advances playback to the next buffered video frame. */
     void advance_video_frame();
@@ -272,16 +279,14 @@ private:
     /** @brief Handles the start of a scheduled render. */
     void handle_render_started(const RenderRequest& request);
     /** @brief Handles completion of a scheduled render. */
-    void handle_render_finished(const RenderRequest& request, const QImage& image, qint64 elapsed_ms, const QString& error_message);
+    void handle_render_finished(const RenderRequest& request, const QImage& image,
+                                qint64 elapsed_ms, const QString& error_message);
     /** @brief Scans the active document for media on a background worker. */
-    void schedule_media_scan(
-        const QString& pdf_path,
-        const QString& package_root_path,
-        const QStringList& package_movie_asset_paths,
-        const QStringList& package_molecule_asset_paths,
-        const QString& document_hash,
-        int generation,
-        std::shared_ptr<QTemporaryDir> package_lifetime);
+    void schedule_media_scan(const QString& pdf_path, const QString& package_root_path,
+                             const QStringList& package_movie_asset_paths,
+                             const QStringList& package_molecule_asset_paths,
+                             const QString& document_hash, int generation,
+                             std::shared_ptr<QTemporaryDir> package_lifetime);
     /** @brief Returns whether a PDF document is currently open. */
     bool has_document() const;
     /** @brief Returns cached page geometry without re-entering the PDF backend. */

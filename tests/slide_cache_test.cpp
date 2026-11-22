@@ -14,7 +14,7 @@ QImage make_image(int width, int height, QRgb color) {
     image.fill(color);
     return image;
 }
-}
+}  // namespace
 
 class SlideCacheTest final : public QObject {
     Q_OBJECT

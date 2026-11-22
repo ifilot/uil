@@ -36,9 +36,7 @@ struct HarmonicPlaybackSample {
  * @param phase Phase in periods; clamped to [0, 1].
  * @param initial_stretch Packet center at phase 0 (maximum stretch).
  */
-HarmonicWavepacketObservation evaluate_harmonic_wavepacket(
-    double phase,
-    double initial_stretch);
+HarmonicWavepacketObservation evaluate_harmonic_wavepacket(double phase, double initial_stretch);
 
 /**
  * @brief Evaluates the normalized coherent-state density exp(-(x - x0)^2) / sqrt(pi) at @p x.
@@ -50,11 +48,8 @@ double harmonic_probability_density(double x, double mean_position);
  * @brief Samples the Gaussian density uniformly, including both range endpoints.
  * @return @p sample_count points, or none when @p x_max <= @p x_min or @p sample_count < 2.
  */
-QVector<QPointF> sample_harmonic_probability_density(
-    double x_min,
-    double x_max,
-    int sample_count,
-    double mean_position);
+QVector<QPointF> sample_harmonic_probability_density(double x_min, double x_max, int sample_count,
+                                                     double mean_position);
 
 /**
  * @brief Computes elapsed-time playback from @p starting_phase.
@@ -63,11 +58,8 @@ QVector<QPointF> sample_harmonic_probability_density(
  * @p loop, it wraps into [0, 1) and keeps running. A non-positive period or negative elapsed
  * time returns the clamped start phase, not running.
  */
-HarmonicPlaybackSample harmonic_playback_sample(
-    double starting_phase,
-    double elapsed_seconds,
-    double period_seconds,
-    bool loop = false);
+HarmonicPlaybackSample harmonic_playback_sample(double starting_phase, double elapsed_seconds,
+                                                double period_seconds, bool loop = false);
 
 /** @brief Evaluates |psi_n(x)|^2 for eigenstate @p n; 0 outside n in [0, 32]. */
 double harmonic_basis_probability_density(int n, double x);
@@ -93,11 +85,7 @@ double coherent_state_basis_weight(int n, double initial_stretch);
  * The common zero-point phase is omitted, leaving the physically relevant
  * relative phase exp(-i 2 pi n tau).
  */
-double coherent_state_basis_real_component(
-    int n,
-    double x,
-    double phase,
-    double initial_stretch);
+double coherent_state_basis_real_component(int n, double x, double phase, double initial_stretch);
 
 /** @brief Evaluates the displaced ground state Phi(x) = psi_0(x-d). */
 double harmonic_displaced_ground_state(double x, double displacement);
@@ -120,9 +108,6 @@ double harmonic_displaced_captured_fraction(int basis_count, double displacement
  *         @p basis_count is outside [1, 200], the range is empty, @p sample_count < 2, or the
  *         displacement is not finite.
  */
-QVector<QPointF> sample_harmonic_displaced_approximation(
-    int basis_count,
-    double x_min,
-    double x_max,
-    int sample_count,
-    double displacement);
+QVector<QPointF> sample_harmonic_displaced_approximation(int basis_count, double x_min,
+                                                         double x_max, int sample_count,
+                                                         double displacement);

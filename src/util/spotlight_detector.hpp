@@ -33,10 +33,8 @@ public:
      * @param poll_interval_ms Poll interval in milliseconds, clamped to at least 1.
      * @param parent Owning QObject.
      */
-    SpotlightDetector(
-        PresenceProbe presence_probe,
-        int poll_interval_ms,
-        QObject* parent = nullptr);
+    SpotlightDetector(PresenceProbe presence_probe, int poll_interval_ms,
+                      QObject* parent = nullptr);
     /** @brief Releases the HID enumeration library when this detector initialized it. */
     ~SpotlightDetector() override;
 

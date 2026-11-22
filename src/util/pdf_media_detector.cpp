@@ -49,9 +49,7 @@ bool is_latin1_space_byte(char ch) {
 }
 
 /** @brief Returns whether a byte is an ASCII decimal digit. */
-bool is_digit_byte(char ch) {
-    return ch >= '0' && ch <= '9';
-}
+bool is_digit_byte(char ch) { return ch >= '0' && ch <= '9'; }
 
 /** @brief Returns whether a byte is an ASCII letter or digit. */
 bool is_alphanumeric_byte(char ch) {
@@ -59,9 +57,7 @@ bool is_alphanumeric_byte(char ch) {
 }
 
 /** @brief Returns whether a byte is a regular-expression word character (`[A-Za-z0-9_]`). */
-bool is_word_byte(char ch) {
-    return is_alphanumeric_byte(ch) || ch == '_';
-}
+bool is_word_byte(char ch) { return is_alphanumeric_byte(ch) || ch == '_'; }
 
 /** @brief Returns the index of the first non-whitespace byte at or after @p index. */
 qsizetype skip_spaces(QByteArrayView bytes, qsizetype index) {
@@ -138,9 +134,9 @@ bool parse_reference_at(QByteArrayView bytes, qsizetype index, int* object_numbe
     const qsizetype generation_begin = skip_spaces(bytes, number_end);
     const qsizetype generation_end = skip_digits(bytes, generation_begin);
     const qsizetype keyword = skip_spaces(bytes, generation_end);
-    if (number_end == index || generation_begin == number_end
-        || generation_end == generation_begin || keyword == generation_end
-        || keyword >= bytes.size() || bytes.at(keyword) != 'R') {
+    if (number_end == index || generation_begin == number_end ||
+        generation_end == generation_begin || keyword == generation_end ||
+        keyword >= bytes.size() || bytes.at(keyword) != 'R') {
         return false;
     }
     *object_number = parse_decimal(bytes, index, number_end);
@@ -156,10 +152,8 @@ bool parse_reference_at(QByteArrayView bytes, qsizetype index, int* object_numbe
  * so that callers can charge aborted decompression against an aggregate budget.
  * @return The inflated data, or an empty array for corrupt, truncated, or oversized streams.
  */
-QByteArray inflate_flate_data(
-    QByteArrayView input,
-    qsizetype maximum_output_bytes,
-    qsizetype* produced_bytes = nullptr) {
+QByteArray inflate_flate_data(QByteArrayView input, qsizetype maximum_output_bytes,
+                              qsizetype* produced_bytes = nullptr) {
     if (produced_bytes) {
         *produced_bytes = 0;
     }
@@ -199,8 +193,8 @@ qsizetype stream_data_start(const QByteArray& object_body, qsizetype stream_keyw
     if (object_body.mid(start, 2) == "\r\n") {
         return start + 2;
     }
-    if (start < object_body.size()
-        && (object_body.at(start) == '\n' || object_body.at(start) == '\r')) {
+    if (start < object_body.size() &&
+        (object_body.at(start) == '\n' || object_body.at(start) == '\r')) {
         return start + 1;
     }
     return start;
@@ -238,8 +232,8 @@ bool has_type(const QByteArray& bytes, QByteArrayView type_name) {
     qsizetype index = 0;
     while ((index = bytes.indexOf("/Type", index)) >= 0) {
         const qsizetype value = skip_spaces(bytes, index + 5);
-        if (value < bytes.size() && bytes.at(value) == '/'
-            && QByteArrayView(bytes).sliced(value + 1).startsWith(type_name)) {
+        if (value < bytes.size() && bytes.at(value) == '/' &&
+            QByteArrayView(bytes).sliced(value + 1).startsWith(type_name)) {
             const qsizetype end = value + 1 + type_name.size();
             if (end == bytes.size() || !is_word_byte(bytes.at(end))) {
                 return true;
@@ -259,8 +253,8 @@ std::optional<int> referenced_object(const QByteArray& bytes, QByteArrayView key
         const qsizetype number_begin = skip_spaces(bytes, key_end);
         int object_number = 0;
         qsizetype reference_end = 0;
-        if (number_begin > key_end
-            && parse_reference_at(bytes, number_begin, &object_number, &reference_end)) {
+        if (number_begin > key_end &&
+            parse_reference_at(bytes, number_begin, &object_number, &reference_end)) {
             return object_number;
         }
         ++index;
@@ -312,17 +306,16 @@ QByteArray bracketed_value(const QByteArray& bytes, QByteArrayView key) {
 
 /** @brief Decodes a PDF byte string, including UTF-16 byte-order marks. */
 QString decoded_pdf_string_bytes(const QByteArray& decoded) {
-    if (decoded.size() >= 2
-        && ((uchar(decoded.at(0)) == 0xfe && uchar(decoded.at(1)) == 0xff)
-            || (uchar(decoded.at(0)) == 0xff && uchar(decoded.at(1)) == 0xfe))) {
+    if (decoded.size() >= 2 && ((uchar(decoded.at(0)) == 0xfe && uchar(decoded.at(1)) == 0xff) ||
+                                (uchar(decoded.at(0)) == 0xff && uchar(decoded.at(1)) == 0xfe))) {
         const bool big_endian = uchar(decoded.at(0)) == 0xfe;
         QString result;
         result.reserve((decoded.size() - 2) / 2);
         for (qsizetype i = 2; i + 1 < decoded.size(); i += 2) {
             const ushort first = uchar(decoded.at(i));
             const ushort second = uchar(decoded.at(i + 1));
-            result.append(QChar(big_endian ? ushort((first << 8) | second)
-                                           : ushort(first | (second << 8))));
+            result.append(
+                QChar(big_endian ? ushort((first << 8) | second) : ushort(first | (second << 8))));
         }
         return result;
     }
@@ -373,9 +366,8 @@ QString pdf_string_value(const QByteArray& bytes, QByteArrayView key) {
             if (escaped >= '0' && escaped <= '7') {
                 int value = escaped - '0';
                 int digits = 1;
-                while (digits < 3 && i + 1 < bytes.size()
-                       && bytes.at(i + 1) >= '0'
-                       && bytes.at(i + 1) <= '7') {
+                while (digits < 3 && i + 1 < bytes.size() && bytes.at(i + 1) >= '0' &&
+                       bytes.at(i + 1) <= '7') {
                     value = value * 8 + bytes.at(++i) - '0';
                     ++digits;
                 }
@@ -470,21 +462,15 @@ bool is_media_annotation(const QByteArray& bytes) {
     if (has_type(dictionary_part(bytes), "EmbeddedFile")) {
         return false;
     }
-    return has_name(bytes, "Movie")
-        || has_name(bytes, "RichMedia")
-        || has_name(bytes, "Rendition")
-        || has_name(bytes, "EmbeddedFile")
-        || has_name(bytes, "Sound")
-        || bytes.contains("/Subtype/Movie")
-        || bytes.contains("/Subtype /Movie")
-        || bytes.contains("/Subtype/RichMedia")
-        || bytes.contains("/Subtype /RichMedia");
+    return has_name(bytes, "Movie") || has_name(bytes, "RichMedia") ||
+           has_name(bytes, "Rendition") || has_name(bytes, "EmbeddedFile") ||
+           has_name(bytes, "Sound") || bytes.contains("/Subtype/Movie") ||
+           bytes.contains("/Subtype /Movie") || bytes.contains("/Subtype/RichMedia") ||
+           bytes.contains("/Subtype /RichMedia");
 }
 
 /** @brief Returns whether a PDF annotation describes a UIL molecule. */
-bool is_molecule_annotation(const QByteArray& bytes) {
-    return has_name(bytes, "UILMolecule");
-}
+bool is_molecule_annotation(const QByteArray& bytes) { return has_name(bytes, "UILMolecule"); }
 
 /** @brief Returns whether a PDF annotation describes an embedded UIL interactive figure. */
 bool is_interactive_figure_annotation(const QByteArray& bytes) {
@@ -503,15 +489,11 @@ bool is_molecular_symmetry_annotation(const QByteArray& bytes) {
 
 /** @brief Cheaply detects whether object bytes could contain a supported media annotation. */
 bool contains_media_marker(const QByteArray& bytes) {
-    return bytes.contains("/Movie")
-        || bytes.contains("/RichMedia")
-        || bytes.contains("/Rendition")
-        || bytes.contains("/EmbeddedFile")
-        || bytes.contains("/Sound")
-        || bytes.contains("/UILMolecule")
-        || bytes.contains("/UILInteractiveFigure")
-        || bytes.contains("/UILAtomicOrbital")
-        || bytes.contains("/UILMolecularSymmetry");
+    return bytes.contains("/Movie") || bytes.contains("/RichMedia") ||
+           bytes.contains("/Rendition") || bytes.contains("/EmbeddedFile") ||
+           bytes.contains("/Sound") || bytes.contains("/UILMolecule") ||
+           bytes.contains("/UILInteractiveFigure") || bytes.contains("/UILAtomicOrbital") ||
+           bytes.contains("/UILMolecularSymmetry");
 }
 
 /** @brief Location of one `N G obj` indirect-object header in the PDF bytes. */
@@ -540,10 +522,10 @@ std::optional<ObjectHeader> next_object_header(const QByteArray& pdf_bytes, qsiz
         const qsizetype number_end =
             std::max(skip_spaces_backward(pdf_bytes, generation_begin), from);
         const qsizetype number_begin = std::max(skip_digits_backward(pdf_bytes, number_end), from);
-        if (generation_end < keyword && generation_begin < generation_end
-            && number_end < generation_begin && number_begin < number_end) {
-            return ObjectHeader{
-                number_begin, keyword_end, parse_decimal(pdf_bytes, number_begin, number_end)};
+        if (generation_end < keyword && generation_begin < generation_end &&
+            number_end < generation_begin && number_begin < number_end) {
+            return ObjectHeader{number_begin, keyword_end,
+                                parse_decimal(pdf_bytes, number_begin, number_end)};
         }
         keyword = keyword_end;
     }
@@ -584,10 +566,10 @@ ObjectMap extract_indirect_objects(const QByteArray& pdf_bytes) {
             const qsizetype body_begin = skip_spaces(pdf_bytes, header->body_begin);
             body_end = std::max(body_begin, skip_spaces_backward(pdf_bytes, body_end));
             body_end = std::min(body_end, body_begin + kMaximumIndirectObjectBytes);
-            if (objects.size() >= kMaximumIndirectObjects
-                && !objects.contains(header->object_number)) {
+            if (objects.size() >= kMaximumIndirectObjects &&
+                !objects.contains(header->object_number)) {
                 qCWarning(log_media) << "Stopping PDF object extraction at the object-count limit"
-                                    << kMaximumIndirectObjects;
+                                     << kMaximumIndirectObjects;
                 break;
             }
             objects.insert(
@@ -612,9 +594,8 @@ void extract_object_streams(ObjectMap& objects) {
             object_streams.push_back({it.key(), it.value()});
         }
     }
-    std::sort(object_streams.begin(), object_streams.end(), [](const auto& lhs, const auto& rhs) {
-        return lhs.first < rhs.first;
-    });
+    std::sort(object_streams.begin(), object_streams.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
 
     for (const auto& [object_stream_number, object_body] : object_streams) {
         const QByteArray dictionary = dictionary_part(object_body);
@@ -637,15 +618,15 @@ void extract_object_streams(ObjectMap& objects) {
         const qsizetype remaining_budget =
             kMaximumTotalInflatedObjectStreamBytes - total_inflated_bytes;
         if (remaining_budget <= 0) {
-            qCWarning(log_media) << "Stopping object-stream expansion at the aggregate memory limit";
+            qCWarning(log_media)
+                << "Stopping object-stream expansion at the aggregate memory limit";
             break;
         }
         const qsizetype data_start = stream_data_start(object_body, stream_index);
         qsizetype produced_bytes = 0;
         const QByteArray decoded = inflate_flate_data(
             QByteArrayView(object_body).sliced(data_start, end_stream_index - data_start),
-            std::min(kMaximumInflatedObjectStreamBytes, remaining_budget),
-            &produced_bytes);
+            std::min(kMaximumInflatedObjectStreamBytes, remaining_budget), &produced_bytes);
         total_inflated_bytes += produced_bytes;
         if (decoded.isEmpty() || decoded.size() <= *first) {
             qCWarning(log_media) << "Could not decode object stream" << object_stream_number;
@@ -672,24 +653,23 @@ void extract_object_streams(ObjectMap& objects) {
             index = offset_end;
         }
 
-        std::stable_sort(pairs.begin(), pairs.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.second < rhs.second;
-        });
+        std::stable_sort(pairs.begin(), pairs.end(),
+                         [](const auto& lhs, const auto& rhs) { return lhs.second < rhs.second; });
 
         for (qsizetype i = 0; i < pairs.size(); ++i) {
             const int object_number = pairs.at(i).first;
             const qsizetype object_start = *first + pairs.at(i).second;
             const qsizetype object_end =
                 (i + 1 < pairs.size()) ? *first + pairs.at(i + 1).second : decoded.size();
-            if (object_start >= *first && object_end > object_start
-                && object_end <= decoded.size()) {
+            if (object_start >= *first && object_end > object_start &&
+                object_end <= decoded.size()) {
                 if (objects.size() >= kMaximumIndirectObjects && !objects.contains(object_number)) {
                     qCWarning(log_media)
                         << "Stopping object-stream expansion at the object-count limit";
                     return;
                 }
-                objects.insert(
-                    object_number, decoded.mid(object_start, object_end - object_start).trimmed());
+                objects.insert(object_number,
+                               decoded.mid(object_start, object_end - object_start).trimmed());
             }
         }
     }
@@ -702,11 +682,8 @@ void extract_object_streams(ObjectMap& objects) {
  * overflow the stack. Nodes already in @p visited are skipped, which breaks reference cycles,
  * and the kids of /Pages nodes deeper than kMaximumPageTreeDepth are ignored.
  */
-void append_page_tree(
-    const ObjectMap& objects,
-    int root_object_number,
-    std::unordered_set<int>& visited,
-    QVector<int>& pages) {
+void append_page_tree(const ObjectMap& objects, int root_object_number,
+                      std::unordered_set<int>& visited, QVector<int>& pages) {
     struct PendingNode {
         int object_number = -1;
         int depth = 0;
@@ -733,8 +710,8 @@ void append_page_tree(
         }
         if (node.depth >= kMaximumPageTreeDepth) {
             if (!depth_limit_reported) {
-                qCWarning(log_media) << "Ignoring PDF page-tree nodes nested deeper than"
-                                    << kMaximumPageTreeDepth;
+                qCWarning(log_media)
+                    << "Ignoring PDF page-tree nodes nested deeper than" << kMaximumPageTreeDepth;
                 depth_limit_reported = true;
             }
             continue;
@@ -790,10 +767,8 @@ QVector<int> ordered_page_objects(const ObjectMap& objects) {
  * @param annotation_arrays Cache of parsed indirect /Annots arrays keyed by object number, so a
  * large array shared by many pages is parsed only once.
  */
-QVector<int> annotation_objects_for_page(
-    const ObjectMap& objects,
-    const QByteArray& page_body,
-    QHash<int, QVector<int>>& annotation_arrays) {
+QVector<int> annotation_objects_for_page(const ObjectMap& objects, const QByteArray& page_body,
+                                         QHash<int, QVector<int>>& annotation_arrays) {
     if (const std::optional<int> annots_ref = referenced_object(page_body, "Annots")) {
         const auto cached = annotation_arrays.constFind(*annots_ref);
         if (cached != annotation_arrays.cend()) {
@@ -807,23 +782,20 @@ QVector<int> annotation_objects_for_page(
 }
 
 /** @brief Builds a media annotation from a parsed PDF object. */
-PdfMediaAnnotation annotation_from_object(int page_index, int object_number, const QByteArray& body) {
-    return PdfMediaAnnotation{
-        page_index,
-        object_number,
-        subtype_for_annotation(body),
-        media_file_name(body),
-        QString(),
-        rect_for_annotation(body),
-        QImage()
-    };
+PdfMediaAnnotation annotation_from_object(int page_index, int object_number,
+                                          const QByteArray& body) {
+    return PdfMediaAnnotation{page_index,
+                              object_number,
+                              subtype_for_annotation(body),
+                              media_file_name(body),
+                              QString(),
+                              rect_for_annotation(body),
+                              QImage()};
 }
 
 /** @brief Builds a molecule annotation from a parsed PDF object. */
-PdfMoleculeAnnotation molecule_annotation_from_object(
-    int page_index,
-    int object_number,
-    const QByteArray& body) {
+PdfMoleculeAnnotation molecule_annotation_from_object(int page_index, int object_number,
+                                                      const QByteArray& body) {
     return PdfMoleculeAnnotation{
         page_index,
         object_number,
@@ -842,16 +814,15 @@ PdfMoleculeAnnotation molecule_annotation_from_object(
  * bytes are subtracted and decoding is refused once it is exhausted.
  * @return The payload, or an empty array on failure.
  */
-QByteArray decoded_stream_payload(
-    const QByteArray& object_body,
-    QString* error_message,
-    qsizetype* remaining_budget) {
+QByteArray decoded_stream_payload(const QByteArray& object_body, QString* error_message,
+                                  qsizetype* remaining_budget) {
     const QByteArray dictionary = dictionary_part(object_body);
     const qsizetype stream_index = object_body.indexOf("stream");
     const qsizetype end_stream_index = object_body.lastIndexOf("endstream");
     if (stream_index < 0 || end_stream_index <= stream_index) {
         if (error_message) {
-            *error_message = QStringLiteral("Embedded figure does not reference a valid PDF stream");
+            *error_message =
+                QStringLiteral("Embedded figure does not reference a valid PDF stream");
         }
         return {};
     }
@@ -873,7 +844,8 @@ QByteArray decoded_stream_payload(
         *remaining_budget -= produced_bytes;
     } else if (dictionary.contains("/Filter")) {
         if (error_message) {
-            *error_message = QStringLiteral("Embedded figure uses an unsupported PDF stream filter");
+            *error_message =
+                QStringLiteral("Embedded figure uses an unsupported PDF stream filter");
         }
         return {};
     } else if (raw_payload.size() <= kMaximumEmbeddedFigureBytes) {
@@ -894,10 +866,7 @@ QByteArray decoded_stream_payload(
  * @param remaining_payload_budget Aggregate embedded-payload budget, see decoded_stream_payload().
  */
 PdfInteractiveFigureAnnotation interactive_figure_annotation_from_object(
-    const ObjectMap& objects,
-    int page_index,
-    int object_number,
-    const QByteArray& body,
+    const ObjectMap& objects, int page_index, int object_number, const QByteArray& body,
     qsizetype* remaining_payload_budget) {
     PdfInteractiveFigureAnnotation annotation;
     annotation.page_index = page_index;
@@ -906,7 +875,8 @@ PdfInteractiveFigureAnnotation interactive_figure_annotation_from_object(
 
     const std::optional<int> asset_ref = referenced_object(body, "Asset");
     if (!asset_ref || !objects.contains(*asset_ref)) {
-        annotation.error_message = QStringLiteral("Interactive figure has no embedded file specification");
+        annotation.error_message =
+            QStringLiteral("Interactive figure has no embedded file specification");
         return annotation;
     }
 
@@ -923,11 +893,12 @@ PdfInteractiveFigureAnnotation interactive_figure_annotation_from_object(
 
     const QByteArray stream_object = objects.value(*stream_ref);
     if (!has_type(dictionary_part(stream_object), "EmbeddedFile")) {
-        annotation.error_message = QStringLiteral("Interactive figure asset is not an embedded file");
+        annotation.error_message =
+            QStringLiteral("Interactive figure asset is not an embedded file");
         return annotation;
     }
-    const QByteArray payload = decoded_stream_payload(
-        stream_object, &annotation.error_message, remaining_payload_budget);
+    const QByteArray payload =
+        decoded_stream_payload(stream_object, &annotation.error_message, remaining_payload_budget);
     if (payload.isEmpty()) {
         return annotation;
     }
@@ -940,10 +911,7 @@ PdfInteractiveFigureAnnotation interactive_figure_annotation_from_object(
  * @param remaining_payload_budget Aggregate embedded-payload budget, see decoded_stream_payload().
  */
 PdfAtomicOrbitalAnnotation atomic_orbital_annotation_from_object(
-    const ObjectMap& objects,
-    int page_index,
-    int object_number,
-    const QByteArray& body,
+    const ObjectMap& objects, int page_index, int object_number, const QByteArray& body,
     qsizetype* remaining_payload_budget) {
     PdfAtomicOrbitalAnnotation annotation;
     annotation.page_index = page_index;
@@ -952,7 +920,8 @@ PdfAtomicOrbitalAnnotation atomic_orbital_annotation_from_object(
 
     const std::optional<int> asset_ref = referenced_object(body, "Asset");
     if (!asset_ref || !objects.contains(*asset_ref)) {
-        annotation.error_message = QStringLiteral("Atomic orbital has no embedded file specification");
+        annotation.error_message =
+            QStringLiteral("Atomic orbital has no embedded file specification");
         return annotation;
     }
     const QByteArray file_spec = objects.value(*asset_ref);
@@ -970,8 +939,8 @@ PdfAtomicOrbitalAnnotation atomic_orbital_annotation_from_object(
         annotation.error_message = QStringLiteral("Atomic-orbital asset is not an embedded file");
         return annotation;
     }
-    const QByteArray payload = decoded_stream_payload(
-        stream_object, &annotation.error_message, remaining_payload_budget);
+    const QByteArray payload =
+        decoded_stream_payload(stream_object, &annotation.error_message, remaining_payload_budget);
     if (!payload.isEmpty()) {
         parse_atomic_orbital(payload, &annotation.definition, &annotation.error_message);
     }
@@ -983,10 +952,7 @@ PdfAtomicOrbitalAnnotation atomic_orbital_annotation_from_object(
  * @param remaining_payload_budget Aggregate embedded-payload budget, see decoded_stream_payload().
  */
 PdfMolecularSymmetryAnnotation molecular_symmetry_annotation_from_object(
-    const ObjectMap& objects,
-    int page_index,
-    int object_number,
-    const QByteArray& body,
+    const ObjectMap& objects, int page_index, int object_number, const QByteArray& body,
     qsizetype* remaining_payload_budget) {
     PdfMolecularSymmetryAnnotation annotation;
     annotation.page_index = page_index;
@@ -1010,11 +976,12 @@ PdfMolecularSymmetryAnnotation molecular_symmetry_annotation_from_object(
     }
     const QByteArray stream_object = objects.value(*stream_ref);
     if (!has_type(dictionary_part(stream_object), "EmbeddedFile")) {
-        annotation.error_message = QStringLiteral("Molecular-symmetry asset is not an embedded file");
+        annotation.error_message =
+            QStringLiteral("Molecular-symmetry asset is not an embedded file");
         return annotation;
     }
-    const QByteArray payload = decoded_stream_payload(
-        stream_object, &annotation.error_message, remaining_payload_budget);
+    const QByteArray payload =
+        decoded_stream_payload(stream_object, &annotation.error_message, remaining_payload_budget);
     if (!payload.isEmpty()) {
         parse_molecular_symmetry(payload, &annotation.definition, &annotation.error_message);
     }
@@ -1081,31 +1048,30 @@ public:
 
         switch (kind) {
         case AnnotationKind::kMolecularSymmetry:
-            result_.molecular_symmetry_annotations.push_back(cached(
-                molecular_symmetry_cache_, page_index, object_number, [&] {
+            result_.molecular_symmetry_annotations.push_back(
+                cached(molecular_symmetry_cache_, page_index, object_number, [&] {
                     return molecular_symmetry_annotation_from_object(
                         objects_, page_index, object_number, body, &remaining_payload_bytes_);
                 }));
             break;
         case AnnotationKind::kAtomicOrbital:
-            result_.atomic_orbital_annotations.push_back(cached(
-                atomic_orbital_cache_, page_index, object_number, [&] {
+            result_.atomic_orbital_annotations.push_back(
+                cached(atomic_orbital_cache_, page_index, object_number, [&] {
                     return atomic_orbital_annotation_from_object(
                         objects_, page_index, object_number, body, &remaining_payload_bytes_);
                 }));
             break;
         case AnnotationKind::kInteractiveFigure:
-            result_.interactive_figure_annotations.push_back(cached(
-                interactive_figure_cache_, page_index, object_number, [&] {
+            result_.interactive_figure_annotations.push_back(
+                cached(interactive_figure_cache_, page_index, object_number, [&] {
                     return interactive_figure_annotation_from_object(
                         objects_, page_index, object_number, body, &remaining_payload_bytes_);
                 }));
             break;
         case AnnotationKind::kMolecule:
-            result_.molecule_annotations.push_back(
-                cached(molecule_cache_, page_index, object_number, [&] {
-                    return molecule_annotation_from_object(page_index, object_number, body);
-                }));
+            result_.molecule_annotations.push_back(cached(
+                molecule_cache_, page_index, object_number,
+                [&] { return molecule_annotation_from_object(page_index, object_number, body); }));
             break;
         case AnnotationKind::kMedia:
             result_.annotations.push_back(cached(media_cache_, page_index, object_number, [&] {
@@ -1120,16 +1086,16 @@ public:
 
     /** @brief Returns whether the annotation limit has been reached; logs the first time. */
     bool is_full() {
-        const qsizetype count = result_.annotations.size() + result_.molecule_annotations.size()
-            + result_.interactive_figure_annotations.size()
-            + result_.atomic_orbital_annotations.size()
-            + result_.molecular_symmetry_annotations.size();
+        const qsizetype count = result_.annotations.size() + result_.molecule_annotations.size() +
+                                result_.interactive_figure_annotations.size() +
+                                result_.atomic_orbital_annotations.size() +
+                                result_.molecular_symmetry_annotations.size();
         if (count < kMaximumDetectedAnnotations) {
             return false;
         }
         if (!limit_reported_) {
             qCWarning(log_media) << "Ignoring PDF annotations beyond the limit of"
-                                << kMaximumDetectedAnnotations;
+                                 << kMaximumDetectedAnnotations;
             limit_reported_ = true;
         }
         return true;
@@ -1150,8 +1116,8 @@ private:
      * @return A copy carrying @p page_index.
      */
     template <typename Annotation, typename Builder>
-    static Annotation cached(
-        QHash<int, Annotation>& cache, int page_index, int object_number, Builder&& build) {
+    static Annotation cached(QHash<int, Annotation>& cache, int page_index, int object_number,
+                             Builder&& build) {
         auto it = cache.find(object_number);
         if (it == cache.end()) {
             it = cache.insert(object_number, build());
@@ -1210,11 +1176,9 @@ bool is_path_within_directory(const QString& candidate, const QString& directory
  * @return The absolute path, or an empty string when the name is empty, undeclared by the
  * package, or escapes the permitted directory.
  */
-QString resolve_media_path(
-    const QString& pdf_path,
-    const QString& file_name,
-    const QString& package_root_path,
-    const QStringList& package_asset_paths) {
+QString resolve_media_path(const QString& pdf_path, const QString& file_name,
+                           const QString& package_root_path,
+                           const QStringList& package_asset_paths) {
     if (file_name.isEmpty()) {
         return {};
     }
@@ -1234,8 +1198,8 @@ QString resolve_media_path(
 
     const QFileInfo pdf_info(pdf_path);
     const QString candidate = QFileInfo(file_name).isAbsolute()
-        ? QFileInfo(file_name).absoluteFilePath()
-        : QFileInfo(pdf_info.absoluteDir(), file_name).absoluteFilePath();
+                                  ? QFileInfo(file_name).absoluteFilePath()
+                                  : QFileInfo(pdf_info.absoluteDir(), file_name).absoluteFilePath();
     return is_path_within_directory(candidate, pdf_info.absolutePath()) ? candidate : QString();
 }
 
@@ -1243,20 +1207,18 @@ QString resolve_media_path(
  * @brief Resolves media paths and extracts MP4 preview frames with FFmpeg.
  * Each distinct resolved file is decoded at most once per scan.
  */
-void resolve_and_extract_media_frames(
-    PdfMediaScanResult& result,
-    const QString& pdf_path,
-    const QString& package_root_path,
-    const QStringList& package_movie_asset_paths) {
+void resolve_and_extract_media_frames(PdfMediaScanResult& result, const QString& pdf_path,
+                                      const QString& package_root_path,
+                                      const QStringList& package_movie_asset_paths) {
     QHash<QString, QImage> decoded_frames;
     for (PdfMediaAnnotation& annotation : result.annotations) {
         annotation.resolved_file_path = resolve_media_path(
             pdf_path, annotation.file_name, package_root_path, package_movie_asset_paths);
         if (annotation.is_mp4() && annotation.resolved_file_path.isEmpty()) {
-            performance_log::record_event(QStringLiteral("pdf.media_path_rejected"), {
-                {QStringLiteral("file_name"), QFileInfo(annotation.file_name).fileName()},
-                {QStringLiteral("page"), annotation.page_index + 1}
-            });
+            performance_log::record_event(
+                QStringLiteral("pdf.media_path_rejected"),
+                {{QStringLiteral("file_name"), QFileInfo(annotation.file_name).fileName()},
+                 {QStringLiteral("page"), annotation.page_index + 1}});
             continue;
         }
         if (!annotation.is_mp4()) {
@@ -1268,18 +1230,20 @@ void resolve_and_extract_media_frames(
             continue;
         }
 
-        performance_log::ScopedSpan frame_span(QStringLiteral("pdf.media_first_frame"), {
-            {QStringLiteral("file_name"), QFileInfo(annotation.resolved_file_path).fileName()},
-            {QStringLiteral("page"), annotation.page_index + 1}
-        });
+        performance_log::ScopedSpan frame_span(
+            QStringLiteral("pdf.media_first_frame"),
+            {{QStringLiteral("file_name"), QFileInfo(annotation.resolved_file_path).fileName()},
+             {QStringLiteral("page"), annotation.page_index + 1}});
         QString error_message;
-        annotation.first_frame = extract_first_video_frame(annotation.resolved_file_path, &error_message);
+        annotation.first_frame =
+            extract_first_video_frame(annotation.resolved_file_path, &error_message);
         decoded_frames.insert(annotation.resolved_file_path, annotation.first_frame);
         frame_span.add_field(QStringLiteral("frame_ready"), annotation.has_first_frame());
         if (!error_message.isEmpty()) {
             frame_span.add_field(QStringLiteral("error"), error_message);
             frame_span.set_outcome(QStringLiteral("failed"));
-            qCInfo(log_media) << "Could not extract first MP4 frame from" << annotation.resolved_file_path << error_message;
+            qCInfo(log_media) << "Could not extract first MP4 frame from"
+                              << annotation.resolved_file_path << error_message;
         } else {
             frame_span.set_outcome(QStringLiteral("decoded"));
         }
@@ -1290,18 +1254,13 @@ void resolve_and_extract_media_frames(
  * @brief Resolves and parses molecule assets referenced by PDF annotations.
  * Each distinct resolved XYZ file is loaded at most once per scan.
  */
-void resolve_and_load_molecules(
-    PdfMediaScanResult& result,
-    const QString& pdf_path,
-    const QString& package_root_path,
-    const QStringList& package_molecule_asset_paths) {
+void resolve_and_load_molecules(PdfMediaScanResult& result, const QString& pdf_path,
+                                const QString& package_root_path,
+                                const QStringList& package_molecule_asset_paths) {
     QHash<QString, std::pair<MoleculeGeometry, QString>> loaded_molecules;
     for (PdfMoleculeAnnotation& annotation : result.molecule_annotations) {
         annotation.resolved_file_path = resolve_media_path(
-            pdf_path,
-            annotation.file_name,
-            package_root_path,
-            package_molecule_asset_paths);
+            pdf_path, annotation.file_name, package_root_path, package_molecule_asset_paths);
         if (annotation.resolved_file_path.isEmpty()) {
             annotation.error_message =
                 QStringLiteral("Molecule asset path was rejected or is missing");
@@ -1317,12 +1276,10 @@ void resolve_and_load_molecules(
             annotation.error_message = loaded.value().second;
             continue;
         }
-        load_xyz_molecule(
-            annotation.resolved_file_path,
-            &annotation.geometry,
-            &annotation.error_message);
-        loaded_molecules.insert(
-            annotation.resolved_file_path, {annotation.geometry, annotation.error_message});
+        load_xyz_molecule(annotation.resolved_file_path, &annotation.geometry,
+                          &annotation.error_message);
+        loaded_molecules.insert(annotation.resolved_file_path,
+                                {annotation.geometry, annotation.error_message});
     }
 }
 
@@ -1331,13 +1288,11 @@ void resolve_and_load_molecules(
  * May throw (for example std::bad_alloc); the public wrapper converts exceptions into an empty
  * result. Checkpoints and the outcome are recorded on @p scan_span.
  */
-void scan_pdf_media_annotations_into(
-    PdfMediaScanResult& result,
-    performance_log::ScopedSpan& scan_span,
-    const QString& path,
-    const QString& package_root_path,
-    const QStringList& package_movie_asset_paths,
-    const QStringList& package_molecule_asset_paths) {
+void scan_pdf_media_annotations_into(PdfMediaScanResult& result,
+                                     performance_log::ScopedSpan& scan_span, const QString& path,
+                                     const QString& package_root_path,
+                                     const QStringList& package_movie_asset_paths,
+                                     const QStringList& package_molecule_asset_paths) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         scan_span.add_field(QStringLiteral("error_stage"), QStringLiteral("open_file"));
@@ -1351,7 +1306,7 @@ void scan_pdf_media_annotations_into(
         scan_span.add_field(QStringLiteral("error_stage"), QStringLiteral("file_size_limit"));
         scan_span.set_outcome(QStringLiteral("skipped_too_large"));
         qCWarning(log_media) << "Skipping PDF media scan because the file exceeds the scan limit"
-                            << "or is not a regular file" << path;
+                             << "or is not a regular file" << path;
         return;
     }
 
@@ -1363,16 +1318,14 @@ void scan_pdf_media_annotations_into(
         qCWarning(log_media) << "Could not completely read PDF for media scanning" << path;
         return;
     }
-    scan_span.checkpoint(
-        QStringLiteral("read_file"),
-        {{QStringLiteral("bytes_read"), file_bytes.size()}});
+    scan_span.checkpoint(QStringLiteral("read_file"),
+                         {{QStringLiteral("bytes_read"), file_bytes.size()}});
 
     const bool raw_media_candidate = contains_media_marker(file_bytes);
     const bool has_compressed_objects = file_bytes.contains("/ObjStm");
-    scan_span.checkpoint(QStringLiteral("raw_media_marker_preflight"), {
-        {QStringLiteral("candidate_found"), raw_media_candidate},
-        {QStringLiteral("compressed_objects"), has_compressed_objects}
-    });
+    scan_span.checkpoint(QStringLiteral("raw_media_marker_preflight"),
+                         {{QStringLiteral("candidate_found"), raw_media_candidate},
+                          {QStringLiteral("compressed_objects"), has_compressed_objects}});
     if (!raw_media_candidate && !has_compressed_objects) {
         scan_span.add_field(QStringLiteral("annotation_count"), 0);
         scan_span.set_outcome(QStringLiteral("no_media_markers"));
@@ -1382,23 +1335,17 @@ void scan_pdf_media_annotations_into(
 
     // Bodies in `objects` are views into `file_bytes`, which outlives the map.
     ObjectMap objects = extract_indirect_objects(file_bytes);
-    scan_span.checkpoint(
-        QStringLiteral("extract_indirect_objects"),
-        {{QStringLiteral("object_count"), objects.size()}});
+    scan_span.checkpoint(QStringLiteral("extract_indirect_objects"),
+                         {{QStringLiteral("object_count"), objects.size()}});
     extract_object_streams(objects);
-    scan_span.checkpoint(
-        QStringLiteral("extract_object_streams"),
-        {{QStringLiteral("object_count"), objects.size()}});
+    scan_span.checkpoint(QStringLiteral("extract_object_streams"),
+                         {{QStringLiteral("object_count"), objects.size()}});
 
     const bool has_media_candidate = std::any_of(
-        objects.cbegin(),
-        objects.cend(),
-        [](const QByteArray& object_body) {
-            return contains_media_marker(object_body);
-        });
-    scan_span.checkpoint(
-        QStringLiteral("media_marker_preflight"),
-        {{QStringLiteral("candidate_found"), has_media_candidate}});
+        objects.cbegin(), objects.cend(),
+        [](const QByteArray& object_body) { return contains_media_marker(object_body); });
+    scan_span.checkpoint(QStringLiteral("media_marker_preflight"),
+                         {{QStringLiteral("candidate_found"), has_media_candidate}});
     if (!has_media_candidate) {
         scan_span.add_field(QStringLiteral("annotation_count"), 0);
         scan_span.set_outcome(QStringLiteral("no_media_markers"));
@@ -1417,7 +1364,7 @@ void scan_pdf_media_annotations_into(
             annotation_objects_for_page(objects, page_body, annotation_arrays);
         if (page_annotations.size() > kMaximumAnnotationReferences - annotation_references) {
             qCWarning(log_media) << "Ignoring PDF annotation references beyond the limit of"
-                                << kMaximumAnnotationReferences;
+                                 << kMaximumAnnotationReferences;
             break;
         }
         annotation_references += page_annotations.size();
@@ -1429,14 +1376,17 @@ void scan_pdf_media_annotations_into(
             }
         }
     }
-    scan_span.checkpoint(QStringLiteral("scan_page_annotations"), {
-        {QStringLiteral("annotation_count"), result.annotations.size()},
-        {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
-        {QStringLiteral("interactive_figure_annotation_count"), result.interactive_figure_annotations.size()},
-        {QStringLiteral("atomic_orbital_annotation_count"), result.atomic_orbital_annotations.size()},
-        {QStringLiteral("molecular_symmetry_annotation_count"), result.molecular_symmetry_annotations.size()},
-        {QStringLiteral("page_count"), pages.size()}
-    });
+    scan_span.checkpoint(
+        QStringLiteral("scan_page_annotations"),
+        {{QStringLiteral("annotation_count"), result.annotations.size()},
+         {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
+         {QStringLiteral("interactive_figure_annotation_count"),
+          result.interactive_figure_annotations.size()},
+         {QStringLiteral("atomic_orbital_annotation_count"),
+          result.atomic_orbital_annotations.size()},
+         {QStringLiteral("molecular_symmetry_annotation_count"),
+          result.molecular_symmetry_annotations.size()},
+         {QStringLiteral("page_count"), pages.size()}});
 
     for (auto it = objects.cbegin(); it != objects.cend() && !collector.is_full(); ++it) {
         if (seen_interactive_objects.contains(it.key())) {
@@ -1449,50 +1399,49 @@ void scan_pdf_media_annotations_into(
         {
             {QStringLiteral("annotation_count"), result.annotations.size()},
             {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
-            {QStringLiteral("interactive_figure_annotation_count"), result.interactive_figure_annotations.size()},
-            {QStringLiteral("atomic_orbital_annotation_count"), result.atomic_orbital_annotations.size()},
-            {QStringLiteral("molecular_symmetry_annotation_count"), result.molecular_symmetry_annotations.size()},
+            {QStringLiteral("interactive_figure_annotation_count"),
+             result.interactive_figure_annotations.size()},
+            {QStringLiteral("atomic_orbital_annotation_count"),
+             result.atomic_orbital_annotations.size()},
+            {QStringLiteral("molecular_symmetry_annotation_count"),
+             result.molecular_symmetry_annotations.size()},
         });
 
     resolve_and_extract_media_frames(result, path, package_root_path, package_movie_asset_paths);
-    resolve_and_load_molecules(
-        result,
-        path,
-        package_root_path,
-        package_molecule_asset_paths);
+    resolve_and_load_molecules(result, path, package_root_path, package_molecule_asset_paths);
     int frames_ready = 0;
     for (const PdfMediaAnnotation& annotation : std::as_const(result.annotations)) {
         if (annotation.has_first_frame()) {
             ++frames_ready;
         }
     }
-    scan_span.checkpoint(QStringLiteral("resolve_media_and_extract_frames"), {
-        {QStringLiteral("annotation_count"), result.annotations.size()},
-        {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
-        {QStringLiteral("interactive_figure_annotation_count"), result.interactive_figure_annotations.size()},
-        {QStringLiteral("atomic_orbital_annotation_count"), result.atomic_orbital_annotations.size()},
-        {QStringLiteral("molecular_symmetry_annotation_count"), result.molecular_symmetry_annotations.size()},
-        {QStringLiteral("frames_ready"), frames_ready}
-    });
-    scan_span.add_field(
-        QStringLiteral("annotation_count"),
-        result.annotations.size() + result.molecule_annotations.size()
-            + result.interactive_figure_annotations.size()
-            + result.atomic_orbital_annotations.size()
-            + result.molecular_symmetry_annotations.size());
+    scan_span.checkpoint(
+        QStringLiteral("resolve_media_and_extract_frames"),
+        {{QStringLiteral("annotation_count"), result.annotations.size()},
+         {QStringLiteral("molecule_annotation_count"), result.molecule_annotations.size()},
+         {QStringLiteral("interactive_figure_annotation_count"),
+          result.interactive_figure_annotations.size()},
+         {QStringLiteral("atomic_orbital_annotation_count"),
+          result.atomic_orbital_annotations.size()},
+         {QStringLiteral("molecular_symmetry_annotation_count"),
+          result.molecular_symmetry_annotations.size()},
+         {QStringLiteral("frames_ready"), frames_ready}});
+    scan_span.add_field(QStringLiteral("annotation_count"),
+                        result.annotations.size() + result.molecule_annotations.size() +
+                            result.interactive_figure_annotations.size() +
+                            result.atomic_orbital_annotations.size() +
+                            result.molecular_symmetry_annotations.size());
     scan_span.add_field(QStringLiteral("page_count"), pages.size());
     scan_span.set_outcome(QStringLiteral("scanned"));
     qCInfo(log_media) << result.summary();
 }
 }  // namespace
 
-bool PdfMediaAnnotation::has_first_frame() const {
-    return !first_frame.isNull();
-}
+bool PdfMediaAnnotation::has_first_frame() const { return !first_frame.isNull(); }
 
 bool PdfMediaAnnotation::is_mp4() const {
-    return resolved_file_path.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive)
-        || file_name.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive);
+    return resolved_file_path.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive) ||
+           file_name.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive);
 }
 
 bool PdfMoleculeAnnotation::is_ready() const {
@@ -1512,25 +1461,23 @@ bool PdfMolecularSymmetryAnnotation::is_ready() const {
 }
 
 bool PdfMediaScanResult::has_media() const {
-    return !annotations.isEmpty() || !molecule_annotations.isEmpty()
-        || !interactive_figure_annotations.isEmpty()
-        || !atomic_orbital_annotations.isEmpty()
-        || !molecular_symmetry_annotations.isEmpty();
+    return !annotations.isEmpty() || !molecule_annotations.isEmpty() ||
+           !interactive_figure_annotations.isEmpty() || !atomic_orbital_annotations.isEmpty() ||
+           !molecular_symmetry_annotations.isEmpty();
 }
 
 QString PdfMediaScanResult::summary() const {
-    if (annotations.isEmpty() && molecule_annotations.isEmpty()
-        && interactive_figure_annotations.isEmpty()
-        && atomic_orbital_annotations.isEmpty()
-        && molecular_symmetry_annotations.isEmpty()) {
+    if (annotations.isEmpty() && molecule_annotations.isEmpty() &&
+        interactive_figure_annotations.isEmpty() && atomic_orbital_annotations.isEmpty() &&
+        molecular_symmetry_annotations.isEmpty()) {
         return QStringLiteral("No PDF media annotations detected");
     }
 
     QStringList parts;
     for (const PdfMediaAnnotation& annotation : annotations) {
         QString part = annotation.page_index >= 0
-            ? QStringLiteral("page %1").arg(annotation.page_index + 1)
-            : QStringLiteral("unknown page");
+                           ? QStringLiteral("page %1").arg(annotation.page_index + 1)
+                           : QStringLiteral("unknown page");
         part += QStringLiteral(" %1").arg(annotation.subtype);
         if (!annotation.file_name.isEmpty()) {
             part += QStringLiteral(" (%1)").arg(annotation.file_name);
@@ -1542,8 +1489,8 @@ QString PdfMediaScanResult::summary() const {
     }
     for (const PdfMoleculeAnnotation& annotation : molecule_annotations) {
         QString part = annotation.page_index >= 0
-            ? QStringLiteral("page %1 molecule").arg(annotation.page_index + 1)
-            : QStringLiteral("unknown page molecule");
+                           ? QStringLiteral("page %1 molecule").arg(annotation.page_index + 1)
+                           : QStringLiteral("unknown page molecule");
         if (!annotation.file_name.isEmpty()) {
             part += QStringLiteral(" (%1)").arg(annotation.file_name);
         }
@@ -1553,9 +1500,10 @@ QString PdfMediaScanResult::summary() const {
     }
 
     for (const PdfInteractiveFigureAnnotation& annotation : interactive_figure_annotations) {
-        QString part = annotation.page_index >= 0
-            ? QStringLiteral("page %1 interactive figure").arg(annotation.page_index + 1)
-            : QStringLiteral("unknown page interactive figure");
+        QString part =
+            annotation.page_index >= 0
+                ? QStringLiteral("page %1 interactive figure").arg(annotation.page_index + 1)
+                : QStringLiteral("unknown page interactive figure");
         if (!annotation.file_name.isEmpty()) {
             part += QStringLiteral(" (%1)").arg(annotation.file_name);
         }
@@ -1565,8 +1513,8 @@ QString PdfMediaScanResult::summary() const {
     }
     for (const PdfAtomicOrbitalAnnotation& annotation : atomic_orbital_annotations) {
         QString part = annotation.page_index >= 0
-            ? QStringLiteral("page %1 atomic orbital").arg(annotation.page_index + 1)
-            : QStringLiteral("unknown page atomic orbital");
+                           ? QStringLiteral("page %1 atomic orbital").arg(annotation.page_index + 1)
+                           : QStringLiteral("unknown page atomic orbital");
         if (!annotation.file_name.isEmpty()) {
             part += QStringLiteral(" (%1)").arg(annotation.file_name);
         }
@@ -1575,47 +1523,42 @@ QString PdfMediaScanResult::summary() const {
         parts.push_back(part);
     }
     for (const PdfMolecularSymmetryAnnotation& annotation : molecular_symmetry_annotations) {
-        QString part = annotation.page_index >= 0
-            ? QStringLiteral("page %1 molecular symmetry").arg(annotation.page_index + 1)
-            : QStringLiteral("unknown page molecular symmetry");
-        if (!annotation.file_name.isEmpty()) part += QStringLiteral(" (%1)").arg(annotation.file_name);
+        QString part =
+            annotation.page_index >= 0
+                ? QStringLiteral("page %1 molecular symmetry").arg(annotation.page_index + 1)
+                : QStringLiteral("unknown page molecular symmetry");
+        if (!annotation.file_name.isEmpty())
+            part += QStringLiteral(" (%1)").arg(annotation.file_name);
         part += annotation.is_ready() ? QStringLiteral(" [embedded symmetry ready]")
                                       : QStringLiteral(" [symmetry unavailable]");
         parts.push_back(part);
     }
     return QStringLiteral("%1 interactive annotation(s): %2")
-        .arg(annotations.size() + molecule_annotations.size()
-             + interactive_figure_annotations.size() + atomic_orbital_annotations.size()
-             + molecular_symmetry_annotations.size())
+        .arg(annotations.size() + molecule_annotations.size() +
+             interactive_figure_annotations.size() + atomic_orbital_annotations.size() +
+             molecular_symmetry_annotations.size())
         .arg(parts.join(QStringLiteral("; ")));
 }
 
 PdfMediaScanResult scan_pdf_media_annotations(
-    const QString& path,
-    const QString& package_root_path,
+    const QString& path, const QString& package_root_path,
     const QStringList& package_movie_asset_paths,
     const QStringList& package_molecule_asset_paths) noexcept {
     PdfMediaScanResult result;
     std::optional<performance_log::ScopedSpan> scan_span;
     try {
         const QFileInfo file_info(path);
-        scan_span.emplace(QStringLiteral("pdf.media_scan"), QVariantMap{
-            {QStringLiteral("file_name"), file_info.fileName()},
-            {QStringLiteral("file_size_bytes"), file_info.size()}
-        });
-        scan_pdf_media_annotations_into(
-            result,
-            *scan_span,
-            path,
-            package_root_path,
-            package_movie_asset_paths,
-            package_molecule_asset_paths);
+        scan_span.emplace(QStringLiteral("pdf.media_scan"),
+                          QVariantMap{{QStringLiteral("file_name"), file_info.fileName()},
+                                      {QStringLiteral("file_size_bytes"), file_info.size()}});
+        scan_pdf_media_annotations_into(result, *scan_span, path, package_root_path,
+                                        package_movie_asset_paths, package_molecule_asset_paths);
         return result;
     } catch (const std::exception& error) {
         result = PdfMediaScanResult();
         try {
             qCWarning(log_media) << "PDF media scan aborted for" << path
-                                << "after an internal error:" << error.what();
+                                 << "after an internal error:" << error.what();
             if (scan_span) {
                 scan_span->add_field(QStringLiteral("error_stage"), QStringLiteral("exception"));
                 scan_span->set_outcome(QStringLiteral("failed"));
@@ -1626,7 +1569,7 @@ PdfMediaScanResult scan_pdf_media_annotations(
         result = PdfMediaScanResult();
         try {
             qCWarning(log_media) << "PDF media scan aborted for" << path
-                                << "after an unknown internal error";
+                                 << "after an unknown internal error";
             if (scan_span) {
                 scan_span->add_field(QStringLiteral("error_stage"), QStringLiteral("exception"));
                 scan_span->set_outcome(QStringLiteral("failed"));

@@ -11,10 +11,8 @@
 Q_LOGGING_CATEGORY(log_cache, "cache", QtInfoMsg)
 
 SlideCache::SlideCache(qint64 memory_limit_bytes)
-    : memory_limit_bytes_(memory_limit_bytes > 0
-              ? memory_limit_bytes
-              : recommended_memory_limit_bytes()) {
-}
+    : memory_limit_bytes_(memory_limit_bytes > 0 ? memory_limit_bytes
+                                                 : recommended_memory_limit_bytes()) {}
 
 qint64 SlideCache::recommended_memory_limit_bytes() {
     constexpr qint64 default_cache_bytes = 512LL * 1024LL * 1024LL;
@@ -24,18 +22,14 @@ qint64 SlideCache::recommended_memory_limit_bytes() {
     MEMORYSTATUSEX memory_status{};
     memory_status.dwLength = sizeof(memory_status);
     if (GlobalMemoryStatusEx(&memory_status)) {
-        return std::clamp(
-            qint64(memory_status.ullTotalPhys / 8ULL),
-            minimum_cache_bytes,
-            maximum_cache_bytes);
+        return std::clamp(qint64(memory_status.ullTotalPhys / 8ULL), minimum_cache_bytes,
+                          maximum_cache_bytes);
     }
 #endif
     return default_cache_bytes;
 }
 
-bool SlideCache::contains(const SlideCacheKey& key) const {
-    return entries_.contains(key);
-}
+bool SlideCache::contains(const SlideCacheKey& key) const { return entries_.contains(key); }
 
 std::optional<QImage> SlideCache::get(const SlideCacheKey& key) {
     auto it = entries_.find(key);
@@ -70,9 +64,8 @@ void SlideCache::put(const SlideCacheKey& key, const QImage& image) {
     touch(key);
     evict_if_needed();
 
-    qCDebug(log_cache) << "cache put page" << key.page_index
-                      << "bytes" << bytes
-                      << "total" << estimated_memory_bytes_;
+    qCDebug(log_cache) << "cache put page" << key.page_index << "bytes" << bytes << "total"
+                       << estimated_memory_bytes_;
 }
 
 void SlideCache::clear() {
@@ -99,25 +92,15 @@ int SlideCache::remove_page(const QString& document_hash, int page_index) {
     return removed;
 }
 
-qint64 SlideCache::estimated_memory_bytes() const {
-    return estimated_memory_bytes_;
-}
+qint64 SlideCache::estimated_memory_bytes() const { return estimated_memory_bytes_; }
 
-int SlideCache::hits() const {
-    return hits_;
-}
+int SlideCache::hits() const { return hits_; }
 
-int SlideCache::misses() const {
-    return misses_;
-}
+int SlideCache::misses() const { return misses_; }
 
-int SlideCache::evictions() const {
-    return evictions_;
-}
+int SlideCache::evictions() const { return evictions_; }
 
-qint64 SlideCache::estimate_bytes(const QImage& image) {
-    return qint64(image.sizeInBytes());
-}
+qint64 SlideCache::estimate_bytes(const QImage& image) { return qint64(image.sizeInBytes()); }
 
 void SlideCache::touch(const SlideCacheKey& key) {
     lru_.removeAll(key);

@@ -58,8 +58,7 @@ public:
      * @param threading Decoder threading strategy; see Threading.
      * @return True when the input and its video decoder are ready.
      */
-    bool open(const QString& path,
-              QString* error_message = nullptr,
+    bool open(const QString& path, QString* error_message = nullptr,
               Threading threading = Threading::Playback);
     /**
      * @brief Decodes and returns the next video frame in presentation order.

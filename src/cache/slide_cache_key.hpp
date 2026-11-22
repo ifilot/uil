@@ -12,10 +12,8 @@ struct SlideCacheKey {
 
     /** @brief Compares two keys for exact cache identity. */
     friend bool operator==(const SlideCacheKey& lhs, const SlideCacheKey& rhs) {
-        return lhs.document_hash == rhs.document_hash
-            && lhs.page_index == rhs.page_index
-            && lhs.pixel_size == rhs.pixel_size
-            && lhs.rotation == rhs.rotation;
+        return lhs.document_hash == rhs.document_hash && lhs.page_index == rhs.page_index &&
+               lhs.pixel_size == rhs.pixel_size && lhs.rotation == rhs.rotation;
     }
 };
 

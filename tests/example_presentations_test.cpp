@@ -10,8 +10,7 @@ namespace {
 /** @brief Writes a small placeholder file used as an installed example. */
 bool write_fixture(const QString& path) {
     QFile file(path);
-    return file.open(QIODevice::WriteOnly)
-        && file.write(QByteArrayLiteral("fixture")) == 7;
+    return file.open(QIODevice::WriteOnly) && file.write(QByteArrayLiteral("fixture")) == 7;
 }
 }  // namespace
 
@@ -39,47 +38,33 @@ void ExamplePresentationsTest::discovers_known_examples_in_menu_order() {
     QVERIFY(directory.isValid());
     const QDir application_directory(directory.path());
     QVERIFY(application_directory.mkpath(QStringLiteral("examples")));
-    const QDir examples_directory(
-        application_directory.filePath(QStringLiteral("examples")));
+    const QDir examples_directory(application_directory.filePath(QStringLiteral("examples")));
 
-    QVERIFY(write_fixture(
-        examples_directory.filePath(QStringLiteral("pointer-and-annotations.pdf"))));
-    QVERIFY(write_fixture(
-        examples_directory.filePath(QStringLiteral("getting-started.pdf"))));
-    QVERIFY(write_fixture(
-        examples_directory.filePath(QStringLiteral("molecule-visualizer.pdf"))));
-    QVERIFY(write_fixture(
-        examples_directory.filePath(QStringLiteral("interactive-figure.pdf"))));
-    QVERIFY(write_fixture(
-        examples_directory.filePath(QStringLiteral("atomic-orbitals.pdf"))));
-    QVERIFY(write_fixture(
-        examples_directory.filePath(QStringLiteral("molecular-symmetry.pdf"))));
+    QVERIFY(
+        write_fixture(examples_directory.filePath(QStringLiteral("pointer-and-annotations.pdf"))));
+    QVERIFY(write_fixture(examples_directory.filePath(QStringLiteral("getting-started.pdf"))));
+    QVERIFY(write_fixture(examples_directory.filePath(QStringLiteral("molecule-visualizer.pdf"))));
+    QVERIFY(write_fixture(examples_directory.filePath(QStringLiteral("interactive-figure.pdf"))));
+    QVERIFY(write_fixture(examples_directory.filePath(QStringLiteral("atomic-orbitals.pdf"))));
+    QVERIFY(write_fixture(examples_directory.filePath(QStringLiteral("molecular-symmetry.pdf"))));
 
     // The orbital atlas is a documentation artifact, not a bundled menu example.
-    QVERIFY(write_fixture(
-        examples_directory.filePath(QStringLiteral("orbital-atlas.pdf"))));
+    QVERIFY(write_fixture(examples_directory.filePath(QStringLiteral("orbital-atlas.pdf"))));
 
     const QVector<ExamplePresentation> examples =
         installed_example_presentations(application_directory.absolutePath());
     QCOMPARE(examples.size(), 6);
     QCOMPARE(examples.at(0).title, QStringLiteral("Getting Started with uil"));
     QCOMPARE(examples.at(0).file_name, QStringLiteral("getting-started.pdf"));
-    QCOMPARE(
-        examples.at(0).absolute_path,
-        QFileInfo(examples_directory.filePath(QStringLiteral("getting-started.pdf")))
-            .absoluteFilePath());
+    QCOMPARE(examples.at(0).absolute_path,
+             QFileInfo(examples_directory.filePath(QStringLiteral("getting-started.pdf")))
+                 .absoluteFilePath());
     QCOMPARE(examples.at(1).title, QStringLiteral("Pointer and Annotation Tools"));
-    QCOMPARE(
-        examples.at(1).file_name,
-        QStringLiteral("pointer-and-annotations.pdf"));
+    QCOMPARE(examples.at(1).file_name, QStringLiteral("pointer-and-annotations.pdf"));
     QCOMPARE(examples.at(2).title, QStringLiteral("Interactive Molecule Visualizer"));
-    QCOMPARE(
-        examples.at(2).file_name,
-        QStringLiteral("molecule-visualizer.pdf"));
+    QCOMPARE(examples.at(2).file_name, QStringLiteral("molecule-visualizer.pdf"));
     QCOMPARE(examples.at(3).title, QStringLiteral("Interactive Figure Prototype"));
-    QCOMPARE(
-        examples.at(3).file_name,
-        QStringLiteral("interactive-figure.pdf"));
+    QCOMPARE(examples.at(3).file_name, QStringLiteral("interactive-figure.pdf"));
     QCOMPARE(examples.at(4).title, QStringLiteral("Atomic Orbitals"));
     QCOMPARE(examples.at(4).file_name, QStringLiteral("atomic-orbitals.pdf"));
     QCOMPARE(examples.at(5).title, QStringLiteral("Molecular Symmetry"));
@@ -91,18 +76,15 @@ void ExamplePresentationsTest::ignores_unknown_files_and_directories() {
     QVERIFY(directory.isValid());
     QDir application_directory(directory.path());
     QVERIFY(application_directory.mkpath(QStringLiteral("examples/getting-started.pdf")));
-    const QDir examples_directory(
-        application_directory.filePath(QStringLiteral("examples")));
+    const QDir examples_directory(application_directory.filePath(QStringLiteral("examples")));
     QVERIFY(write_fixture(examples_directory.filePath(QStringLiteral("other.pdf"))));
-    QVERIFY(write_fixture(
-        examples_directory.filePath(QStringLiteral("pointer-and-annotations.pdf"))));
+    QVERIFY(
+        write_fixture(examples_directory.filePath(QStringLiteral("pointer-and-annotations.pdf"))));
 
     const QVector<ExamplePresentation> examples =
         installed_example_presentations(application_directory.absolutePath());
     QCOMPARE(examples.size(), 1);
-    QCOMPARE(
-        examples.constFirst().file_name,
-        QStringLiteral("pointer-and-annotations.pdf"));
+    QCOMPARE(examples.constFirst().file_name, QStringLiteral("pointer-and-annotations.pdf"));
 }
 
 QTEST_GUILESS_MAIN(ExamplePresentationsTest)

@@ -26,5 +26,8 @@ brief description. Internal functions declared only in a `.cpp` file follow the 
 
 ## Formatting
 
-Run `clang-format -i` on changed C++ source and header files. The repository's `.clang-format`
-uses Google formatting with a 100-column limit and left-aligned pointer and reference markers.
+Run `clang-format -i` on changed C and C++ source and header files. The repository's
+`.clang-format` uses Google formatting with a 100-column limit, 4-space indentation, flush-left
+access specifiers and `case` labels, and left-aligned pointer and reference markers. The tree was
+formatted with clang-format 18; other major versions may produce small differences, so use the
+same version where possible.

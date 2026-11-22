@@ -91,9 +91,9 @@ bool is_dominant_colour(QRgb rgb, Qt::GlobalColor expected) {
 
 /** @brief Returns whether @p error means the FFmpeg runtime itself is unavailable. */
 bool is_missing_ffmpeg_runtime(const QString& error) {
-    return error.startsWith(QStringLiteral("Could not load"))
-        || error.startsWith(QStringLiteral("Could not resolve"))
-        || error.startsWith(QStringLiteral("FFmpeg libraries were not found"));
+    return error.startsWith(QStringLiteral("Could not load")) ||
+           error.startsWith(QStringLiteral("Could not resolve")) ||
+           error.startsWith(QStringLiteral("FFmpeg libraries were not found"));
 }
 
 /** @brief Builds a small opaque frame in the decoder's output format at @p pts_ms. */
@@ -107,14 +107,11 @@ DecodedVideoFrame frame_at(qint64 pts_ms, const QColor& color = Qt::red) {
 class FakeFrameSource final : public VideoFrameSource {
 public:
     /** @brief Creates a source that fails with @p open_error or ends with @p final_error. */
-    FakeFrameSource(
-        QList<DecodedVideoFrame> frames,
-        QString open_error = {},
-        QString final_error = {})
+    FakeFrameSource(QList<DecodedVideoFrame> frames, QString open_error = {},
+                    QString final_error = {})
         : frames_(std::move(frames)),
           open_error_(std::move(open_error)),
-          final_error_(std::move(final_error)) {
-    }
+          final_error_(std::move(final_error)) {}
 
     /** @brief Records @p path and fails when an open error was scripted. */
     bool open(const QString& path, QString* error_message) override {
@@ -129,8 +126,7 @@ public:
     }
 
     /** @brief Returns the next scripted frame, then the scripted end-of-stream outcome. */
-    std::optional<DecodedVideoFrame> read_next_frame(
-        QString* error_message) override {
+    std::optional<DecodedVideoFrame> read_next_frame(QString* error_message) override {
         if (!frames_.isEmpty()) {
             return frames_.takeFirst();
         }
@@ -152,8 +148,7 @@ class BlockingFrameSource final : public VideoFrameSource {
 public:
     /** @brief Creates a source that reports through @p read_started once a read blocks. */
     explicit BlockingFrameSource(std::shared_ptr<std::atomic<bool>> read_started)
-        : read_started_(std::move(read_started)) {
-    }
+        : read_started_(std::move(read_started)) {}
 
     /** @brief Stores the interrupt flag raised by VideoFrameBuffer::stop(). */
     void set_interrupt_flag(const std::atomic<bool>* interrupt_requested) override {
@@ -161,18 +156,15 @@ public:
     }
 
     /** @brief Always opens successfully. */
-    bool open(const QString&, QString*) override {
-        return true;
-    }
+    bool open(const QString&, QString*) override { return true; }
 
     /** @brief Blocks until interrupted (or a 10 s safety timeout), then reports an error. */
-    std::optional<DecodedVideoFrame> read_next_frame(
-        QString* error_message) override {
+    std::optional<DecodedVideoFrame> read_next_frame(QString* error_message) override {
         read_started_->store(true);
         QElapsedTimer timer;
         timer.start();
-        while (!(interrupt_requested_ && interrupt_requested_->load())
-               && timer.elapsed() < 10'000) {
+        while (!(interrupt_requested_ && interrupt_requested_->load()) &&
+               timer.elapsed() < 10'000) {
             QThread::msleep(1);
         }
         if (error_message) {
@@ -220,8 +212,8 @@ private slots:
 
 void VideoFrameBufferTest::buffers_frames_in_timestamp_order() {
     VideoFrameBuffer buffer([] {
-        return std::make_unique<FakeFrameSource>(QList<DecodedVideoFrame>{
-            frame_at(0), frame_at(40), frame_at(80)});
+        return std::make_unique<FakeFrameSource>(
+            QList<DecodedVideoFrame>{frame_at(0), frame_at(40), frame_at(80)});
     });
     QSignalSpy finished_spy(&buffer, &VideoFrameBuffer::finished);
 
@@ -240,8 +232,8 @@ void VideoFrameBufferTest::buffers_frames_in_timestamp_order() {
 
 void VideoFrameBufferTest::reports_open_and_decode_failures() {
     VideoFrameBuffer open_failure([] {
-        return std::make_unique<FakeFrameSource>(
-            QList<DecodedVideoFrame>{}, QStringLiteral("cannot open"));
+        return std::make_unique<FakeFrameSource>(QList<DecodedVideoFrame>{},
+                                                 QStringLiteral("cannot open"));
     });
     QSignalSpy open_failed_spy(&open_failure, &VideoFrameBuffer::failed);
     open_failure.start(QStringLiteral("missing.mp4"));
@@ -249,10 +241,8 @@ void VideoFrameBufferTest::reports_open_and_decode_failures() {
     QCOMPARE(open_failure.error_message(), QStringLiteral("cannot open"));
 
     VideoFrameBuffer decode_failure([] {
-        return std::make_unique<FakeFrameSource>(
-            QList<DecodedVideoFrame>{frame_at(0)},
-            QString(),
-            QStringLiteral("decode failed"));
+        return std::make_unique<FakeFrameSource>(QList<DecodedVideoFrame>{frame_at(0)}, QString(),
+                                                 QStringLiteral("decode failed"));
     });
     QSignalSpy decode_failed_spy(&decode_failure, &VideoFrameBuffer::failed);
     decode_failure.start(QStringLiteral("broken.mp4"), 1000);
@@ -263,8 +253,8 @@ void VideoFrameBufferTest::reports_open_and_decode_failures() {
 
 void VideoFrameBufferTest::stop_clears_buffered_state() {
     VideoFrameBuffer buffer([] {
-        return std::make_unique<FakeFrameSource>(QList<DecodedVideoFrame>{
-            frame_at(0), frame_at(40), frame_at(80)});
+        return std::make_unique<FakeFrameSource>(
+            QList<DecodedVideoFrame>{frame_at(0), frame_at(40), frame_at(80)});
     });
     buffer.start(QStringLiteral("synthetic.mp4"), 1000);
     QTRY_VERIFY_WITH_TIMEOUT(buffer.has_frames(), 1000);
@@ -279,8 +269,7 @@ void VideoFrameBufferTest::restart_uses_a_fresh_source() {
     auto invocation = std::make_shared<int>(0);
     VideoFrameBuffer buffer([invocation] {
         const qint64 pts = (*invocation)++ == 0 ? 10 : 90;
-        return std::make_unique<FakeFrameSource>(
-            QList<DecodedVideoFrame>{frame_at(pts)});
+        return std::make_unique<FakeFrameSource>(QList<DecodedVideoFrame>{frame_at(pts)});
     });
 
     buffer.start(QStringLiteral("first.mp4"), 1000);
@@ -294,9 +283,8 @@ void VideoFrameBufferTest::restart_uses_a_fresh_source() {
 }
 
 void VideoFrameBufferTest::unstarted_buffer_is_finished() {
-    VideoFrameBuffer buffer([] {
-        return std::make_unique<FakeFrameSource>(QList<DecodedVideoFrame>{});
-    });
+    VideoFrameBuffer buffer(
+        [] { return std::make_unique<FakeFrameSource>(QList<DecodedVideoFrame>{}); });
     QVERIFY(buffer.is_finished());
     QVERIFY(!buffer.has_frames());
     QVERIFY(!buffer.take_frame().has_value());
@@ -304,9 +292,8 @@ void VideoFrameBufferTest::unstarted_buffer_is_finished() {
 
 void VideoFrameBufferTest::stop_interrupts_a_blocked_source() {
     auto read_started = std::make_shared<std::atomic<bool>>(false);
-    VideoFrameBuffer buffer([read_started] {
-        return std::make_unique<BlockingFrameSource>(read_started);
-    });
+    VideoFrameBuffer buffer(
+        [read_started] { return std::make_unique<BlockingFrameSource>(read_started); });
     QSignalSpy failed_spy(&buffer, &VideoFrameBuffer::failed);
 
     buffer.start(QStringLiteral("blocking.mp4"), 1000);
@@ -326,8 +313,7 @@ void VideoFrameBufferTest::stop_interrupts_a_blocked_source() {
 void VideoFrameBufferTest::stop_discards_pending_notifications() {
     VideoFrameBuffer buffer([] {
         return std::make_unique<FakeFrameSource>(
-            QList<DecodedVideoFrame>{frame_at(0), frame_at(40)},
-            QString(),
+            QList<DecodedVideoFrame>{frame_at(0), frame_at(40)}, QString(),
             QStringLiteral("decode failed"));
     });
     QSignalSpy frame_spy(&buffer, &VideoFrameBuffer::frame_available);

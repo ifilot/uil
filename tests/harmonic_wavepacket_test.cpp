@@ -62,9 +62,9 @@ void HarmonicWavepacketTest::gaussian_is_normalized_and_peaks_at_mean() {
     }
     QVERIFY(std::abs(integral - 1.0) < 1e-6);
 
-    const auto peak = std::max_element(samples.cbegin(), samples.cend(), [](const QPointF& lhs, const QPointF& rhs) {
-        return lhs.y() < rhs.y();
-    });
+    const auto peak =
+        std::max_element(samples.cbegin(), samples.cend(),
+                         [](const QPointF& lhs, const QPointF& rhs) { return lhs.y() < rhs.y(); });
     QVERIFY(peak != samples.cend());
     QVERIFY(std::abs(peak->x() - mean) <= 0.001);
     QVERIFY(std::abs(peak->y() - 1.0 / std::sqrt(std::numbers::pi)) < 1e-9);
@@ -125,44 +125,44 @@ void HarmonicWavepacketTest::coherent_state_weights_follow_poisson_distribution(
     const double ground_weight = coherent_state_basis_weight(0, stretch);
     QVERIFY(std::abs(ground_weight - std::exp(-mean_occupation)) < 1e-12);
     for (int n = 0; n < 3; ++n) {
-        const double ratio = coherent_state_basis_weight(n + 1, stretch)
-            / coherent_state_basis_weight(n, stretch);
+        const double ratio =
+            coherent_state_basis_weight(n + 1, stretch) / coherent_state_basis_weight(n, stretch);
         QVERIFY(std::abs(ratio - mean_occupation / (n + 1)) < 1e-12);
     }
 }
 
 void HarmonicWavepacketTest::displaced_state_coefficients_match_week_two_derivation() {
     constexpr double displacement = 2.0;
-    QVERIFY(std::abs(harmonic_displaced_state_coefficient(0, displacement)
-                     - std::exp(-1.0)) < 1e-12);
-    QVERIFY(std::abs(harmonic_displaced_state_coefficient(1, displacement)
-                     - std::sqrt(2.0) * std::exp(-1.0)) < 1e-12);
-    QVERIFY(std::abs(100.0 * harmonic_displaced_captured_fraction(1, displacement)
-                     - 13.5335) < 0.001);
-    QVERIFY(std::abs(100.0 * harmonic_displaced_captured_fraction(3, displacement)
-                     - 67.6676) < 0.001);
-    QVERIFY(std::abs(100.0 * harmonic_displaced_captured_fraction(5, displacement)
-                     - 94.7347) < 0.001);
+    QVERIFY(std::abs(harmonic_displaced_state_coefficient(0, displacement) - std::exp(-1.0)) <
+            1e-12);
+    QVERIFY(std::abs(harmonic_displaced_state_coefficient(1, displacement) -
+                     std::sqrt(2.0) * std::exp(-1.0)) < 1e-12);
+    QVERIFY(std::abs(100.0 * harmonic_displaced_captured_fraction(1, displacement) - 13.5335) <
+            0.001);
+    QVERIFY(std::abs(100.0 * harmonic_displaced_captured_fraction(3, displacement) - 67.6676) <
+            0.001);
+    QVERIFY(std::abs(100.0 * harmonic_displaced_captured_fraction(5, displacement) - 94.7347) <
+            0.001);
 }
 
 void HarmonicWavepacketTest::displaced_state_fit_converges_monotonically() {
     constexpr double displacement = 2.0;
     double previous = 0.0;
     for (int basis_count = 1; basis_count <= 25; ++basis_count) {
-        const double captured = harmonic_displaced_captured_fraction(
-            basis_count, displacement);
+        const double captured = harmonic_displaced_captured_fraction(basis_count, displacement);
         QVERIFY(captured + 1e-14 >= previous);
         previous = captured;
     }
     QVERIFY(previous > 1.0 - 1e-12);
 
-    const QVector<QPointF> approximation = sample_harmonic_displaced_approximation(
-        25, -6.0, 6.0, 1201, displacement);
+    const QVector<QPointF> approximation =
+        sample_harmonic_displaced_approximation(25, -6.0, 6.0, 1201, displacement);
     QCOMPARE(approximation.size(), 1201);
     double maximum_error = 0.0;
     for (const QPointF& point : approximation) {
-        maximum_error = std::max(maximum_error, std::abs(
-            point.y() - harmonic_displaced_ground_state(point.x(), displacement)));
+        maximum_error = std::max(
+            maximum_error,
+            std::abs(point.y() - harmonic_displaced_ground_state(point.x(), displacement)));
     }
     QVERIFY(maximum_error < 1e-8);
 }
@@ -191,9 +191,7 @@ void HarmonicWavepacketTest::displaced_state_interactive_payload_parses() {
     QString error_message;
     QVERIFY2(parse_interactive_figure(payload, &definition, &error_message),
              qPrintable(error_message));
-    QCOMPARE(
-        definition.kind,
-        InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion);
+    QCOMPARE(definition.kind, InteractiveFigureDefinition::Kind::HarmonicDisplacedStateExpansion);
     QCOMPARE(definition.displacement, 2.0);
     QCOMPARE(definition.basis_count_min, 1);
     QCOMPARE(definition.basis_count_max, 25);

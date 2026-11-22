@@ -1,15 +1,15 @@
 #pragma once
 
-#include <QVector3D>
 #include <QQuaternion>
+#include <QVector3D>
 
 namespace molecule_camera {
 
 /** @brief World-space vectors defining a camera view. */
 struct ViewFrame {
-  QVector3D eye;
-  QVector3D center;
-  QVector3D up;
+    QVector3D eye;
+    QVector3D center;
+    QVector3D up;
 };
 
 constexpr float kVerticalFieldOfViewDegrees = 35.0f;

@@ -66,11 +66,9 @@ QIcon font_awesome::icon(Style style, const QString& name, QColor color, QSize s
     if (!rendered_size.isValid()) {
         rendered_size = icon_size;
     }
-    const QRectF target(
-        (icon_size.width() - rendered_size.width()) / 2.0,
-        (icon_size.height() - rendered_size.height()) / 2.0,
-        rendered_size.width(),
-        rendered_size.height());
+    const QRectF target((icon_size.width() - rendered_size.width()) / 2.0,
+                        (icon_size.height() - rendered_size.height()) / 2.0, rendered_size.width(),
+                        rendered_size.height());
     renderer.render(&painter, target);
     const QIcon rendered_icon(pixmap);
     icon_cache().insert(cache_key, rendered_icon);

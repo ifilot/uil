@@ -27,10 +27,8 @@ namespace deck_overview {
  *         null. Null entries in @p widgets count as pages but are never visible.
  */
 template <typename WidgetRange>
-QPair<int, int> visible_page_range(
-    const WidgetRange& widgets,
-    const QWidget* viewport,
-    int fallback_index) {
+QPair<int, int> visible_page_range(const WidgetRange& widgets, const QWidget* viewport,
+                                   int fallback_index) {
     const int widget_count = int(widgets.size());
     if (widget_count <= 0 || !viewport) {
         return {-1, -1};
@@ -42,9 +40,7 @@ QPair<int, int> visible_page_range(
     int page_index = 0;
     for (QWidget* widget : widgets) {
         if (widget) {
-            const QRect widget_rect(
-                widget->mapTo(viewport, QPoint(0, 0)),
-                widget->size());
+            const QRect widget_rect(widget->mapTo(viewport, QPoint(0, 0)), widget->size());
             if (widget_rect.intersects(viewport_rect)) {
                 if (first_visible < 0) {
                     first_visible = page_index;

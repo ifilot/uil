@@ -1,5 +1,5 @@
-#include "figure/interactive_figure.hpp"
 #include "figure/particle_in_box_basis.hpp"
+#include "figure/interactive_figure.hpp"
 
 #include <QTest>
 
@@ -79,9 +79,7 @@ void ParticleInBoxBasisTest::interactive_figure_payload_parses() {
     QString error_message;
     QVERIFY2(parse_interactive_figure(payload, &definition, &error_message),
              qPrintable(error_message));
-    QCOMPARE(
-        definition.kind,
-        InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion);
+    QCOMPARE(definition.kind, InteractiveFigureDefinition::Kind::ParticleInBoxStepExpansion);
     QCOMPARE(definition.basis_count_min, 1);
     QCOMPARE(definition.basis_count_max, 25);
     QCOMPARE(definition.basis_count_initial, 1);
