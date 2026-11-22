@@ -2,6 +2,14 @@
 
 Notable user-facing changes to `uil` are documented here.
 
+## 1.0.1 - 2026-11-22
+
+### Fixed
+
+- Windows: the fullscreen audience display no longer flashes black when a tooltip or
+  dialog appears above it, for example while picking the pen and its ink colour before
+  drawing on a slide.
+
 ## 1.0.0 - 2026-11-22
 
 First stable release.
