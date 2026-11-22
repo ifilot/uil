@@ -222,6 +222,10 @@ private:
 
     /** @brief Applies the selected screen geometry for windowed or full-screen mode. */
     void apply_screen_geometry(bool fullscreen);
+    /** @brief Stops Windows from presenting the fullscreen window outside the compositor. */
+    void keep_fullscreen_window_composited();
+    /** @brief Returns the window height that is actually visible on the audience screen. */
+    int visible_viewport_height() const;
     /** @brief Presents the current slide and active OpenGL children after a fullscreen swap. */
     void present_fullscreen_frame();
     /** @brief Shows the cursor and restarts its automatic hide timer. */

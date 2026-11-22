@@ -41,6 +41,13 @@
 #include <cmath>
 #include <utility>
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include "orbital/atomic_orbital_cache.hpp"
 #include "ui/atomic_orbital_widget.hpp"
 #include "ui/bluecurve.hpp"
@@ -1151,6 +1158,7 @@ void AudienceWindow::set_audience_screen(QScreen* screen) {
     apply_screen_geometry(is_fullscreen_);
     if (is_fullscreen_) {
         showFullScreen();
+        keep_fullscreen_window_composited();
     }
     emit render_target_changed();
 }
@@ -1160,6 +1168,7 @@ void AudienceWindow::enter_fullscreen() {
     fullscreen_slide_presented_ = false;
     apply_screen_geometry(true);
     showFullScreen();
+    keep_fullscreen_window_composited();
     raise();
     activateWindow();
     setFocus(Qt::ActiveWindowFocusReason);
@@ -1995,14 +2004,49 @@ void AudienceWindow::update_cursor_appearance() {
     }
 }
 
+int AudienceWindow::visible_viewport_height() const {
+    // The fullscreen window may extend one row past the screen; see
+    // keep_fullscreen_window_composited(). Lay slides out in the visible part only.
+    if (is_fullscreen_ && screen_) {
+        return std::min(height(), screen_->geometry().height());
+    }
+    return height();
+}
+
+void AudienceWindow::keep_fullscreen_window_composited() {
+#ifdef Q_OS_WIN
+    // The audience window is composited through OpenGL (it hosts QOpenGLWidget overlays). When
+    // such a window covers a monitor exactly, Windows presents it in a fullscreen-optimized
+    // mode that bypasses the desktop compositor, and has to drop out of that mode whenever
+    // another top-level window (tooltip, dialog) appears above it or the surface is
+    // reconfigured. Each switch shows as a black flash. Making the window one pixel row taller
+    // than the monitor keeps it composited at all times; the extra row is off-screen.
+    if (!is_fullscreen_ || QGuiApplication::platformName() != QLatin1String("windows")) {
+        return;
+    }
+    const HWND window = reinterpret_cast<HWND>(winId());
+    MONITORINFO monitor_info;
+    monitor_info.cbSize = sizeof(monitor_info);
+    if (!window ||
+        !GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor_info)) {
+        return;
+    }
+    const RECT& monitor = monitor_info.rcMonitor;
+    SetWindowPos(window, nullptr, monitor.left, monitor.top, monitor.right - monitor.left,
+                 monitor.bottom - monitor.top + 1,
+                 SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+#endif
+}
+
 QRectF AudienceWindow::slide_logical_rect(QSize texture_size) const {
-    if (!texture_size.isValid() || height() <= 0 || width() <= 0) {
+    const int viewport_height = visible_viewport_height();
+    if (!texture_size.isValid() || viewport_height <= 0 || width() <= 0) {
         return {};
     }
 
-    const qreal viewport_aspect = qreal(width()) / qreal(height());
+    const qreal viewport_aspect = qreal(width()) / qreal(viewport_height);
     const qreal texture_aspect = qreal(texture_size.width()) / qreal(texture_size.height());
-    QSizeF displayed_size(width(), height());
+    QSizeF displayed_size(width(), viewport_height);
     if (texture_aspect > viewport_aspect) {
         displayed_size.setHeight(displayed_size.width() / texture_aspect);
     } else {
@@ -2017,12 +2061,12 @@ QRectF AudienceWindow::slide_logical_rect(QSize texture_size) const {
         std::abs(displayed_size.height() * dpr - texture_size.height()) <= 1.0) {
         displayed_size = QSizeF(texture_size) / dpr;
         return QRectF(std::round((width() - displayed_size.width()) / 2.0 * dpr) / dpr,
-                      std::round((height() - displayed_size.height()) / 2.0 * dpr) / dpr,
+                      std::round((viewport_height - displayed_size.height()) / 2.0 * dpr) / dpr,
                       displayed_size.width(), displayed_size.height());
     }
 
     return QRectF((width() - displayed_size.width()) / 2.0,
-                  (height() - displayed_size.height()) / 2.0, displayed_size.width(),
+                  (viewport_height - displayed_size.height()) / 2.0, displayed_size.width(),
                   displayed_size.height());
 }
 
